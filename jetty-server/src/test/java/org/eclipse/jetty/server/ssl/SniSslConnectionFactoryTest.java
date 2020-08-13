@@ -35,7 +35,7 @@ import java.util.function.Consumer;
 import javax.net.ssl.SNIHostName;
 import javax.net.ssl.SNIServerName;
 import javax.net.ssl.SSLEngine;
-import javax.net.ssl.SSLHandshakeException;
+import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLParameters;
 import javax.net.ssl.SSLSession;
 import javax.net.ssl.SSLSocket;
@@ -240,10 +240,10 @@ public class SniSslConnectionFactoryTest
         });
 
         // Wrong SNI host.
-        assertThrows(SSLHandshakeException.class, () -> getResponse("wrong.com", "wrong.com", null));
+        assertThrows(SSLException.class, () -> getResponse("wrong.com", "wrong.com", null));
 
         // No SNI host.
-        assertThrows(SSLHandshakeException.class, () -> getResponse(null, "wrong.com", null));
+        assertThrows(SSLException.class, () -> getResponse(null, "wrong.com", null));
     }
 
     @Test
@@ -292,7 +292,7 @@ public class SniSslConnectionFactoryTest
         });
 
         // Wrong SNI host.
-        assertThrows(SSLHandshakeException.class, () -> getResponse("wrong.com", "wrong.com", null));
+        assertThrows(SSLException.class, () -> getResponse("wrong.com", "wrong.com", null));
 
         // No SNI host.
         HttpTester.Response response = HttpTester.parseResponse(getResponse(null, "wrong.com", null));
@@ -311,10 +311,10 @@ public class SniSslConnectionFactoryTest
         });
 
         // Wrong SNI host.
-        assertThrows(SSLHandshakeException.class, () -> getResponse("wrong.com", "wrong.com", null));
+        assertThrows(SSLException.class, () -> getResponse("wrong.com", "wrong.com", null));
 
         // No SNI host.
-        assertThrows(SSLHandshakeException.class, () -> getResponse(null, "wrong.com", null));
+        assertThrows(SSLException.class, () -> getResponse(null, "wrong.com", null));
 
         // Good SNI host.
         HttpTester.Response response = HttpTester.parseResponse(getResponse("localhost", "localhost", null));

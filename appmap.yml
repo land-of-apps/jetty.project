@@ -1,0 +1,64 @@
+name: jetty
+packages:
+- path: org.eclipse.jetty.logging
+- path: org.eclipse.jetty.util
+- path: org.eclipse.jetty.io
+- path: org.eclipse.jetty.http
+- path: org.eclipse.jetty.jmx
+- path: org.eclipse.jetty.xml
+- path: org.eclipse.jetty
+- path: org.eclipse.jetty.jstl
+- path: org.eclipse.jetty.embedded
+- path: org.eclipse.jetty.alpn.conscrypt.client
+- path: org.eclipse.jetty.alpn.conscrypt.server
+- path: org.eclipse.jetty.alpn.java.client
+- path: org.eclipse.jetty.alpn.java.server
+- path: org.eclipse.jetty.annotations
+- path: org.eclipse.jetty.ant
+- path: org.eclipse.jetty.client
+- path: org.eclipse.jetty.deploy
+- path: org.eclipse.jetty.fcgi
+- path: org.eclipse.jetty.fcgi.server
+- path: org.eclipse.jetty.gcloud.session
+- path: org.eclipse.jetty.hazelcast.session
+- path: org.eclipse.jetty.http2.client
+- path: org.eclipse.jetty.http2
+- path: org.eclipse.jetty.http2.hpack
+- path: org.eclipse.jetty.http2.client.http
+- path: org.eclipse.jetty.http2.server
+- path: org.eclipse.jetty.http.spi
+- path: org.eclipse.jetty.jass
+- path: org.eclipse.jetty.security.jaspi
+- path: org.eclipse.jetty.jndi
+- path: org.eclipse.jetty.maven.plugin
+- path: org.eclipse.jetty.memcached.session
+- path: org.eclipse.jetty.security.openid
+- path: org.eclipse.jetty.plus
+- path: org.eclipse.jetty.proxy
+- path: org.eclipse.jetty.quickstart
+- path: org.eclipse.jetty.rewrite
+- path: org.eclipse.jetty.security
+- path: org.eclipse.jetty.server
+- path: org.eclipse.jetty.servlet
+- path: org.eclipse.jetty.servlets
+- path: org.eclipse.jetty.spring
+- path: org.eclipse.jetty.start
+- path: org.eclipse.jetty.unixsocket.client
+- path: org.eclipse.jetty.unixsocket.common
+- path: org.eclipse.jetty.unixsocket.server
+- path: org.eclipse.jetty.util.ajax
+- path: org.eclipse.jetty.webapp
+- path: org.eclipse.jetty.websocket.javax.client
+- path: org.eclipse.jetty.websocket.javax.common
+- path: org.eclipse.jetty.websocket.javax.tests
+- path: org.eclipse.jetty.websocket.javax.server
+- path: org.eclipse.jetty.websocket.client
+- path: org.eclipse.jetty.websocket.api
+- path: org.eclipse.jetty.websocket.common
+- path: org.eclipse.jetty.websocket.server
+- path: org.eclipse.jetty.websocket.util
+- path: org.eclipse.jetty.websocket.util.server
+- path: org.eclipse.jetty.xml
+
+
+
