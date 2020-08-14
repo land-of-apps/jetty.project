@@ -3,6 +3,9 @@
 [description]
 Configures the ByteBufferPool used by ServerConnectors.
 
+[depends]
+logging
+
 [xml]
 etc/jetty-bytebufferpool.xml
 

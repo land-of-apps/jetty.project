@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.proxy;
@@ -50,17 +50,17 @@ import javax.servlet.http.HttpServletResponse;
 
 import org.eclipse.jetty.client.HttpClient;
 import org.eclipse.jetty.client.HttpProxy;
-import org.eclipse.jetty.client.api.ContentProvider;
 import org.eclipse.jetty.client.api.ContentResponse;
 import org.eclipse.jetty.client.api.Request;
 import org.eclipse.jetty.client.api.Response;
-import org.eclipse.jetty.client.util.BytesContentProvider;
-import org.eclipse.jetty.client.util.DeferredContentProvider;
+import org.eclipse.jetty.client.util.AsyncRequestContent;
+import org.eclipse.jetty.client.util.BytesRequestContent;
 import org.eclipse.jetty.client.util.FutureResponseListener;
 import org.eclipse.jetty.http.HttpHeader;
 import org.eclipse.jetty.http.HttpHeaderValue;
 import org.eclipse.jetty.http.HttpStatus;
 import org.eclipse.jetty.io.RuntimeIOException;
+import org.eclipse.jetty.logging.StacklessLogging;
 import org.eclipse.jetty.server.HttpChannel;
 import org.eclipse.jetty.server.HttpConfiguration;
 import org.eclipse.jetty.server.HttpConnectionFactory;
@@ -73,14 +73,12 @@ import org.eclipse.jetty.util.BufferUtil;
 import org.eclipse.jetty.util.IO;
 import org.eclipse.jetty.util.Utf8StringBuilder;
 import org.eclipse.jetty.util.ajax.JSON;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
-import org.eclipse.jetty.util.log.StacklessLogging;
 import org.eclipse.jetty.util.thread.QueuedThreadPool;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.OS;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -89,10 +87,9 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-@Disabled("See issue #3974")
 public class AsyncMiddleManServletTest
 {
-    private static final Logger LOG = Log.getLogger(AsyncMiddleManServletTest.class);
+    private static final Logger LOG = LoggerFactory.getLogger(AsyncMiddleManServletTest.class);
     private static final String PROXIED_HEADER = "X-Proxied";
 
     private HttpClient client;
@@ -224,11 +221,11 @@ public class AsyncMiddleManServletTest
         startClient();
 
         byte[] gzipBytes = gzip(bytes);
-        ContentProvider gzipContent = new BytesContentProvider(gzipBytes);
+        Request.Content gzipContent = new BytesRequestContent(gzipBytes);
 
         ContentResponse response = client.newRequest("localhost", serverConnector.getLocalPort())
-            .header(HttpHeader.CONTENT_ENCODING, "gzip")
-            .content(gzipContent)
+            .headers(headers -> headers.put(HttpHeader.CONTENT_ENCODING, HttpHeaderValue.GZIP))
+            .body(gzipContent)
             .timeout(5, TimeUnit.SECONDS)
             .send();
 
@@ -302,8 +299,8 @@ public class AsyncMiddleManServletTest
         startClient();
 
         ContentResponse response = client.newRequest("localhost", serverConnector.getLocalPort())
-            .header(HttpHeader.CONTENT_ENCODING, "gzip")
-            .content(new BytesContentProvider(gzip(bytes)))
+            .headers(headers -> headers.put(HttpHeader.CONTENT_ENCODING, HttpHeaderValue.GZIP))
+            .body(new BytesRequestContent(gzip(bytes)))
             .timeout(5, TimeUnit.SECONDS)
             .send();
 
@@ -349,7 +346,7 @@ public class AsyncMiddleManServletTest
         startClient();
 
         ContentResponse response = client.newRequest("localhost", serverConnector.getLocalPort())
-            .header(HttpHeader.CONTENT_ENCODING, "gzip")
+            .headers(headers -> headers.put(HttpHeader.CONTENT_ENCODING, HttpHeaderValue.GZIP))
             .timeout(5, TimeUnit.SECONDS)
             .send();
 
@@ -391,11 +388,11 @@ public class AsyncMiddleManServletTest
         });
         startClient();
 
-        DeferredContentProvider content = new DeferredContentProvider();
+        AsyncRequestContent content = new AsyncRequestContent();
         Request request = client.newRequest("localhost", serverConnector.getLocalPort());
         FutureResponseListener listener = new FutureResponseListener(request);
-        request.header(HttpHeader.CONTENT_ENCODING, "gzip")
-            .content(content)
+        request.headers(headers -> headers.put(HttpHeader.CONTENT_ENCODING, HttpHeaderValue.GZIP))
+            .body(content)
             .send(listener);
         byte[] bytes = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".getBytes(StandardCharsets.UTF_8);
         content.offer(ByteBuffer.wrap(gzip(bytes)));
@@ -439,8 +436,8 @@ public class AsyncMiddleManServletTest
 
         byte[] bytes = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".getBytes(StandardCharsets.UTF_8);
         ContentResponse response = client.newRequest("localhost", serverConnector.getLocalPort())
-            .header(HttpHeader.CONTENT_ENCODING, "gzip")
-            .content(new BytesContentProvider(gzip(bytes)))
+            .headers(headers -> headers.put(HttpHeader.CONTENT_ENCODING, HttpHeaderValue.GZIP))
+            .body(new BytesRequestContent(gzip(bytes)))
             .timeout(5, TimeUnit.SECONDS)
             .send();
 
@@ -483,8 +480,8 @@ public class AsyncMiddleManServletTest
         startClient();
 
         ContentResponse response = client.newRequest("localhost", serverConnector.getLocalPort())
-            .header(HttpHeader.CONTENT_ENCODING, "gzip")
-            .content(new BytesContentProvider(gzip(bytes)))
+            .headers(headers -> headers.put(HttpHeader.CONTENT_ENCODING, HttpHeaderValue.GZIP))
+            .body(new BytesRequestContent(gzip(bytes)))
             .timeout(5, TimeUnit.SECONDS)
             .send();
 
@@ -511,7 +508,7 @@ public class AsyncMiddleManServletTest
 
         byte[] bytes = new byte[1024];
         ContentResponse response = client.newRequest("localhost", serverConnector.getLocalPort())
-            .content(new BytesContentProvider(bytes))
+            .body(new BytesRequestContent(bytes))
             .timeout(5, TimeUnit.SECONDS)
             .send();
 
@@ -521,7 +518,7 @@ public class AsyncMiddleManServletTest
     @Test
     public void testUpstreamTransformationThrowsAfterCommittingProxyRequest() throws Exception
     {
-        try (StacklessLogging scope = new StacklessLogging(HttpChannel.class))
+        try (StacklessLogging ignored = new StacklessLogging(HttpChannel.class))
         {
             startServer(new EchoHttpServlet());
             startProxy(new AsyncMiddleManServlet()
@@ -546,10 +543,10 @@ public class AsyncMiddleManServletTest
             });
             startClient();
 
-            final CountDownLatch latch = new CountDownLatch(1);
-            DeferredContentProvider content = new DeferredContentProvider();
+            CountDownLatch latch = new CountDownLatch(1);
+            AsyncRequestContent content = new AsyncRequestContent();
             client.newRequest("localhost", serverConnector.getLocalPort())
-                .content(content)
+                .body(content)
                 .send(result ->
                 {
                     if (result.isSucceeded() && result.getResponse().getStatus() == 502)
@@ -756,10 +753,10 @@ public class AsyncMiddleManServletTest
         });
         startClient();
 
-        final CountDownLatch latch = new CountDownLatch(1);
-        DeferredContentProvider content = new DeferredContentProvider();
+        CountDownLatch latch = new CountDownLatch(1);
+        AsyncRequestContent content = new AsyncRequestContent();
         client.newRequest("localhost", serverConnector.getLocalPort())
-            .content(content)
+            .body(content)
             .send(result ->
             {
                 System.err.println(result);
@@ -777,7 +774,7 @@ public class AsyncMiddleManServletTest
     @Test
     public void testClientRequestReadFailsOnSecondRead() throws Exception
     {
-        try (StacklessLogging scope = new StacklessLogging(HttpChannel.class))
+        try (StacklessLogging ignored = new StacklessLogging(HttpChannel.class))
         {
             startServer(new EchoHttpServlet());
             startProxy(new AsyncMiddleManServlet()
@@ -795,10 +792,10 @@ public class AsyncMiddleManServletTest
             });
             startClient();
 
-            final CountDownLatch latch = new CountDownLatch(1);
-            DeferredContentProvider content = new DeferredContentProvider();
+            CountDownLatch latch = new CountDownLatch(1);
+            AsyncRequestContent content = new AsyncRequestContent();
             client.newRequest("localhost", serverConnector.getLocalPort())
-                .content(content)
+                .body(content)
                 .send(result ->
                 {
                     if (result.getResponse().getStatus() == 502)
@@ -863,20 +860,21 @@ public class AsyncMiddleManServletTest
     @Test
     public void testAfterContentTransformer() throws Exception
     {
-        final String key0 = "id";
+        String key0 = "id";
         long value0 = 1;
-        final String key1 = "channel";
+        String key1 = "channel";
         String value1 = "foo";
-        final String json = "{ \"" + key0 + "\":" + value0 + ", \"" + key1 + "\":\"" + value1 + "\" }";
+        String jsonString = "{ \"" + key0 + "\":" + value0 + ", \"" + key1 + "\":\"" + value1 + "\" }";
         startServer(new HttpServlet()
         {
             @Override
             protected void service(HttpServletRequest request, HttpServletResponse response) throws IOException
             {
-                response.getOutputStream().write(json.getBytes(StandardCharsets.UTF_8));
+                response.getOutputStream().write(jsonString.getBytes(StandardCharsets.UTF_8));
             }
         });
-        final String key2 = "c";
+        String key2 = "c";
+        JSON json = new JSON();
         startProxy(new AsyncMiddleManServlet()
         {
             @Override
@@ -889,12 +887,12 @@ public class AsyncMiddleManServletTest
                     {
                         InputStream input = source.getInputStream();
                         @SuppressWarnings("unchecked")
-                        Map<String, Object> obj = (Map<String, Object>)JSON.parse(new InputStreamReader(input, StandardCharsets.UTF_8));
+                        Map<String, Object> obj = (Map<String, Object>)json.fromJSON(new InputStreamReader(input, StandardCharsets.UTF_8));
                         // Transform the object.
                         obj.put(key2, obj.remove(key1));
                         try (OutputStream output = sink.getOutputStream())
                         {
-                            output.write(JSON.toString(obj).getBytes(StandardCharsets.UTF_8));
+                            output.write(json.toJSON(obj).getBytes(StandardCharsets.UTF_8));
                             return true;
                         }
                     }
@@ -909,7 +907,7 @@ public class AsyncMiddleManServletTest
 
         assertEquals(200, response.getStatus());
         @SuppressWarnings("unchecked")
-        Map<String, Object> obj = (Map<String, Object>)JSON.parse(response.getContentAsString());
+        Map<String, Object> obj = (Map<String, Object>)json.fromJSON(response.getContentAsString());
         assertNotNull(obj);
         assertEquals(2, obj.size());
         assertEquals(value0, obj.get(key0));
@@ -984,24 +982,25 @@ public class AsyncMiddleManServletTest
     public void testAfterContentTransformerOverflowingToDisk() throws Exception
     {
         // Make sure the temporary directory we use exists and it's empty.
-        final Path targetTestsDir = prepareTargetTestsDir();
+        Path targetTestsDir = prepareTargetTestsDir();
 
-        final String key0 = "id";
+        String key0 = "id";
         long value0 = 1;
-        final String key1 = "channel";
+        String key1 = "channel";
         String value1 = "foo";
-        final String json = "{ \"" + key0 + "\":" + value0 + ", \"" + key1 + "\":\"" + value1 + "\" }";
+        String jsonString = "{ \"" + key0 + "\":" + value0 + ", \"" + key1 + "\":\"" + value1 + "\" }";
         startServer(new HttpServlet()
         {
             @Override
             protected void service(HttpServletRequest request, HttpServletResponse response) throws IOException
             {
-                response.getOutputStream().write(json.getBytes(StandardCharsets.UTF_8));
+                response.getOutputStream().write(jsonString.getBytes(StandardCharsets.UTF_8));
             }
         });
-        final String inputPrefix = "in_";
-        final String outputPrefix = "out_";
-        final String key2 = "c";
+        String inputPrefix = "in_";
+        String outputPrefix = "out_";
+        String key2 = "c";
+        JSON json = new JSON();
         startProxy(new AsyncMiddleManServlet()
         {
             @Override
@@ -1014,18 +1013,18 @@ public class AsyncMiddleManServletTest
                     {
                         InputStream input = source.getInputStream();
                         @SuppressWarnings("unchecked")
-                        Map<String, Object> obj = (Map<String, Object>)JSON.parse(new InputStreamReader(input, StandardCharsets.UTF_8));
+                        Map<String, Object> obj = (Map<String, Object>)json.fromJSON(new InputStreamReader(input, StandardCharsets.UTF_8));
                         // Transform the object.
                         obj.put(key2, obj.remove(key1));
                         try (OutputStream output = sink.getOutputStream())
                         {
-                            output.write(JSON.toString(obj).getBytes(StandardCharsets.UTF_8));
+                            output.write(json.toJSON(obj).getBytes(StandardCharsets.UTF_8));
                             return true;
                         }
                     }
                 };
                 transformer.setOverflowDirectory(targetTestsDir);
-                int maxBufferSize = json.length() / 4;
+                int maxBufferSize = jsonString.length() / 4;
                 transformer.setMaxInputBufferSize(maxBufferSize);
                 transformer.setInputFilePrefix(inputPrefix);
                 transformer.setMaxOutputBufferSize(maxBufferSize);
@@ -1041,7 +1040,7 @@ public class AsyncMiddleManServletTest
 
         assertEquals(200, response.getStatus());
         @SuppressWarnings("unchecked")
-        Map<String, Object> obj = (Map<String, Object>)JSON.parse(response.getContentAsString());
+        Map<String, Object> obj = (Map<String, Object>)json.fromJSON(response.getContentAsString());
         assertNotNull(obj);
         assertEquals(2, obj.size());
         assertEquals(value0, obj.get(key0));
@@ -1112,7 +1111,7 @@ public class AsyncMiddleManServletTest
         // Send only part of the content; the proxy will idle timeout.
         final byte[] data = new byte[]{'c', 'a', 'f', 'e'};
         ContentResponse response = client.newRequest("localhost", serverConnector.getLocalPort())
-            .content(new BytesContentProvider(data)
+            .body(new BytesRequestContent(data)
             {
                 @Override
                 public long getLength()
@@ -1202,19 +1201,20 @@ public class AsyncMiddleManServletTest
 
     private void testAfterContentTransformerDoNoTransform(final boolean readSource, final boolean useDisk) throws Exception
     {
-        final String key0 = "id";
+        String key0 = "id";
         long value0 = 1;
-        final String key1 = "channel";
+        String key1 = "channel";
         String value1 = "foo";
-        final String json = "{ \"" + key0 + "\":" + value0 + ", \"" + key1 + "\":\"" + value1 + "\" }";
+        String jsonString = "{ \"" + key0 + "\":" + value0 + ", \"" + key1 + "\":\"" + value1 + "\" }";
         startServer(new HttpServlet()
         {
             @Override
             protected void service(HttpServletRequest request, HttpServletResponse response) throws IOException
             {
-                response.getOutputStream().write(json.getBytes(StandardCharsets.UTF_8));
+                response.getOutputStream().write(jsonString.getBytes(StandardCharsets.UTF_8));
             }
         });
+        JSON json = new JSON();
         startProxy(new AsyncMiddleManServlet()
         {
             @Override
@@ -1228,12 +1228,12 @@ public class AsyncMiddleManServletTest
                     }
 
                     @Override
-                    public boolean transform(Source source, Sink sink) throws IOException
+                    public boolean transform(Source source, Sink sink)
                     {
                         if (readSource)
                         {
                             InputStream input = source.getInputStream();
-                            JSON.parse(new InputStreamReader(input, StandardCharsets.UTF_8));
+                            json.fromJSON(new InputStreamReader(input, StandardCharsets.UTF_8));
                         }
                         // No transformation.
                         return false;
@@ -1249,7 +1249,7 @@ public class AsyncMiddleManServletTest
 
         assertEquals(200, response.getStatus());
         @SuppressWarnings("unchecked")
-        Map<String, Object> obj = (Map<String, Object>)JSON.parse(response.getContentAsString());
+        Map<String, Object> obj = (Map<String, Object>)json.fromJSON(response.getContentAsString());
         assertNotNull(obj);
         assertEquals(2, obj.size());
         assertEquals(value0, obj.get(key0));
@@ -1317,10 +1317,10 @@ public class AsyncMiddleManServletTest
         });
         startClient();
 
-        DeferredContentProvider content = new DeferredContentProvider();
+        AsyncRequestContent content = new AsyncRequestContent();
         Request request = client.newRequest("localhost", serverConnector.getLocalPort())
             .timeout(5, TimeUnit.SECONDS)
-            .content(content);
+            .body(content);
         FutureResponseListener listener = new FutureResponseListener(request);
         request.send(listener);
 
@@ -1365,10 +1365,10 @@ public class AsyncMiddleManServletTest
         });
         startClient();
 
-        DeferredContentProvider content = new DeferredContentProvider();
+        AsyncRequestContent content = new AsyncRequestContent();
         Request request = client.newRequest("localhost", serverConnector.getLocalPort())
             .timeout(5, TimeUnit.SECONDS)
-            .content(content);
+            .body(content);
         FutureResponseListener listener = new FutureResponseListener(request);
         request.send(listener);
 
@@ -1436,10 +1436,10 @@ public class AsyncMiddleManServletTest
         });
         startClient();
 
-        DeferredContentProvider content = new DeferredContentProvider();
+        AsyncRequestContent content = new AsyncRequestContent();
         Request request = client.newRequest("localhost", serverConnector.getLocalPort())
             .timeout(5, TimeUnit.SECONDS)
-            .content(content);
+            .body(content);
         FutureResponseListener listener = new FutureResponseListener(request);
         request.send(listener);
 
@@ -1495,7 +1495,7 @@ public class AsyncMiddleManServletTest
             .timeout(5, TimeUnit.SECONDS)
             .send();
         assertEquals(200, response.getStatus());
-        assertTrue(response.getHeaders().containsKey(PROXIED_HEADER));
+        assertTrue(response.getHeaders().contains(PROXIED_HEADER));
     }
 
     private Path prepareTargetTestsDir() throws IOException
@@ -1604,9 +1604,9 @@ public class AsyncMiddleManServletTest
         private static class Client extends HrefTransformer
         {
             @Override
-            protected String transform(String value) throws IOException
+            protected String transform(String value)
             {
-                String result = PREFIX + URLEncoder.encode(value, "UTF-8");
+                String result = PREFIX + URLEncoder.encode(value, StandardCharsets.UTF_8);
                 LOG.debug("{} -> {}", value, result);
                 return result;
             }
@@ -1615,9 +1615,9 @@ public class AsyncMiddleManServletTest
         private static class Server extends HrefTransformer
         {
             @Override
-            protected String transform(String value) throws IOException
+            protected String transform(String value)
             {
-                String result = URLDecoder.decode(value.substring(PREFIX.length()), "UTF-8");
+                String result = URLDecoder.decode(value.substring(PREFIX.length()), StandardCharsets.UTF_8);
                 LOG.debug("{} <- {}", value, result);
                 return result;
             }

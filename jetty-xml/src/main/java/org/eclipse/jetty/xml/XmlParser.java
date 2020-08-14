@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.xml;
@@ -34,9 +34,10 @@ import javax.xml.parsers.SAXParser;
 import javax.xml.parsers.SAXParserFactory;
 
 import org.eclipse.jetty.util.LazyList;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
 import org.eclipse.jetty.util.resource.Resource;
+import org.eclipse.jetty.util.thread.AutoLock;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.xml.sax.Attributes;
 import org.xml.sax.ContentHandler;
 import org.xml.sax.InputSource;
@@ -54,8 +55,9 @@ import org.xml.sax.helpers.DefaultHandler;
  */
 public class XmlParser
 {
-    private static final Logger LOG = Log.getLogger(XmlParser.class);
+    private static final Logger LOG = LoggerFactory.getLogger(XmlParser.class);
 
+    private final AutoLock _lock = new AutoLock();
     private Map<String, URL> _redirectMap = new HashMap<String, URL>();
     private SAXParser _parser;
     private Map<String, ContentHandler> _observerMap;
@@ -70,8 +72,8 @@ public class XmlParser
     public XmlParser()
     {
         SAXParserFactory factory = SAXParserFactory.newInstance();
-        boolean validatingDft = factory.getClass().toString().startsWith("org.apache.xerces.");
-        String validatingProp = System.getProperty("org.eclipse.jetty.xml.XmlParser.Validating", validatingDft ? "true" : "false");
+        boolean validatingDefault = factory.getClass().toString().contains("org.apache.xerces.");
+        String validatingProp = System.getProperty("org.eclipse.jetty.xml.XmlParser.Validating", validatingDefault ? "true" : "false");
         boolean validating = Boolean.valueOf(validatingProp).booleanValue();
         setValidating(validating);
     }
@@ -79,6 +81,11 @@ public class XmlParser
     public XmlParser(boolean validating)
     {
         setValidating(validating);
+    }
+
+    AutoLock lock()
+    {
+        return _lock.lock();
     }
 
     public void setValidating(boolean validating)
@@ -99,7 +106,7 @@ public class XmlParser
                 if (validating)
                     LOG.warn("Schema validation may not be supported: ", e);
                 else
-                    LOG.ignore(e);
+                    LOG.trace("IGNORED", e);
             }
 
             _parser.getXMLReader().setFeature("http://xml.org/sax/features/validation", validating);
@@ -117,7 +124,7 @@ public class XmlParser
         }
         catch (Exception e)
         {
-            LOG.warn(Log.EXCEPTION, e);
+            LOG.warn("Unable to set validating on XML Parser", e);
             throw new Error(e.toString());
         }
     }
@@ -127,10 +134,15 @@ public class XmlParser
         return _parser.isValidating();
     }
 
-    public synchronized void redirectEntity(String name, URL entity)
+    public void redirectEntity(String name, URL entity)
     {
         if (entity != null)
-            _redirectMap.put(name, entity);
+        {
+            try (AutoLock l = _lock.lock())
+            {
+                _redirectMap.put(name, entity);
+            }
+        }
     }
 
     /**
@@ -170,29 +182,35 @@ public class XmlParser
      * @param trigger Tag local or q name.
      * @param observer SAX ContentHandler
      */
-    public synchronized void addContentHandler(String trigger, ContentHandler observer)
+    public void addContentHandler(String trigger, ContentHandler observer)
     {
-        if (_observerMap == null)
-            _observerMap = new HashMap<>();
-        _observerMap.put(trigger, observer);
+        try (AutoLock l = _lock.lock())
+        {
+            if (_observerMap == null)
+                _observerMap = new HashMap<>();
+            _observerMap.put(trigger, observer);
+        }
     }
 
-    public synchronized Node parse(InputSource source) throws IOException, SAXException
+    public Node parse(InputSource source) throws IOException, SAXException
     {
-        _dtd = null;
-        Handler handler = new Handler();
-        XMLReader reader = _parser.getXMLReader();
-        reader.setContentHandler(handler);
-        reader.setErrorHandler(handler);
-        reader.setEntityResolver(handler);
-        if (LOG.isDebugEnabled())
-            LOG.debug("parsing: sid=" + source.getSystemId() + ",pid=" + source.getPublicId());
-        _parser.parse(source, handler);
-        if (handler._error != null)
-            throw handler._error;
-        Node doc = (Node)handler._top.get(0);
-        handler.clear();
-        return doc;
+        try (AutoLock l = _lock.lock())
+        {
+            _dtd = null;
+            Handler handler = new Handler();
+            XMLReader reader = _parser.getXMLReader();
+            reader.setContentHandler(handler);
+            reader.setErrorHandler(handler);
+            reader.setEntityResolver(handler);
+            if (LOG.isDebugEnabled())
+                LOG.debug("parsing: sid=" + source.getSystemId() + ",pid=" + source.getPublicId());
+            _parser.parse(source, handler);
+            if (handler._error != null)
+                throw handler._error;
+            Node doc = (Node)handler._top.get(0);
+            handler.clear();
+            return doc;
+        }
     }
 
     /**
@@ -203,7 +221,7 @@ public class XmlParser
      * @throws IOException if unable to load the xml
      * @throws SAXException if unable to parse the xml
      */
-    public synchronized Node parse(String url) throws IOException, SAXException
+    public Node parse(String url) throws IOException, SAXException
     {
         if (LOG.isDebugEnabled())
             LOG.debug("parse: " + url);
@@ -218,7 +236,7 @@ public class XmlParser
      * @throws IOException if unable to load the xml
      * @throws SAXException if unable to parse the xml
      */
-    public synchronized Node parse(File file) throws IOException, SAXException
+    public Node parse(File file) throws IOException, SAXException
     {
         if (LOG.isDebugEnabled())
             LOG.debug("parse: " + file);
@@ -233,20 +251,9 @@ public class XmlParser
      * @throws IOException if unable to load the xml
      * @throws SAXException if unable to parse the xml
      */
-    public synchronized Node parse(InputStream in) throws IOException, SAXException
+    public Node parse(InputStream in) throws IOException, SAXException
     {
-        _dtd = null;
-        Handler handler = new Handler();
-        XMLReader reader = _parser.getXMLReader();
-        reader.setContentHandler(handler);
-        reader.setErrorHandler(handler);
-        reader.setEntityResolver(handler);
-        _parser.parse(new InputSource(in), handler);
-        if (handler._error != null)
-            throw handler._error;
-        Node doc = (Node)handler._top.get(0);
-        handler.clear();
-        return doc;
+        return parse(new InputSource(in));
     }
 
     protected InputSource resolveEntity(String pid, String sid)
@@ -259,9 +266,9 @@ public class XmlParser
 
         URL entity = null;
         if (pid != null)
-            entity = _redirectMap.get(pid);
+            entity = (URL)_redirectMap.get(pid);
         if (entity == null)
-            entity = _redirectMap.get(sid);
+            entity = (URL)_redirectMap.get(sid);
         if (entity == null)
         {
             String dtd = sid;
@@ -270,7 +277,7 @@ public class XmlParser
 
             if (LOG.isDebugEnabled())
                 LOG.debug("Can't exact match entity in redirect map, trying " + dtd);
-            entity = _redirectMap.get(dtd);
+            entity = (URL)_redirectMap.get(dtd);
         }
 
         if (entity != null)
@@ -286,7 +293,7 @@ public class XmlParser
             }
             catch (IOException e)
             {
-                LOG.ignore(e);
+                LOG.trace("IGNORED", e);
             }
         }
         return null;
@@ -356,7 +363,7 @@ public class XmlParser
                 boolean match = false;
                 for (int i = LazyList.size(_xpaths); !match && i-- > 0; )
                 {
-                    String xpath = LazyList.get(_xpaths, i);
+                    String xpath = (String)LazyList.get(_xpaths, i);
 
                     match = path.equals(xpath) || xpath.startsWith(path) && xpath.length() > path.length() && xpath.charAt(path.length()) == '/';
                 }
@@ -379,13 +386,13 @@ public class XmlParser
 
             ContentHandler observer = null;
             if (_observerMap != null)
-                observer = _observerMap.get(name);
+                observer = (ContentHandler)_observerMap.get(name);
             _observers.push(observer);
 
             for (int i = 0; i < _observers.size(); i++)
             {
                 if (_observers.get(i) != null)
-                    _observers.get(i).startElement(uri, localName, qName, attrs);
+                    ((ContentHandler)_observers.get(i)).startElement(uri, localName, qName, attrs);
             }
         }
 
@@ -396,7 +403,7 @@ public class XmlParser
             for (int i = 0; i < _observers.size(); i++)
             {
                 if (_observers.get(i) != null)
-                    _observers.get(i).endElement(uri, localName, qName);
+                    ((ContentHandler)_observers.get(i)).endElement(uri, localName, qName);
             }
             _observers.pop();
         }
@@ -407,7 +414,7 @@ public class XmlParser
             for (int i = 0; i < _observers.size(); i++)
             {
                 if (_observers.get(i) != null)
-                    _observers.get(i).ignorableWhitespace(buf, offset, len);
+                    ((ContentHandler)_observers.get(i)).ignorableWhitespace(buf, offset, len);
             }
         }
 
@@ -418,14 +425,14 @@ public class XmlParser
             for (int i = 0; i < _observers.size(); i++)
             {
                 if (_observers.get(i) != null)
-                    _observers.get(i).characters(buf, offset, len);
+                    ((ContentHandler)_observers.get(i)).characters(buf, offset, len);
             }
         }
 
         @Override
         public void warning(SAXParseException ex)
         {
-            LOG.debug(Log.EXCEPTION, ex);
+            LOG.debug("SAX Parse Issue", ex);
             LOG.warn("WARNING@" + getLocationString(ex) + " : " + ex.toString());
         }
 
@@ -435,16 +442,16 @@ public class XmlParser
             // Save error and continue to report other errors
             if (_error == null)
                 _error = ex;
-            LOG.debug(Log.EXCEPTION, ex);
-            LOG.warn("ERROR@" + getLocationString(ex) + " : " + ex.toString());
+            LOG.debug("SAX Parse Issue", ex);
+            LOG.error("ERROR@" + getLocationString(ex) + " : " + ex.toString());
         }
 
         @Override
         public void fatalError(SAXParseException ex) throws SAXException
         {
             _error = ex;
-            LOG.debug(Log.EXCEPTION, ex);
-            LOG.warn("FATAL@" + getLocationString(ex) + " : " + ex.toString());
+            LOG.debug("SAX Parse Issue", ex);
+            LOG.error("FATAL@" + getLocationString(ex) + " : " + ex.toString());
             throw ex;
         }
 
@@ -676,7 +683,7 @@ public class XmlParser
         }
 
         @Override
-        public synchronized String toString()
+        public String toString()
         {
             return toString(true);
         }
@@ -687,7 +694,7 @@ public class XmlParser
          * @param tag If false, only _content is shown.
          * @return the string value
          */
-        public synchronized String toString(boolean tag)
+        public String toString(boolean tag)
         {
             StringBuilder buf = new StringBuilder();
             toString(buf, tag);
@@ -701,7 +708,7 @@ public class XmlParser
          * @param trim true to trim the content
          * @return the trimmed content
          */
-        public synchronized String toString(boolean tag, boolean trim)
+        public String toString(boolean tag, boolean trim)
         {
             String s = toString(tag);
             if (s != null && trim)
@@ -709,7 +716,7 @@ public class XmlParser
             return s;
         }
 
-        private synchronized void toString(StringBuilder buf, boolean tag)
+        private void toString(StringBuilder buf, boolean tag)
         {
             if (tag)
             {

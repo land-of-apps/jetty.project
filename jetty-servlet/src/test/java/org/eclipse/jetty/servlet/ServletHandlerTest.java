@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.servlet;
@@ -85,17 +85,17 @@ public class ServletHandlerTest
         fm5.setFilterHolder(fh5);
 
         sh1.setName("s1");
-        sm1.setDefault(false);
+        sm1.setFromDefaultDescriptor(false);
         sm1.setPathSpec("/foo/*");
         sm1.setServletName("s1");
 
         sh2.setName("s2");
-        sm2.setDefault(false);
+        sm2.setFromDefaultDescriptor(false);
         sm2.setPathSpec("/foo/*");
         sm2.setServletName("s2");
 
         sh3.setName("s3");
-        sm3.setDefault(true);
+        sm3.setFromDefaultDescriptor(true);
         sm3.setPathSpec("/foo/*");
         sm3.setServletName("s3");
     }
@@ -257,9 +257,9 @@ public class ServletHandlerTest
 
         handler.updateMappings();
 
-        MappedResource<ServletHolder> entry = handler.getMappedServlet("/foo/*");
+        ServletHandler.MappedServlet entry = handler.getMappedServlet("/foo/*");
         assertNotNull(entry);
-        assertEquals("s1", entry.getResource().getName());
+        assertEquals("s1", entry.getServletHolder().getName());
     }
 
     @Test
@@ -298,9 +298,9 @@ public class ServletHandlerTest
         handler.addServletMapping(sm2);
         handler.updateMappings();
 
-        MappedResource<ServletHolder> entry = handler.getMappedServlet("/foo/*");
+        ServletHandler.MappedServlet entry = handler.getMappedServlet("/foo/*");
         assertNotNull(entry);
-        assertEquals("s2", entry.getResource().getName());
+        assertEquals("s2", entry.getServletHolder().getName());
     }
 
     @Test
@@ -687,7 +687,6 @@ public class ServletHandlerTest
             {
                 removeResults.add(child);
             }
-        
         });
 
         handler.addFilter(fh1);
@@ -714,12 +713,12 @@ public class ServletHandlerTest
         //test that servlets, filters and listeners are dumped, but
         //not as beans
         String dump = handler.dump();
-        dump = dump.substring(0, dump.indexOf("key:"));
 
-        assertFalse(dump.contains("+-")); //not dumped as beans
-        assertFalse(dump.contains("+=")); //not dumped as managed beans
-        assertFalse(dump.contains("+~")); //not dumped as unmanaged beans
-        assertFalse(dump.contains("+?")); //not dumped as auto beans
+        assertTrue(dump.contains("+> listeners"));
+        assertTrue(dump.contains("+> filters"));
+        assertTrue(dump.contains("+> servlets"));
+        assertTrue(dump.contains("+> filterMappings"));
+        assertTrue(dump.contains("+> servletMappings"));
 
         handler.setFilters(null);
         handler.setServlets(null);

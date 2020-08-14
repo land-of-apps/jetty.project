@@ -2,7 +2,7 @@
   <parent>
     <groupId>org.eclipse.jetty.examples</groupId>
     <artifactId>examples-parent</artifactId>
-    <version>9.4.31.v20200723</version>
+    <version>10.0.0-SNAPSHOT</version>
   </parent>
 
   <modelVersion>4.0.0</modelVersion>
@@ -14,6 +14,7 @@
   <modules>
     <module>async-rest-jar</module>
     <module>async-rest-webapp</module>
+    <module>async-rest-server</module>
   </modules>
 
 </project>

@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.annotations;
@@ -26,7 +26,6 @@ import java.net.URL;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -40,8 +39,6 @@ import org.eclipse.jetty.util.MultiException;
 import org.eclipse.jetty.util.MultiReleaseJarFile;
 import org.eclipse.jetty.util.StringUtil;
 import org.eclipse.jetty.util.TypeUtil;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
 import org.eclipse.jetty.util.resource.Resource;
 import org.objectweb.asm.AnnotationVisitor;
 import org.objectweb.asm.ClassReader;
@@ -49,6 +46,8 @@ import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.FieldVisitor;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * AnnotationParser
@@ -70,9 +69,9 @@ import org.objectweb.asm.Opcodes;
  */
 public class AnnotationParser
 {
-    private static final Logger LOG = Log.getLogger(AnnotationParser.class);
-    private static final int ASM_OPCODE_VERSION = Opcodes.ASM7; //compatibility of api
-    private static final String ASM_OPCODE_VERSION_STR = "ASM7";
+    private static final Logger LOG = LoggerFactory.getLogger(AnnotationParser.class);
+    protected static int ASM_OPCODE_VERSION = Opcodes.ASM7; //compatibility of api
+    protected static String ASM_OPCODE_VERSION_STR = "ASM7";
 
     /**
      * Map of classnames scanned and the first location from which scan occurred
@@ -348,19 +347,19 @@ public class AnnotationParser
     /**
      * Signature for all handlers that respond to parsing class files.
      */
-    public interface Handler
+    public static interface Handler
     {
-        void handle(ClassInfo classInfo);
+        public void handle(ClassInfo classInfo);
 
-        void handle(MethodInfo methodInfo);
+        public void handle(MethodInfo methodInfo);
 
-        void handle(FieldInfo fieldInfo);
+        public void handle(FieldInfo fieldInfo);
 
-        void handle(ClassInfo info, String annotationName);
+        public void handle(ClassInfo info, String annotationName);
 
-        void handle(MethodInfo info, String annotationName);
+        public void handle(MethodInfo info, String annotationName);
 
-        void handle(FieldInfo info, String annotationName);
+        public void handle(FieldInfo info, String annotationName);
     }
 
     /**
@@ -589,20 +588,6 @@ public class AnnotationParser
     }
 
     /**
-     * Get the locations of the given classname. There may be more than one
-     * location if there are duplicates of the same class.
-     *
-     * @param classname the name of the class
-     * @return an immutable list of locations
-     * @deprecated List of duplicate locations no longer stored
-     */
-    @Deprecated
-    public List<String> getParsedLocations(String classname)
-    {
-        return Collections.emptyList();
-    }
-
-    /**
      * Parse a given class
      *
      * @param handlers the set of handlers to find class
@@ -710,84 +695,6 @@ public class AnnotationParser
     }
 
     /**
-     * Parse all classes in a directory
-     *
-     * @param handlers the set of handlers to look for classes in
-     * @param root the resource directory to look for classes
-     * @throws Exception if unable to parse
-     */
-    protected void parseDir(Set<? extends Handler> handlers, Resource root) throws Exception
-    {
-        if (!root.isDirectory() || !root.exists() || root.getName().startsWith("."))
-            return;
-
-        if (LOG.isDebugEnabled())
-            LOG.debug("Scanning dir {}", root);
-
-        File rootFile = root.getFile();
-
-        MultiException me = new MultiException();
-        Collection<Resource> resources = root.getAllResources();
-        if (resources != null)
-        {
-            for (Resource r : resources)
-            {
-                if (r.isDirectory())
-                    continue;
-
-                File file = r.getFile();
-                if (isValidClassFileName((file == null ? null : file.getName())))
-                {
-                    Path classpath = rootFile.toPath().relativize(file.toPath());
-                    String str = classpath.toString();
-                    str = str.substring(0, str.lastIndexOf(".class"));
-                    str = StringUtil.replace(str, File.separatorChar, '.');
-
-                    try
-                    {
-                        if (LOG.isDebugEnabled())
-                            LOG.debug("Scanning class {}", r);
-                        addParsedClass(str, r);
-                        try (InputStream is = r.getInputStream())
-                        {
-                            scanClass(handlers, Resource.newResource(file.getParentFile()), is);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        if (LOG.isDebugEnabled())
-                            LOG.debug("Error scanning file " + file, ex);
-                        me.add(new RuntimeException("Error scanning file " + file, ex));
-                    }
-                }
-                else
-                {
-                    if (LOG.isDebugEnabled())
-                        LOG.debug("Skipping scan on invalid file {}", file);
-                }
-            }
-        }
-
-        me.ifExceptionThrow();
-    }
-
-    /**
-     * Parse classes in the supplied classloader.
-     * Only class files in jar files will be scanned.
-     *
-     * @param handlers the handlers to look for classes in
-     * @param loader the classloader for the classes
-     * @param visitParents if true, visit parent classloaders too
-     * @param nullInclusive if true, an empty pattern means all names match, if false, none match
-     * @throws Exception if unable to parse
-     */
-    @Deprecated
-    public void parse(final Set<? extends Handler> handlers, ClassLoader loader, boolean visitParents, boolean nullInclusive) throws Exception
-    {
-        throw new UnsupportedOperationException();
-    }
-
-    /**
      * Parse classes in the supplied uris.
      *
      * @param handlers the handlers to look for classes in
@@ -866,6 +773,68 @@ public class AnnotationParser
 
         if (LOG.isDebugEnabled())
             LOG.warn("Resource not scannable for classes: {}", r);
+    }
+
+    /**
+     * Parse all classes in a directory
+     *
+     * @param handlers the set of handlers to look for classes in
+     * @param root the resource directory to look for classes
+     * @throws Exception if unable to parse
+     */
+    protected void parseDir(Set<? extends Handler> handlers, Resource root) throws Exception
+    {
+        if (!root.isDirectory() || !root.exists() || root.getName().startsWith("."))
+            return;
+
+        if (LOG.isDebugEnabled())
+            LOG.debug("Scanning dir {}", root);
+
+        File rootFile = root.getFile();
+
+        MultiException me = new MultiException();
+        Collection<Resource> resources = root.getAllResources();
+        if (resources != null)
+        {
+            for (Resource r : resources)
+            {
+                if (r.isDirectory())
+                    continue;
+
+                File file = r.getFile();
+                if (isValidClassFileName((file == null ? null : file.getName())))
+                {
+                    Path classpath = rootFile.toPath().relativize(file.toPath());
+                    String str = classpath.toString();
+                    str = str.substring(0, str.lastIndexOf(".class"));
+                    str = StringUtil.replace(str, File.separatorChar, '.');
+
+                    try
+                    {
+                        if (LOG.isDebugEnabled())
+                            LOG.debug("Scanning class {}", r);
+                        addParsedClass(str, r);
+                        try (InputStream is = r.getInputStream())
+                        {
+                            scanClass(handlers, Resource.newResource(file.getParentFile()), is);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        if (LOG.isDebugEnabled())
+                            LOG.debug("Error scanning file " + file, ex);
+                        me.add(new RuntimeException("Error scanning file " + file, ex));
+                    }
+                }
+                else
+                {
+                    if (LOG.isDebugEnabled())
+                        LOG.debug("Skipping scan on invalid file {}", file);
+                }
+            }
+        }
+
+        me.ifExceptionThrow();
     }
 
     /**

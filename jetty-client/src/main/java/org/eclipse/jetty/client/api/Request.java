@@ -1,24 +1,25 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.client.api;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.HttpCookie;
 import java.net.URI;
 import java.net.URLEncoder;
@@ -30,6 +31,7 @@ import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Consumer;
 
 import org.eclipse.jetty.client.HttpClient;
 import org.eclipse.jetty.client.util.InputStreamResponseListener;
@@ -37,6 +39,7 @@ import org.eclipse.jetty.http.HttpFields;
 import org.eclipse.jetty.http.HttpHeader;
 import org.eclipse.jetty.http.HttpMethod;
 import org.eclipse.jetty.http.HttpVersion;
+import org.eclipse.jetty.util.Callback;
 import org.eclipse.jetty.util.Fields;
 
 /**
@@ -169,11 +172,21 @@ public interface Request
     HttpFields getHeaders();
 
     /**
+     * Modifies the headers of this request.
+     *
+     * @param consumer the code that modifies the headers of this request
+     * @return this request object
+     */
+    Request headers(Consumer<HttpFields.Mutable> consumer);
+
+    /**
      * @param name the name of the header
      * @param value the value of the header
      * @return this request object
      * @see #header(HttpHeader, String)
+     * @deprecated use {@link #headers(Consumer)} instead
      */
+    @Deprecated
     Request header(String name, String value);
 
     /**
@@ -184,7 +197,9 @@ public interface Request
      * @param header the header name
      * @param value the value of the header
      * @return this request object
+     * @deprecated use {@link #headers(Consumer)} instead
      */
+    @Deprecated
     Request header(HttpHeader header, String value);
 
     /**
@@ -234,21 +249,38 @@ public interface Request
 
     /**
      * @return the content provider of this request
+     * @deprecated use {@link #getBody()} instead
      */
+    @Deprecated
     ContentProvider getContent();
 
     /**
      * @param content the content provider of this request
      * @return this request object
+     * @deprecated use {@link #body(Content)} instead
      */
+    @Deprecated
     Request content(ContentProvider content);
 
     /**
      * @param content the content provider of this request
      * @param contentType the content type
      * @return this request object
+     * @deprecated use {@link #body(Content)} instead
      */
+    @Deprecated
     Request content(ContentProvider content, String contentType);
+
+    /**
+     * @return the request content of this request
+     */
+    Content getBody();
+
+    /**
+     * @param content the request content of this request
+     * @return this request object
+     */
+    Request body(Content content);
 
     /**
      * Shortcut method to specify a file as a content for this request, with the default content type of
@@ -483,27 +515,27 @@ public interface Request
     /**
      * Common, empty, super-interface for request listeners.
      */
-    interface RequestListener extends EventListener
+    public interface RequestListener extends EventListener
     {
     }
 
     /**
      * Listener for the request queued event.
      */
-    interface QueuedListener extends RequestListener
+    public interface QueuedListener extends RequestListener
     {
         /**
          * Callback method invoked when the request is queued, waiting to be sent
          *
          * @param request the request being queued
          */
-        void onQueued(Request request);
+        public void onQueued(Request request);
     }
 
     /**
      * Listener for the request begin event.
      */
-    interface BeginListener extends RequestListener
+    public interface BeginListener extends RequestListener
     {
         /**
          * Callback method invoked when the request begins being processed in order to be sent.
@@ -511,13 +543,13 @@ public interface Request
          *
          * @param request the request that begins being processed
          */
-        void onBegin(Request request);
+        public void onBegin(Request request);
     }
 
     /**
      * Listener for the request headers event.
      */
-    interface HeadersListener extends RequestListener
+    public interface HeadersListener extends RequestListener
     {
         /**
          * Callback method invoked when the request headers (and perhaps small content) are ready to be sent.
@@ -526,13 +558,13 @@ public interface Request
          *
          * @param request the request that is about to be committed
          */
-        void onHeaders(Request request);
+        public void onHeaders(Request request);
     }
 
     /**
      * Listener for the request committed event.
      */
-    interface CommitListener extends RequestListener
+    public interface CommitListener extends RequestListener
     {
         /**
          * Callback method invoked when the request headers (and perhaps small content) have been sent.
@@ -541,13 +573,13 @@ public interface Request
          *
          * @param request the request that has been committed
          */
-        void onCommit(Request request);
+        public void onCommit(Request request);
     }
 
     /**
      * Listener for the request content event.
      */
-    interface ContentListener extends RequestListener
+    public interface ContentListener extends RequestListener
     {
         /**
          * Callback method invoked when a chunk of request content has been sent successfully.
@@ -556,26 +588,26 @@ public interface Request
          * @param request the request that has been committed
          * @param content the content
          */
-        void onContent(Request request, ByteBuffer content);
+        public void onContent(Request request, ByteBuffer content);
     }
 
     /**
      * Listener for the request succeeded event.
      */
-    interface SuccessListener extends RequestListener
+    public interface SuccessListener extends RequestListener
     {
         /**
          * Callback method invoked when the request has been successfully sent.
          *
          * @param request the request sent
          */
-        void onSuccess(Request request);
+        public void onSuccess(Request request);
     }
 
     /**
      * Listener for the request failed event.
      */
-    interface FailureListener extends RequestListener
+    public interface FailureListener extends RequestListener
     {
         /**
          * Callback method invoked when the request has failed to be sent
@@ -583,13 +615,13 @@ public interface Request
          * @param request the request that failed
          * @param failure the failure
          */
-        void onFailure(Request request, Throwable failure);
+        public void onFailure(Request request, Throwable failure);
     }
 
     /**
      * Listener for all request events.
      */
-    interface Listener extends QueuedListener, BeginListener, HeadersListener, CommitListener, ContentListener, SuccessListener, FailureListener
+    public interface Listener extends QueuedListener, BeginListener, HeadersListener, CommitListener, ContentListener, SuccessListener, FailureListener
     {
         @Override
         public default void onQueued(Request request)
@@ -629,8 +661,162 @@ public interface Request
         /**
          * An empty implementation of {@link Listener}
          */
-        class Adapter implements Listener
+        public static class Adapter implements Listener
         {
+        }
+    }
+
+    /**
+     * <p>A reactive model to produce request content, similar to {@link java.util.concurrent.Flow.Publisher}.</p>
+     * <p>Implementations receive the content consumer via {@link #subscribe(Consumer, boolean)},
+     * and return a {@link Subscription} as the link between producer and consumer.</p>
+     * <p>Content producers must notify content to the consumer only if there is demand.</p>
+     * <p>Content consumers can generate demand for content by invoking {@link Subscription#demand()}.</p>
+     * <p>Content production must follow this algorithm:</p>
+     * <ul>
+     *   <li>the first time content is demanded
+     *   <ul>
+     *     <li>when the content is not available =&gt; produce an empty content</li>
+     *     <li>when the content is available:
+     *       <ul>
+     *         <li>when {@code emitInitialContent == false} =&gt; produce an empty content</li>
+     *         <li>when {@code emitInitialContent == true} =&gt; produce the content</li>
+     *       </ul>
+     *     </li>
+     *   </ul>
+     *   </li>
+     *   <li>the second and subsequent times content is demanded
+     *     <ul>
+     *       <li>when the content is not available =&gt; do not produce content</li>
+     *       <li>when the content is available =&gt; produce the content</li>
+     *     </ul>
+     *   </li>
+     * </ul>
+     *
+     * @see #subscribe(Consumer, boolean)
+     */
+    public interface Content
+    {
+        /**
+         * @return the content type string such as "application/octet-stream" or
+         * "application/json;charset=UTF8", or null if no content type must be set
+         */
+        public default String getContentType()
+        {
+            return "application/octet-stream";
+        }
+
+        /**
+         * @return the content length, if known, or -1 if the content length is unknown
+         */
+        public default long getLength()
+        {
+            return -1;
+        }
+
+        /**
+         * <p>Whether this content producer can produce exactly the same content more
+         * than once.</p>
+         * <p>Implementations should return {@code true} only if the content can be
+         * produced more than once, which means that {@link #subscribe(Consumer, boolean)}
+         * may be called again.</p>
+         * <p>The {@link HttpClient} implementation may use this method in particular
+         * cases where it detects that it is safe to retry a request that failed.</p>
+         *
+         * @return whether the content can be produced more than once
+         */
+        public default boolean isReproducible()
+        {
+            return false;
+        }
+
+        /**
+         * <p>Initializes this content producer with the content consumer, and with
+         * the indication of whether initial content, if present, must be emitted
+         * upon the initial demand of content (to support delaying the send of the
+         * request content in case of {@code Expect: 100-Continue} when
+         * {@code emitInitialContent} is {@code false}).</p>
+         *
+         * @param consumer the content consumer to invoke when there is demand for content
+         * @param emitInitialContent whether to emit initial content, if present
+         * @return the Subscription that links this producer to the consumer
+         */
+        public Subscription subscribe(Consumer consumer, boolean emitInitialContent);
+
+        /**
+         * <p>Fails this request content, possibly failing and discarding accumulated
+         * content that was not demanded.</p>
+         * <p>The failure may be notified to the consumer at a later time, when the
+         * consumer demands for content.</p>
+         * <p>Typical failure: the request being aborted by user code, or idle timeouts.</p>
+         *
+         * @param failure the reason of the failure
+         */
+        public default void fail(Throwable failure)
+        {
+        }
+
+        /**
+         * <p>A reactive model to consume request content, similar to {@link java.util.concurrent.Flow.Subscriber}.</p>
+         * <p>Callback methods {@link #onContent(ByteBuffer, boolean, Callback)} and {@link #onFailure(Throwable)}
+         * are invoked in strict sequential order and never concurrently, although possibly by different threads.</p>
+         */
+        public interface Consumer
+        {
+            /**
+             * <p>Callback method invoked by the producer when there is content available
+             * <em>and</em> there is demand for content.</p>
+             * <p>The {@code callback} is associated with the {@code buffer} to
+             * signal when the content buffer has been consumed.</p>
+             * <p>Failing the {@code callback} does not have any effect on content
+             * production. To stop the content production, the consumer must call
+             * {@link Subscription#fail(Throwable)}.</p>
+             * <p>In case an exception is thrown by this method, it is equivalent to
+             * a call to {@link Subscription#fail(Throwable)}.</p>
+             *
+             * @param buffer the content buffer to consume
+             * @param last whether it's the last content
+             * @param callback a callback to invoke when the content buffer is consumed
+             */
+            public void onContent(ByteBuffer buffer, boolean last, Callback callback);
+
+            /**
+             * <p>Callback method invoked by the producer when it failed to produce content.</p>
+             * <p>Typical failure: a producer getting an exception while reading from an
+             * {@link InputStream} to produce content.</p>
+             *
+             * @param failure the reason of the failure
+             */
+            public default void onFailure(Throwable failure)
+            {
+            }
+        }
+
+        /**
+         * <p>The link between a content producer and a content consumer.</p>
+         * <p>Content consumers can demand more content via {@link #demand()},
+         * or ask the content producer to stop producing content via
+         * {@link #fail(Throwable)}.</p>
+         */
+        public interface Subscription
+        {
+            /**
+             * <p>Demands more content, which eventually results in
+             * {@link Consumer#onContent(ByteBuffer, boolean, Callback)} to be invoked.</p>
+             */
+            public void demand();
+
+            /**
+             * <p>Fails the subscription, notifying the content producer to stop producing
+             * content.</p>
+             * <p>Typical failure: a proxy consumer waiting for more content (or waiting
+             * to demand content) that is failed by an error response from the server.</p>
+             *
+             * @param failure the reason of the failure
+             */
+            public default void fail(Throwable failure)
+            {
+            }
         }
     }
 }

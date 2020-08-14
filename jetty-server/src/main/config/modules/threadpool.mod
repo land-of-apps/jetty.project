@@ -3,6 +3,9 @@
 [description]
 Enables the Server thread pool.
 
+[depends]
+logging
+
 [xml]
 etc/jetty-threadpool.xml
 

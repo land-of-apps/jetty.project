@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.server;
@@ -51,12 +51,12 @@ public interface ConnectionFactory
     /**
      * @return A string representing the primary protocol name.
      */
-    String getProtocol();
+    public String getProtocol();
 
     /**
      * @return A list of alternative protocol names/versions including the primary protocol.
      */
-    List<String> getProtocols();
+    public List<String> getProtocols();
 
     /**
      * <p>Creates a new {@link Connection} with the given parameters</p>
@@ -65,9 +65,9 @@ public interface ConnectionFactory
      * @param endPoint the {@link EndPoint} associated with the connection
      * @return a new {@link Connection}
      */
-    Connection newConnection(Connector connector, EndPoint endPoint);
+    public Connection newConnection(Connector connector, EndPoint endPoint);
 
-    interface Upgrading extends ConnectionFactory
+    public interface Upgrading extends ConnectionFactory
     {
 
         /**
@@ -84,7 +84,7 @@ public interface ConnectionFactory
          * indicate that the upgrade should proceed.
          * @throws BadMessageException Thrown to indicate the upgrade attempt was illegal and that a bad message response should be sent.
          */
-        Connection upgradeConnection(Connector connector, EndPoint endPoint, MetaData.Request upgradeRequest, HttpFields responseFields) throws BadMessageException;
+        public Connection upgradeConnection(Connector connector, EndPoint endPoint, MetaData.Request upgradeRequest, HttpFields.Mutable responseFields) throws BadMessageException;
     }
 
     /**
@@ -124,5 +124,17 @@ public interface ConnectionFactory
          * </ul>
          */
         Detection detect(ByteBuffer buffer);
+    }
+
+    /**
+     * A ConnectionFactory that can configure the connector.
+     */
+    interface Configuring extends ConnectionFactory
+    {
+        /**
+         * Called during {@link Connector#start()}.
+         * @param connector The connector to configure
+         */
+        void configure(Connector connector);
     }
 }

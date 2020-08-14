@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.server;
@@ -32,16 +32,17 @@ import org.eclipse.jetty.util.annotation.Name;
 import org.eclipse.jetty.util.component.ContainerLifeCycle;
 import org.eclipse.jetty.util.ssl.SslContextFactory;
 
-public class SslConnectionFactory extends AbstractConnectionFactory implements ConnectionFactory.Detecting
+public class SslConnectionFactory extends AbstractConnectionFactory implements ConnectionFactory.Detecting, ConnectionFactory.Configuring
 {
     private static final int TLS_ALERT_FRAME_TYPE = 0x15;
     private static final int TLS_HANDSHAKE_FRAME_TYPE = 0x16;
     private static final int TLS_MAJOR_VERSION = 3;
 
-    private final SslContextFactory _sslContextFactory;
+    private final SslContextFactory.Server _sslContextFactory;
     private final String _nextProtocol;
     private boolean _directBuffersForEncryption = false;
     private boolean _directBuffersForDecryption = false;
+    private boolean _ensureSecureRequestCustomizer = true;
 
     public SslConnectionFactory()
     {
@@ -53,7 +54,7 @@ public class SslConnectionFactory extends AbstractConnectionFactory implements C
         this(null, nextProtocol);
     }
 
-    public SslConnectionFactory(@Name("sslContextFactory") SslContextFactory factory, @Name("next") String nextProtocol)
+    public SslConnectionFactory(@Name("sslContextFactory") SslContextFactory.Server factory, @Name("next") String nextProtocol)
     {
         super("SSL");
         _sslContextFactory = factory == null ? new SslContextFactory.Server() : factory;
@@ -61,7 +62,7 @@ public class SslConnectionFactory extends AbstractConnectionFactory implements C
         addBean(_sslContextFactory);
     }
 
-    public SslContextFactory getSslContextFactory()
+    public SslContextFactory.Server getSslContextFactory()
     {
         return _sslContextFactory;
     }
@@ -91,6 +92,21 @@ public class SslConnectionFactory extends AbstractConnectionFactory implements C
         return _nextProtocol;
     }
 
+    public boolean isEnsureSecureRequestCustomizer()
+    {
+        return _ensureSecureRequestCustomizer;
+    }
+
+    /**
+     * @param ensureSecureRequestCustomizer True if this factory ensures that all {@link HttpConfiguration}s on
+     * associated {@link Connector}s have an {@link SecureRequestCustomizer} instance.
+     * @see ConnectionFactory.Configuring
+     */
+    public void setEnsureSecureRequestCustomizer(boolean ensureSecureRequestCustomizer)
+    {
+        _ensureSecureRequestCustomizer = ensureSecureRequestCustomizer;
+    }
+
     @Override
     protected void doStart() throws Exception
     {
@@ -102,6 +118,19 @@ public class SslConnectionFactory extends AbstractConnectionFactory implements C
 
         if (session.getPacketBufferSize() > getInputBufferSize())
             setInputBufferSize(session.getPacketBufferSize());
+    }
+
+    @Override
+    public void configure(Connector connector)
+    {
+        if (isEnsureSecureRequestCustomizer())
+        {
+            connector.getContainedBeans(HttpConfiguration.class).forEach(configuration ->
+            {
+                if (configuration.getCustomizer(SecureRequestCustomizer.class) == null)
+                    configuration.addCustomizer(new SecureRequestCustomizer());
+            });
+        }
     }
 
     @Override

@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.fcgi.server;
@@ -23,6 +23,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
@@ -40,17 +41,16 @@ import javax.servlet.http.HttpServletResponse;
 import org.eclipse.jetty.client.api.ContentResponse;
 import org.eclipse.jetty.client.api.Request;
 import org.eclipse.jetty.client.api.Response;
-import org.eclipse.jetty.client.api.Result;
-import org.eclipse.jetty.client.util.BytesContentProvider;
-import org.eclipse.jetty.client.util.DeferredContentProvider;
+import org.eclipse.jetty.client.util.AsyncRequestContent;
+import org.eclipse.jetty.client.util.BytesRequestContent;
 import org.eclipse.jetty.client.util.FutureResponseListener;
 import org.eclipse.jetty.http.HttpMethod;
 import org.eclipse.jetty.io.MappedByteBufferPool;
+import org.eclipse.jetty.logging.StacklessLogging;
 import org.eclipse.jetty.server.handler.AbstractHandler;
 import org.eclipse.jetty.toolchain.test.IO;
 import org.eclipse.jetty.toolchain.test.Net;
 import org.eclipse.jetty.util.Callback;
-import org.eclipse.jetty.util.log.StacklessLogging;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.DisabledIfSystemProperty;
@@ -87,7 +87,7 @@ public class HttpClientTest extends AbstractHttpClientServerTest
         start(new AbstractHandler()
         {
             @Override
-            public void handle(String target, org.eclipse.jetty.server.Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException
+            public void handle(String target, org.eclipse.jetty.server.Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException
             {
                 response.getOutputStream().write(data);
                 baseRequest.setHandled(true);
@@ -115,7 +115,7 @@ public class HttpClientTest extends AbstractHttpClientServerTest
         start(new AbstractHandler()
         {
             @Override
-            public void handle(String target, org.eclipse.jetty.server.Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException
+            public void handle(String target, org.eclipse.jetty.server.Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException
             {
                 // Setting the Content-Length triggers the HTTP
                 // content mode for response content parsing,
@@ -144,27 +144,27 @@ public class HttpClientTest extends AbstractHttpClientServerTest
         start(new AbstractHandler()
         {
             @Override
-            public void handle(String target, org.eclipse.jetty.server.Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException
+            public void handle(String target, org.eclipse.jetty.server.Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException
             {
                 response.setCharacterEncoding("UTF-8");
                 ServletOutputStream output = response.getOutputStream();
                 String paramValue1 = request.getParameter(paramName1);
-                output.write(paramValue1.getBytes("UTF-8"));
+                output.write(paramValue1.getBytes(StandardCharsets.UTF_8));
                 String paramValue2 = request.getParameter(paramName2);
                 assertEquals("", paramValue2);
-                output.write("empty".getBytes("UTF-8"));
+                output.write("empty".getBytes(StandardCharsets.UTF_8));
                 baseRequest.setHandled(true);
             }
         });
 
         String value1 = "\u20AC";
-        String paramValue1 = URLEncoder.encode(value1, "UTF-8");
+        String paramValue1 = URLEncoder.encode(value1, StandardCharsets.UTF_8);
         String query = paramName1 + "=" + paramValue1 + "&" + paramName2;
         ContentResponse response = client.GET(scheme + "://localhost:" + connector.getLocalPort() + "/?" + query);
 
         assertNotNull(response);
         assertEquals(200, response.getStatus());
-        String content = new String(response.getContent(), "UTF-8");
+        String content = new String(response.getContent(), StandardCharsets.UTF_8);
         assertEquals(value1 + "empty", content);
     }
 
@@ -176,17 +176,17 @@ public class HttpClientTest extends AbstractHttpClientServerTest
         start(new AbstractHandler()
         {
             @Override
-            public void handle(String target, org.eclipse.jetty.server.Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException
+            public void handle(String target, org.eclipse.jetty.server.Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException
             {
                 response.setCharacterEncoding("UTF-8");
                 ServletOutputStream output = response.getOutputStream();
                 String[] paramValues1 = request.getParameterValues(paramName1);
                 for (String paramValue : paramValues1)
                 {
-                    output.write(paramValue.getBytes("UTF-8"));
+                    output.write(paramValue.getBytes(StandardCharsets.UTF_8));
                 }
                 String paramValue2 = request.getParameter(paramName2);
-                output.write(paramValue2.getBytes("UTF-8"));
+                output.write(paramValue2.getBytes(StandardCharsets.UTF_8));
                 baseRequest.setHandled(true);
             }
         });
@@ -194,15 +194,15 @@ public class HttpClientTest extends AbstractHttpClientServerTest
         String value11 = "\u20AC";
         String value12 = "\u20AA";
         String value2 = "&";
-        String paramValue11 = URLEncoder.encode(value11, "UTF-8");
-        String paramValue12 = URLEncoder.encode(value12, "UTF-8");
-        String paramValue2 = URLEncoder.encode(value2, "UTF-8");
+        String paramValue11 = URLEncoder.encode(value11, StandardCharsets.UTF_8);
+        String paramValue12 = URLEncoder.encode(value12, StandardCharsets.UTF_8);
+        String paramValue2 = URLEncoder.encode(value2, StandardCharsets.UTF_8);
         String query = paramName1 + "=" + paramValue11 + "&" + paramName1 + "=" + paramValue12 + "&" + paramName2 + "=" + paramValue2;
         ContentResponse response = client.GET(scheme + "://localhost:" + connector.getLocalPort() + "/?" + query);
 
         assertNotNull(response);
         assertEquals(200, response.getStatus());
-        String content = new String(response.getContent(), "UTF-8");
+        String content = new String(response.getContent(), StandardCharsets.UTF_8);
         assertEquals(value11 + value12 + value2, content);
     }
 
@@ -214,7 +214,7 @@ public class HttpClientTest extends AbstractHttpClientServerTest
         start(new AbstractHandler()
         {
             @Override
-            public void handle(String target, org.eclipse.jetty.server.Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException
+            public void handle(String target, org.eclipse.jetty.server.Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException
             {
                 baseRequest.setHandled(true);
                 String value = request.getParameter(paramName);
@@ -234,7 +234,7 @@ public class HttpClientTest extends AbstractHttpClientServerTest
 
         assertNotNull(response);
         assertEquals(200, response.getStatus());
-        assertEquals(paramValue, new String(response.getContent(), "UTF-8"));
+        assertEquals(paramValue, new String(response.getContent(), StandardCharsets.UTF_8));
     }
 
     @Test
@@ -245,7 +245,7 @@ public class HttpClientTest extends AbstractHttpClientServerTest
         start(new AbstractHandler()
         {
             @Override
-            public void handle(String target, org.eclipse.jetty.server.Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException
+            public void handle(String target, org.eclipse.jetty.server.Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException
             {
                 baseRequest.setHandled(true);
                 String value = request.getParameter(paramName);
@@ -259,14 +259,14 @@ public class HttpClientTest extends AbstractHttpClientServerTest
         });
 
         String uri = scheme + "://localhost:" + connector.getLocalPort() +
-            "/?" + paramName + "=" + URLEncoder.encode(paramValue, "UTF-8");
+            "/?" + paramName + "=" + URLEncoder.encode(paramValue, StandardCharsets.UTF_8);
         ContentResponse response = client.POST(uri)
             .timeout(5, TimeUnit.SECONDS)
             .send();
 
         assertNotNull(response);
         assertEquals(200, response.getStatus());
-        assertEquals(paramValue, new String(response.getContent(), "UTF-8"));
+        assertEquals(paramValue, new String(response.getContent(), StandardCharsets.UTF_8));
     }
 
     @Test
@@ -277,7 +277,7 @@ public class HttpClientTest extends AbstractHttpClientServerTest
         start(new AbstractHandler()
         {
             @Override
-            public void handle(String target, org.eclipse.jetty.server.Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException
+            public void handle(String target, org.eclipse.jetty.server.Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException
             {
                 baseRequest.setHandled(true);
                 String value = request.getParameter(paramName);
@@ -298,7 +298,7 @@ public class HttpClientTest extends AbstractHttpClientServerTest
 
         assertNotNull(response);
         assertEquals(200, response.getStatus());
-        assertEquals(paramValue, new String(response.getContent(), "UTF-8"));
+        assertEquals(paramValue, new String(response.getContent(), StandardCharsets.UTF_8));
     }
 
     @Test
@@ -310,7 +310,7 @@ public class HttpClientTest extends AbstractHttpClientServerTest
         start(new AbstractHandler()
         {
             @Override
-            public void handle(String target, org.eclipse.jetty.server.Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException
+            public void handle(String target, org.eclipse.jetty.server.Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException
             {
                 baseRequest.setHandled(true);
                 String value = request.getParameter(paramName);
@@ -327,7 +327,7 @@ public class HttpClientTest extends AbstractHttpClientServerTest
         {
             ContentResponse response = client.POST(scheme + "://localhost:" + connector.getLocalPort() + "/?b=1")
                 .param(paramName, paramValue)
-                .content(new BytesContentProvider(content))
+                .body(new BytesRequestContent(content))
                 .timeout(5, TimeUnit.SECONDS)
                 .send();
 
@@ -344,18 +344,14 @@ public class HttpClientTest extends AbstractHttpClientServerTest
         start(new EmptyServerHandler());
 
         ContentResponse response = client.POST(scheme + "://localhost:" + connector.getLocalPort())
-            .onRequestContent(new Request.ContentListener()
+            .onRequestContent((request, buffer) ->
             {
-                @Override
-                public void onContent(Request request, ByteBuffer buffer)
-                {
-                    byte[] bytes = new byte[buffer.remaining()];
-                    buffer.get(bytes);
-                    if (!Arrays.equals(content, bytes))
-                        request.abort(new Exception());
-                }
+                byte[] bytes = new byte[buffer.remaining()];
+                buffer.get(bytes);
+                if (!Arrays.equals(content, bytes))
+                    request.abort(new Exception());
             })
-            .content(new BytesContentProvider(content))
+            .body(new BytesRequestContent(content))
             .timeout(5, TimeUnit.SECONDS)
             .send();
 
@@ -370,18 +366,16 @@ public class HttpClientTest extends AbstractHttpClientServerTest
 
         final AtomicInteger progress = new AtomicInteger();
         ContentResponse response = client.POST(scheme + "://localhost:" + connector.getLocalPort())
-            .onRequestContent(new Request.ContentListener()
+            .onRequestContent((request, buffer) ->
             {
-                @Override
-                public void onContent(Request request, ByteBuffer buffer)
-                {
-                    byte[] bytes = new byte[buffer.remaining()];
-                    assertEquals(1, bytes.length);
-                    buffer.get(bytes);
-                    assertEquals(bytes[0], progress.getAndIncrement());
-                }
+                byte[] bytes = new byte[buffer.remaining()];
+                assertEquals(1, bytes.length);
+                buffer.get(bytes);
+                assertEquals(bytes[0], progress.getAndIncrement());
             })
-            .content(new BytesContentProvider(new byte[]{0}, new byte[]{1}, new byte[]{2}, new byte[]{3}, new byte[]{4}))
+            .body(new BytesRequestContent(new byte[]{0}, new byte[]{1}, new byte[]{
+                2
+            }, new byte[]{3}, new byte[]{4}))
             .timeout(5, TimeUnit.SECONDS)
             .send();
 
@@ -402,7 +396,7 @@ public class HttpClientTest extends AbstractHttpClientServerTest
         start(new AbstractHandler()
         {
             @Override
-            public void handle(String target, org.eclipse.jetty.server.Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException
+            public void handle(String target, org.eclipse.jetty.server.Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException
             {
                 baseRequest.setHandled(true);
                 response.setHeader("Content-Encoding", "gzip");
@@ -429,7 +423,7 @@ public class HttpClientTest extends AbstractHttpClientServerTest
         start(new AbstractHandler()
         {
             @Override
-            public void handle(String target, org.eclipse.jetty.server.Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException
+            public void handle(String target, org.eclipse.jetty.server.Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws ServletException
             {
                 try
                 {
@@ -446,13 +440,11 @@ public class HttpClientTest extends AbstractHttpClientServerTest
         final String host = "localhost";
         final int port = connector.getLocalPort();
         assertThrows(TimeoutException.class, () ->
-        {
             client.newRequest(host, port)
                 .scheme(scheme)
                 .idleTimeout(idleTimeout, TimeUnit.MILLISECONDS)
                 .timeout(3 * idleTimeout, TimeUnit.MILLISECONDS)
-                .send();
-        });
+                .send());
 
         // Make another request without specifying the idle timeout, should not fail
         ContentResponse response = client.newRequest(host, port)
@@ -471,7 +463,7 @@ public class HttpClientTest extends AbstractHttpClientServerTest
         start(new AbstractHandler()
         {
             @Override
-            public void handle(String target, org.eclipse.jetty.server.Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException
+            public void handle(String target, org.eclipse.jetty.server.Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws ServletException
             {
                 try
                 {
@@ -488,13 +480,11 @@ public class HttpClientTest extends AbstractHttpClientServerTest
         connector.setIdleTimeout(idleTimeout);
 
         ExecutionException x = assertThrows(ExecutionException.class, () ->
-        {
             client.newRequest("localhost", connector.getLocalPort())
                 .scheme(scheme)
                 .idleTimeout(4 * idleTimeout, TimeUnit.MILLISECONDS)
                 .timeout(3 * idleTimeout, TimeUnit.MILLISECONDS)
-                .send();
-        });
+                .send());
         assertThat(x.getCause(), instanceOf(EOFException.class));
 
         connector.setIdleTimeout(5 * idleTimeout);
@@ -532,7 +522,7 @@ public class HttpClientTest extends AbstractHttpClientServerTest
         start(new AbstractHandler()
         {
             @Override
-            public void handle(String target, org.eclipse.jetty.server.Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException
+            public void handle(String target, org.eclipse.jetty.server.Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException
             {
                 baseRequest.setHandled(true);
                 response.getOutputStream().write(new byte[length]);
@@ -569,7 +559,7 @@ public class HttpClientTest extends AbstractHttpClientServerTest
         start(new AbstractHandler()
         {
             @Override
-            public void handle(String target, org.eclipse.jetty.server.Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException
+            public void handle(String target, org.eclipse.jetty.server.Request baseRequest, HttpServletRequest request, HttpServletResponse response)
             {
                 baseRequest.setHandled(true);
                 request.startAsync();
@@ -580,14 +570,10 @@ public class HttpClientTest extends AbstractHttpClientServerTest
         final CountDownLatch completeLatch = new CountDownLatch(1);
         client.newRequest("localhost", connector.getLocalPort())
             .scheme(scheme)
-            .send(new Response.CompleteListener()
+            .send(result ->
             {
-                @Override
-                public void onComplete(Result result)
-                {
-                    if (result.isFailed())
-                        completeLatch.countDown();
-                }
+                if (result.isFailed())
+                    completeLatch.countDown();
             });
 
         assertTrue(latch.await(5, TimeUnit.SECONDS));
@@ -604,7 +590,7 @@ public class HttpClientTest extends AbstractHttpClientServerTest
         start(new AbstractHandler()
         {
             @Override
-            public void handle(String target, org.eclipse.jetty.server.Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException
+            public void handle(String target, org.eclipse.jetty.server.Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException
             {
                 baseRequest.setHandled(true);
                 // Promise some content, then flush the headers, then fail to send the content.
@@ -617,12 +603,10 @@ public class HttpClientTest extends AbstractHttpClientServerTest
         try (StacklessLogging ignore = new StacklessLogging(org.eclipse.jetty.server.HttpChannel.class))
         {
             assertThrows(ExecutionException.class, () ->
-            {
                 client.newRequest("localhost", connector.getLocalPort())
                     .scheme(scheme)
                     .timeout(60, TimeUnit.SECONDS)
-                    .send();
-            });
+                    .send());
         }
     }
 
@@ -645,7 +629,7 @@ public class HttpClientTest extends AbstractHttpClientServerTest
         start(new AbstractHandler()
         {
             @Override
-            public void handle(String target, org.eclipse.jetty.server.Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException
+            public void handle(String target, org.eclipse.jetty.server.Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException
             {
                 baseRequest.setHandled(true);
                 response.setHeader("Connection", "close");
@@ -653,10 +637,10 @@ public class HttpClientTest extends AbstractHttpClientServerTest
             }
         });
 
-        DeferredContentProvider content = new DeferredContentProvider(ByteBuffer.wrap(new byte[]{0}));
+        AsyncRequestContent content = new AsyncRequestContent(ByteBuffer.wrap(new byte[]{0}));
         Request request = client.newRequest("localhost", connector.getLocalPort())
             .scheme(scheme)
-            .content(content);
+            .body(content);
         FutureResponseListener listener = new FutureResponseListener(request);
         request.send(listener);
         // Wait some time to simulate a slow request.
@@ -675,7 +659,7 @@ public class HttpClientTest extends AbstractHttpClientServerTest
         start(new AbstractHandler()
         {
             @Override
-            public void handle(String target, org.eclipse.jetty.server.Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException
+            public void handle(String target, org.eclipse.jetty.server.Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException
             {
                 ServletOutputStream output = response.getOutputStream();
                 output.write(65);
@@ -690,24 +674,13 @@ public class HttpClientTest extends AbstractHttpClientServerTest
         final CountDownLatch completeLatch = new CountDownLatch(1);
         client.newRequest("localhost", connector.getLocalPort())
             .scheme(scheme)
-            .onResponseContentAsync(new Response.AsyncContentListener()
+            .onResponseContentAsync((response, content, callback) ->
             {
-                @Override
-                public void onContent(Response response, ByteBuffer content, Callback callback)
-                {
-                    contentCount.incrementAndGet();
-                    callbackRef.set(callback);
-                    contentLatch.get().countDown();
-                }
+                contentCount.incrementAndGet();
+                callbackRef.set(callback);
+                contentLatch.get().countDown();
             })
-            .send(new Response.CompleteListener()
-            {
-                @Override
-                public void onComplete(Result result)
-                {
-                    completeLatch.countDown();
-                }
-            });
+            .send(result -> completeLatch.countDown());
 
         assertTrue(contentLatch.get().await(5, TimeUnit.SECONDS));
         Callback callback = callbackRef.get();

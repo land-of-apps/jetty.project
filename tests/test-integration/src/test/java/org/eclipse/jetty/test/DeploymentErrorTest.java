@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.test;
@@ -40,23 +40,24 @@ import org.eclipse.jetty.deploy.providers.WebAppProvider;
 import org.eclipse.jetty.http.HttpMethod;
 import org.eclipse.jetty.http.HttpStatus;
 import org.eclipse.jetty.io.RuntimeIOException;
-import org.eclipse.jetty.server.Handler;
+import org.eclipse.jetty.logging.StacklessLogging;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
 import org.eclipse.jetty.server.handler.ContextHandler;
 import org.eclipse.jetty.server.handler.ContextHandlerCollection;
 import org.eclipse.jetty.server.handler.DefaultHandler;
-import org.eclipse.jetty.server.handler.HandlerCollection;
+import org.eclipse.jetty.server.handler.HandlerList;
 import org.eclipse.jetty.toolchain.test.FS;
 import org.eclipse.jetty.toolchain.test.IO;
 import org.eclipse.jetty.toolchain.test.MavenTestingUtils;
 import org.eclipse.jetty.toolchain.test.jupiter.WorkDir;
 import org.eclipse.jetty.toolchain.test.jupiter.WorkDirExtension;
-import org.eclipse.jetty.util.log.StacklessLogging;
 import org.eclipse.jetty.util.resource.PathResource;
 import org.eclipse.jetty.webapp.AbstractConfiguration;
 import org.eclipse.jetty.webapp.Configuration;
+import org.eclipse.jetty.webapp.Configurations;
 import org.eclipse.jetty.webapp.WebAppContext;
+import org.eclipse.jetty.webapp.WebInfConfiguration;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -111,25 +112,15 @@ public class DeploymentErrorTest
         server.addBean(deploymentManager);
 
         // Server handlers
-        HandlerCollection handlers = new HandlerCollection();
-        handlers.setHandlers(new Handler[]
-            {contexts, new DefaultHandler()});
-        server.setHandler(handlers);
+        server.setHandler(new HandlerList(contexts, new DefaultHandler()));
 
         // Setup Configurations
-        Configuration.ClassList classlist = Configuration.ClassList
-            .setServerDefault(server);
-        classlist.addAfter(
-            "org.eclipse.jetty.webapp.FragmentConfiguration",
-            "org.eclipse.jetty.plus.webapp.EnvConfiguration",
-            "org.eclipse.jetty.plus.webapp.PlusConfiguration");
-        classlist.addBefore(
-            "org.eclipse.jetty.webapp.JettyWebXmlConfiguration",
-            "org.eclipse.jetty.annotations.AnnotationConfiguration");
-
-        // Tracking Config
-        classlist.addBefore("org.eclipse.jetty.webapp.WebInfConfiguration",
-            TrackedConfiguration.class.getName());
+        Configurations.setServerDefault(server)
+            .add("org.eclipse.jetty.plus.webapp.EnvConfiguration",
+                "org.eclipse.jetty.plus.webapp.PlusConfiguration",
+                "org.eclipse.jetty.annotations.AnnotationConfiguration",
+                TrackedConfiguration.class.getName()
+            );
 
         server.start();
         return docroots;
@@ -336,12 +327,17 @@ public class DeploymentErrorTest
         public Map<String, Integer> configureCounts = new HashMap<>();
         public Map<String, Integer> postConfigureCounts = new HashMap<>();
 
+        public TrackedConfiguration()
+        {
+            addDependents(WebInfConfiguration.class);
+        }
+
         private void incrementCount(WebAppContext context, Map<String, Integer> contextCounts)
         {
             Integer count = contextCounts.get(context.getContextPath());
             if (count == null)
             {
-                count = new Integer(0);
+                count = 0;
             }
             count++;
             contextCounts.put(context.getContextPath(), count);

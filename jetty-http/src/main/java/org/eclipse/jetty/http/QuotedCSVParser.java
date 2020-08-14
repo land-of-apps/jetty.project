@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.http;
@@ -133,6 +133,8 @@ public abstract class QuotedCSVParser
                             if (!_keepQuotes)
                                 continue;
                             break;
+                        default:
+                            break;
                     }
                 }
 
@@ -194,7 +196,10 @@ public abstract class QuotedCSVParser
                             case PARAM_VALUE:
                                 parsedParam(buffer, valueLength, paramName, paramValue);
                                 break;
+                            default:
+                                throw new IllegalStateException(state.toString());
                         }
+
                         parsedValueAndParams(buffer);
                     }
                     buffer.setLength(0);
@@ -209,9 +214,9 @@ public abstract class QuotedCSVParser
                     {
                         case VALUE:
                             // It wasn't really a value, it was a param name
-                            valueLength = paramName = 0;
+                            paramName = 0;
                             buffer.setLength(nwsLength); // trim following OWS
-                            String param = buffer.toString();
+                            final String param = buffer.toString();
                             buffer.setLength(0);
                             parsedValue(buffer);
                             valueLength = buffer.length();
@@ -234,8 +239,10 @@ public abstract class QuotedCSVParser
                             buffer.append(c);
                             nwsLength = buffer.length();
                             continue;
+
+                        default:
+                            throw new IllegalStateException(state.toString());
                     }
-                    continue;
 
                 default:
                 {
@@ -265,6 +272,9 @@ public abstract class QuotedCSVParser
                             nwsLength = buffer.length();
                             continue;
                         }
+
+                        default:
+                            throw new IllegalStateException(state.toString());
                     }
                 }
             }

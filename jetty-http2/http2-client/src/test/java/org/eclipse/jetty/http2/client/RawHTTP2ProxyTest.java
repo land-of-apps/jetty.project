@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.http2.client;
@@ -53,18 +53,19 @@ import org.eclipse.jetty.util.Callback;
 import org.eclipse.jetty.util.FuturePromise;
 import org.eclipse.jetty.util.IteratingCallback;
 import org.eclipse.jetty.util.Promise;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
+import org.eclipse.jetty.util.thread.AutoLock;
 import org.eclipse.jetty.util.thread.QueuedThreadPool;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class RawHTTP2ProxyTest
 {
-    private static final Logger LOGGER = Log.getLogger(RawHTTP2ProxyTest.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(RawHTTP2ProxyTest.class);
 
     private final List<Server> servers = new ArrayList<>();
     private final List<HTTP2Client> clients = new ArrayList<>();
@@ -131,7 +132,7 @@ public class RawHTTP2ProxyTest
                             LOGGER.debug("SERVER1 received {}", frame);
                         if (frame.isEndStream())
                         {
-                            MetaData.Response response = new MetaData.Response(HttpVersion.HTTP_2, HttpStatus.OK_200, new HttpFields());
+                            MetaData.Response response = new MetaData.Response(HttpVersion.HTTP_2, HttpStatus.OK_200, HttpFields.EMPTY);
                             HeadersFrame reply = new HeadersFrame(stream.getId(), response, null, false);
                             if (LOGGER.isDebugEnabled())
                                 LOGGER.debug("SERVER1 sending {}", reply);
@@ -167,7 +168,7 @@ public class RawHTTP2ProxyTest
                         if (LOGGER.isDebugEnabled())
                             LOGGER.debug("SERVER2 received {}", frame);
                         callback.succeeded();
-                        MetaData.Response response = new MetaData.Response(HttpVersion.HTTP_2, HttpStatus.OK_200, new HttpFields());
+                        MetaData.Response response = new MetaData.Response(HttpVersion.HTTP_2, HttpStatus.OK_200, HttpFields.EMPTY);
                         Callback.Completable completable1 = new Callback.Completable();
                         HeadersFrame reply = new HeadersFrame(stream.getId(), response, null, false);
                         if (LOGGER.isDebugEnabled())
@@ -183,7 +184,7 @@ public class RawHTTP2ProxyTest
                             return completable2;
                         }).thenRun(() ->
                         {
-                            MetaData trailer = new MetaData(HttpVersion.HTTP_2, new HttpFields());
+                            MetaData trailer = new MetaData(HttpVersion.HTTP_2, HttpFields.EMPTY);
                             HeadersFrame end = new HeadersFrame(stream.getId(), trailer, null, true);
                             if (LOGGER.isDebugEnabled())
                                 LOGGER.debug("SERVER2 sending {}", end);
@@ -205,9 +206,9 @@ public class RawHTTP2ProxyTest
         Session clientSession = clientPromise.get(5, TimeUnit.SECONDS);
 
         // Send a request with trailers for server1.
-        HttpFields fields1 = new HttpFields();
+        HttpFields.Mutable fields1 = HttpFields.build();
         fields1.put("X-Target", String.valueOf(connector1.getLocalPort()));
-        MetaData.Request request1 = new MetaData.Request("GET", new HttpURI("http://localhost/server1"), HttpVersion.HTTP_2, fields1);
+        MetaData.Request request1 = new MetaData.Request("GET", HttpURI.from("http://localhost/server1"), HttpVersion.HTTP_2, fields1);
         FuturePromise<Stream> streamPromise1 = new FuturePromise<>();
         CountDownLatch latch1 = new CountDownLatch(1);
         clientSession.newStream(new HeadersFrame(request1, null, false), streamPromise1, new Stream.Listener.Adapter()
@@ -230,12 +231,12 @@ public class RawHTTP2ProxyTest
             }
         });
         Stream stream1 = streamPromise1.get(5, TimeUnit.SECONDS);
-        stream1.headers(new HeadersFrame(stream1.getId(), new MetaData(HttpVersion.HTTP_2, new HttpFields()), null, true), Callback.NOOP);
+        stream1.headers(new HeadersFrame(stream1.getId(), new MetaData(HttpVersion.HTTP_2, HttpFields.EMPTY), null, true), Callback.NOOP);
 
         // Send a request for server2.
-        HttpFields fields2 = new HttpFields();
+        HttpFields.Mutable fields2 = HttpFields.build();
         fields2.put("X-Target", String.valueOf(connector2.getLocalPort()));
-        MetaData.Request request2 = new MetaData.Request("GET", new HttpURI("http://localhost/server1"), HttpVersion.HTTP_2, fields2);
+        MetaData.Request request2 = new MetaData.Request("GET", HttpURI.from("http://localhost/server1"), HttpVersion.HTTP_2, fields2);
         FuturePromise<Stream> streamPromise2 = new FuturePromise<>();
         CountDownLatch latch2 = new CountDownLatch(1);
         clientSession.newStream(new HeadersFrame(request2, null, false), streamPromise2, new Stream.Listener.Adapter()
@@ -316,7 +317,7 @@ public class RawHTTP2ProxyTest
 
     private static class ClientToProxyToServer extends IteratingCallback implements Stream.Listener
     {
-        private final Object lock = this;
+        private final AutoLock lock = new AutoLock();
         private final Map<Stream, Deque<FrameInfo>> frames = new HashMap<>();
         private final Map<Stream, Stream> streams = new HashMap<>();
         private final ServerToProxyToClient serverToProxyToClient = new ServerToProxyToClient();
@@ -339,7 +340,7 @@ public class RawHTTP2ProxyTest
             if (LOGGER.isDebugEnabled())
                 LOGGER.debug("CPS queueing {} for {} on {}", frame, stream, stream.getSession());
             boolean connected;
-            synchronized (lock)
+            try (AutoLock l = lock.lock())
             {
                 Deque<FrameInfo> deque = frames.computeIfAbsent(stream, s -> new ArrayDeque<>());
                 deque.offer(new FrameInfo(frame, callback));
@@ -363,7 +364,7 @@ public class RawHTTP2ProxyTest
                 {
                     if (LOGGER.isDebugEnabled())
                         LOGGER.debug("CPS connected to {} with {}", address, result);
-                    synchronized (lock)
+                    try (AutoLock l = lock.lock())
                     {
                         proxyToServerSession = result;
                     }
@@ -385,7 +386,7 @@ public class RawHTTP2ProxyTest
         {
             Stream proxyToServerStream = null;
             Session proxyToServerSession = null;
-            synchronized (lock)
+            try (AutoLock l = lock.lock())
             {
                 for (Map.Entry<Stream, Deque<FrameInfo>> entry : frames.entrySet())
                 {
@@ -415,7 +416,7 @@ public class RawHTTP2ProxyTest
                     @Override
                     public void succeeded(Stream result)
                     {
-                        synchronized (lock)
+                        try (AutoLock l = lock.lock())
                         {
                             if (LOGGER.isDebugEnabled())
                                 LOGGER.debug("CPS created {}", result);
@@ -549,7 +550,7 @@ public class RawHTTP2ProxyTest
 
     private static class ServerToProxyToClient extends IteratingCallback implements Stream.Listener
     {
-        private final Object lock = this;
+        private final AutoLock lock = new AutoLock();
         private final Map<Stream, Deque<FrameInfo>> frames = new HashMap<>();
         private final Map<Stream, Stream> streams = new HashMap<>();
         private FrameInfo frameInfo;
@@ -559,7 +560,7 @@ public class RawHTTP2ProxyTest
         protected Action process() throws Throwable
         {
             Stream proxyToClientStream = null;
-            synchronized (lock)
+            try (AutoLock l = lock.lock())
             {
                 for (Map.Entry<Stream, Deque<FrameInfo>> entry : frames.entrySet())
                 {
@@ -630,7 +631,7 @@ public class RawHTTP2ProxyTest
         {
             if (LOGGER.isDebugEnabled())
                 LOGGER.debug("SPC queueing {} for {} on {}", frame, stream, stream.getSession());
-            synchronized (lock)
+            try (AutoLock l = lock.lock())
             {
                 Deque<FrameInfo> deque = frames.computeIfAbsent(stream, s -> new ArrayDeque<>());
                 deque.offer(new FrameInfo(frame, callback));
@@ -682,7 +683,7 @@ public class RawHTTP2ProxyTest
 
         private void link(Stream proxyToServerStream, Stream clientToProxyStream)
         {
-            synchronized (lock)
+            try (AutoLock l = lock.lock())
             {
                 streams.put(proxyToServerStream, clientToProxyStream);
             }

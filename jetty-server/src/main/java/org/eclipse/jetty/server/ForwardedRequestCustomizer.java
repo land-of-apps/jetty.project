@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.server;
@@ -30,6 +30,7 @@ import org.eclipse.jetty.http.HttpField;
 import org.eclipse.jetty.http.HttpFields;
 import org.eclipse.jetty.http.HttpHeader;
 import org.eclipse.jetty.http.HttpScheme;
+import org.eclipse.jetty.http.HttpURI;
 import org.eclipse.jetty.http.QuotedCSVParser;
 import org.eclipse.jetty.server.HttpConfiguration.Customizer;
 import org.eclipse.jetty.util.ArrayTrie;
@@ -374,16 +375,21 @@ public class ForwardedRequestCustomizer implements Customizer
     public void customize(Connector connector, HttpConfiguration config, Request request)
     {
         HttpFields httpFields = request.getHttpFields();
+        boolean wasSecure = request.isSecure();
 
         // Do a single pass through the header fields as it is a more efficient single iteration.
         Forwarded forwarded = new Forwarded(request, config);
+        boolean match = false;
         for (HttpField field : httpFields)
         {
             try
             {
                 MethodHandle handle = _handles.get(field.getName());
                 if (handle != null)
+                {
+                    match = true;
                     handle.invoke(forwarded, field);
+                }
             }
             catch (Throwable t)
             {
@@ -391,33 +397,42 @@ public class ForwardedRequestCustomizer implements Customizer
             }
         }
 
-        if (forwarded._proto != null)
+        if (match)
         {
-            request.setScheme(forwarded._proto);
-            if (forwarded._proto.equalsIgnoreCase(config.getSecureScheme()))
-                request.setSecure(true);
-        }
+            HttpURI.Mutable builder = HttpURI.build(request.getHttpURI());
+            if (forwarded._proto != null)
+            {
+                builder.scheme(forwarded._proto);
+                if (forwarded._proto.equalsIgnoreCase(config.getSecureScheme()))
+                    request.setSecure(true);
+            }
 
-        if (forwarded._server != null && forwarded._host instanceof PortSetHostPort)
-        {
-            httpFields.put(new HostPortHttpField(forwarded._server, forwarded._host.getPort()));
-            request.setAuthority(forwarded._server, forwarded._host.getPort());
-        }
-        else if (forwarded._host != null)
-        {
-            httpFields.put(new HostPortHttpField(forwarded._host));
-            request.setAuthority(forwarded._host.getHost(), forwarded._host.getPort());
-        }
-        else if (forwarded._server != null)
-        {
-            httpFields.put(new HostPortHttpField(forwarded._server));
-            request.setAuthority(forwarded._server, 0);
-        }
+            if (forwarded._server != null && forwarded._host instanceof PortSetHostPort)
+            {
+                request.setHttpFields(HttpFields.build(httpFields,
+                    new HostPortHttpField(forwarded._server, forwarded._host.getPort())));
+                builder.host(forwarded._server).port(forwarded._host.getPort());
+            }
+            else if (forwarded._host != null)
+            {
+                request.setHttpFields(HttpFields.build(httpFields, new HostPortHttpField(forwarded._host)));
+                builder.host(forwarded._host.getHost()).port(forwarded._host.getPort());
+            }
+            else if (forwarded._server != null)
+            {
+                request.setHttpFields(HttpFields.build(httpFields, new HostPortHttpField(forwarded._server)));
+                builder.host(forwarded._server).port(0);
+            }
 
-        if (forwarded._for != null)
-        {
-            int port = forwarded._for.getPort() > 0 ? forwarded._for.getPort() : request.getRemotePort();
-            request.setRemoteAddr(InetSocketAddress.createUnresolved(forwarded._for.getHost(), port));
+            if (forwarded._for != null)
+            {
+                int port = forwarded._for.getPort() > 0 ? forwarded._for.getPort() : request.getRemotePort();
+                request.setRemoteAddr(InetSocketAddress.createUnresolved(forwarded._for.getHost(), port));
+            }
+
+            if (request.isSecure() && !wasSecure)
+                builder.scheme(HttpScheme.HTTPS);
+            request.setHttpURI(builder);
         }
     }
 
@@ -449,7 +464,6 @@ public class ForwardedRequestCustomizer implements Customizer
         return String.format("%s@%x", this.getClass().getSimpleName(), hashCode());
     }
 
-    @Deprecated
     public String getHostHeader()
     {
         return _forcedHost.getValue();
@@ -460,7 +474,6 @@ public class ForwardedRequestCustomizer implements Customizer
      *
      * @param hostHeader The value of the host header to force.
      */
-    @Deprecated
     public void setHostHeader(String hostHeader)
     {
         _forcedHost = new HostPortHttpField(hostHeader);
@@ -578,10 +591,7 @@ public class ForwardedRequestCustomizer implements Customizer
         {
             _request.setAttribute("javax.servlet.request.cipher_suite", field.getValue());
             if (isSslIsSecure())
-            {
                 _request.setSecure(true);
-                _request.setScheme(_config.getSecureScheme());
-            }
         }
 
         @SuppressWarnings("unused")
@@ -589,10 +599,7 @@ public class ForwardedRequestCustomizer implements Customizer
         {
             _request.setAttribute("javax.servlet.request.ssl_session_id", field.getValue());
             if (isSslIsSecure())
-            {
                 _request.setSecure(true);
-                _request.setScheme(_config.getSecureScheme());
-            }
         }
 
         @SuppressWarnings("unused")
@@ -711,6 +718,8 @@ public class ForwardedRequestCustomizer implements Customizer
                             _protoRfc7239 = true;
                             _proto = value;
                         }
+                        break;
+                    default:
                         break;
                 }
             }

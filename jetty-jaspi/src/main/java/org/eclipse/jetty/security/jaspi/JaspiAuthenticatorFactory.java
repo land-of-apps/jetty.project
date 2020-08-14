@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.security.jaspi;
@@ -37,12 +37,12 @@ import org.eclipse.jetty.security.DefaultAuthenticatorFactory;
 import org.eclipse.jetty.security.IdentityService;
 import org.eclipse.jetty.security.LoginService;
 import org.eclipse.jetty.server.Server;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class JaspiAuthenticatorFactory extends DefaultAuthenticatorFactory
 {
-    private static final Logger LOG = Log.getLogger(JaspiAuthenticatorFactory.class);
+    private static final Logger LOG = LoggerFactory.getLogger(JaspiAuthenticatorFactory.class);
 
     private static String MESSAGE_LAYER = "HTTP";
 
@@ -93,7 +93,7 @@ public class JaspiAuthenticatorFactory extends DefaultAuthenticatorFactory
             };
 
             Subject serviceSubject = findServiceSubject(server);
-            String serverName = findServerName(server, serviceSubject);
+            String serverName = findServerName(server);
 
             String contextPath = context.getContextPath();
             if (contextPath == null || contextPath.length() == 0)
@@ -120,7 +120,7 @@ public class JaspiAuthenticatorFactory extends DefaultAuthenticatorFactory
         }
         catch (AuthException e)
         {
-            LOG.warn(e);
+            LOG.warn("Failed to get ServerAuthConfig", e);
         }
         return authenticator;
     }
@@ -167,21 +167,5 @@ public class JaspiAuthenticatorFactory extends DefaultAuthenticatorFactory
         }
 
         return "server";
-    }
-
-    /**
-     * Find a servername.
-     * If {@link #setServerName(String)} has not been called, then
-     * use the name of the a principal in the service subject.
-     * If not found, return "server".
-     *
-     * @param server the server to use
-     * @param subject not used
-     * @return the server name from the subject of the server (or default value if not found in subject or principals)
-     */
-    @Deprecated
-    protected String findServerName(Server server, Subject subject)
-    {
-        return findServerName(server);
     }
 }

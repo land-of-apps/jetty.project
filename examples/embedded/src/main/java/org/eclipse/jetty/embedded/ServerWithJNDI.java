@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.embedded;
@@ -22,9 +22,10 @@ import java.nio.file.Path;
 import java.util.Properties;
 import javax.naming.NamingException;
 
+import org.eclipse.jetty.plus.webapp.EnvConfiguration;
+import org.eclipse.jetty.plus.webapp.PlusConfiguration;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.util.resource.PathResource;
-import org.eclipse.jetty.webapp.Configuration;
 import org.eclipse.jetty.webapp.WebAppContext;
 
 /**
@@ -37,19 +38,15 @@ public class ServerWithJNDI
         // Create the server
         Server server = new Server(port);
 
-        // Enable parsing of jndi-related parts of web.xml and jetty-env.xml
-        Configuration.ClassList classlist = Configuration.ClassList
-            .setServerDefault(server);
-        classlist.addAfter("org.eclipse.jetty.webapp.FragmentConfiguration",
-            "org.eclipse.jetty.plus.webapp.EnvConfiguration",
-            "org.eclipse.jetty.plus.webapp.PlusConfiguration");
-
         // Create a WebApp
         WebAppContext webapp = new WebAppContext();
         webapp.setContextPath("/");
         Path testJndiWar = JettyDistribution.resolve("demo-base/webapps/test-jndi.war");
         webapp.setWarResource(new PathResource(testJndiWar));
         server.setHandler(webapp);
+
+        // Enable parsing of jndi-related parts of web.xml and jetty-env.xml
+        webapp.addConfiguration(new EnvConfiguration(), new PlusConfiguration());
 
         // Register new transaction manager in JNDI
         // At runtime, the webapp accesses this as java:comp/UserTransaction

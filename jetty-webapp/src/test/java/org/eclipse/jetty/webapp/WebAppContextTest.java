@@ -1,25 +1,24 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.webapp;
 
 import java.io.File;
-import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -30,7 +29,6 @@ import javax.servlet.GenericServlet;
 import javax.servlet.ServletContext;
 import javax.servlet.ServletContextEvent;
 import javax.servlet.ServletContextListener;
-import javax.servlet.ServletException;
 import javax.servlet.ServletRequest;
 import javax.servlet.ServletResponse;
 import javax.servlet.http.HttpSessionEvent;
@@ -44,14 +42,16 @@ import org.eclipse.jetty.server.handler.HotSwapHandler;
 import org.eclipse.jetty.servlet.ErrorPageErrorHandler;
 import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.eclipse.jetty.toolchain.test.MavenTestingUtils;
-import org.eclipse.jetty.util.log.Log;
 import org.eclipse.jetty.util.resource.PathResource;
 import org.eclipse.jetty.util.resource.Resource;
 import org.eclipse.jetty.util.resource.ResourceCollection;
+import org.hamcrest.Matchers;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.containsString;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -62,25 +62,84 @@ public class WebAppContextTest
 {
     public class MySessionListener implements HttpSessionListener
     {
-
         @Override
         public void sessionCreated(HttpSessionEvent se)
         {
-            // TODO Auto-generated method stub
-
         }
 
         @Override
         public void sessionDestroyed(HttpSessionEvent se)
         {
-            // TODO Auto-generated method stub
+        }
+    }
 
+    @AfterEach
+    public void tearDown()
+    {
+        Configurations.cleanKnown();
+    }
+
+    @Test
+    public void testDefaultContextPath() throws Exception
+    {
+        Server server = new Server();
+        File webXml = MavenTestingUtils.getTestResourceFile("web-with-default-context-path.xml");
+        File webXmlEmptyPath = MavenTestingUtils.getTestResourceFile("web-with-empty-default-context-path.xml");
+        File webDefaultXml = MavenTestingUtils.getTestResourceFile("web-default-with-default-context-path.xml");
+        File overrideWebXml = MavenTestingUtils.getTestResourceFile("override-web-with-default-context-path.xml");
+        assertNotNull(webXml);
+        assertNotNull(webDefaultXml);
+        assertNotNull(overrideWebXml);
+        assertNotNull(webXmlEmptyPath);
+        
+        try
+        {
+            WebAppContext wac = new WebAppContext();
+            wac.setResourceBase(MavenTestingUtils.getTargetTestingDir().getAbsolutePath());
+            server.setHandler(wac);
+            
+            //test that an empty default-context-path defaults to root
+            wac.setDescriptor(webXmlEmptyPath.getAbsolutePath());
+            server.start();
+            assertEquals("/", wac.getContextPath());
+            
+            server.stop();
+            
+            //test web-default.xml value is used
+            wac.setDescriptor(null);
+            wac.setDefaultsDescriptor(webDefaultXml.getAbsolutePath());
+            server.start();
+            assertEquals("/one", wac.getContextPath());
+            
+            server.stop();
+            
+            //test web.xml value is used
+            wac.setDescriptor(webXml.getAbsolutePath());
+            server.start();
+            assertEquals("/two", wac.getContextPath());
+            
+            server.stop();
+            
+            //test override-web.xml value is used
+            wac.setOverrideDescriptor(overrideWebXml.getAbsolutePath());
+            server.start();
+            assertEquals("/three", wac.getContextPath());
+
+            server.stop();
+            
+            //test that explicitly set context path is used instead
+            wac.setContextPath("/foo");
+            server.start();
+            assertEquals("/foo", wac.getContextPath());
+        }
+        finally
+        {
+            server.stop();
         }
     }
 
     @Test
     public void testSessionListeners()
-        throws Exception
     {
         Server server = new Server();
 
@@ -90,7 +149,7 @@ public class WebAppContextTest
         server.setHandler(wac);
         wac.addEventListener(new MySessionListener());
 
-        Collection<MySessionListener> listeners = wac.getSessionHandler().getBeans(org.eclipse.jetty.webapp.WebAppContextTest.MySessionListener.class);
+        Collection<MySessionListener> listeners = wac.getSessionHandler().getBeans(MySessionListener.class);
         assertNotNull(listeners);
         assertEquals(1, listeners.size());
     }
@@ -98,10 +157,20 @@ public class WebAppContextTest
     @Test
     public void testConfigurationClassesFromDefault()
     {
+        Configurations.cleanKnown();
+        String[] knownAndEnabled = Configurations.getKnown().stream()
+            .filter(c -> c.isEnabledByDefault())
+            .map(c -> c.getClass().getName())
+            .toArray(String[]::new);
+
         Server server = new Server();
+
         //test if no classnames set, its the defaults
         WebAppContext wac = new WebAppContext();
-        assertEquals(0, wac.getConfigurations().length);
+        assertThat(wac.getConfigurations().stream()
+                .map(c -> c.getClass().getName())
+                .collect(Collectors.toList()),
+            Matchers.containsInAnyOrder(knownAndEnabled));
         String[] classNames = wac.getConfigurationClasses();
         assertNotNull(classNames);
 
@@ -111,49 +180,37 @@ public class WebAppContextTest
     }
 
     @Test
-    public void testConfigurationClassesExplicit()
+    public void testConfigurationOrder()
     {
-        String[] classNames = {"x.y.z"};
-
-        Server server = new Server();
-        server.setAttribute(Configuration.ATTR, classNames);
-
-        //test an explicitly set classnames list overrides that from the server
+        Configurations.cleanKnown();
         WebAppContext wac = new WebAppContext();
-        String[] myClassNames = {"a.b.c", "d.e.f"};
-        wac.setConfigurationClasses(myClassNames);
-        wac.setServer(server);
-        String[] names = wac.getConfigurationClasses();
-        assertTrue(Arrays.equals(myClassNames, names));
-
-        //test if no explicit classnames, they come from the server
-        WebAppContext wac2 = new WebAppContext();
-        wac2.setServer(server);
-        try
-        {
-            wac2.loadConfigurations();
-        }
-        catch (Exception e)
-        {
-            Log.getRootLogger().ignore(e);
-        }
-        assertTrue(Arrays.equals(classNames, wac2.getConfigurationClasses()));
+        wac.setServer(new Server());
+        assertThat(wac.getConfigurations().stream().map(c -> c.getClass().getName()).collect(Collectors.toList()),
+            Matchers.contains(
+                "org.eclipse.jetty.webapp.JmxConfiguration",
+                "org.eclipse.jetty.webapp.WebInfConfiguration",
+                "org.eclipse.jetty.webapp.WebXmlConfiguration",
+                "org.eclipse.jetty.webapp.MetaInfConfiguration",
+                "org.eclipse.jetty.webapp.FragmentConfiguration",
+                "org.eclipse.jetty.webapp.WebAppConfiguration",
+                "org.eclipse.jetty.webapp.JettyWebXmlConfiguration"));
     }
 
     @Test
     public void testConfigurationInstances()
     {
+        Configurations.cleanKnown();
         Configuration[] configs = {new WebInfConfiguration()};
         WebAppContext wac = new WebAppContext();
         wac.setConfigurations(configs);
-        assertTrue(Arrays.equals(configs, wac.getConfigurations()));
+        assertThat(wac.getConfigurations(), Matchers.contains(configs));
 
         //test that explicit config instances override any from server
         String[] classNames = {"x.y.z"};
         Server server = new Server();
         server.setAttribute(Configuration.ATTR, classNames);
         wac.setServer(server);
-        assertTrue(Arrays.equals(configs, wac.getConfigurations()));
+        assertThat(wac.getConfigurations(), Matchers.contains(configs));
     }
 
     @Test
@@ -186,7 +243,7 @@ public class WebAppContextTest
         WebAppContext contextB = new WebAppContext(".", "/B");
 
         contextB.addServlet(ServletB.class, "/s");
-        contextB.setContextWhiteList(new String[]{"/doesnotexist", "/B/s"});
+        contextB.setContextWhiteList("/doesnotexist", "/B/s");
         handlers.addHandler(contextB);
 
         server.setHandler(handlers);
@@ -228,7 +285,7 @@ public class WebAppContextTest
     }
 
     @Test
-    public void testIsProtected() throws Exception
+    public void testIsProtected()
     {
         WebAppContext context = new WebAppContext();
         assertTrue(context.isProtectedTarget("/web-inf/lib/foo.jar"));
@@ -253,10 +310,11 @@ public class WebAppContextTest
         server.addConnector(connector);
 
         server.start();
+
         try
         {
             String response = connector.getResponse("GET http://localhost:8080 HTTP/1.1\r\nHost: localhost:8080\r\nConnection: close\r\n\r\n");
-            assertTrue(response.indexOf("200 OK") >= 0);
+            assertThat(response, containsString("200 OK"));
         }
         finally
         {
@@ -295,7 +353,7 @@ public class WebAppContextTest
     class ServletA extends GenericServlet
     {
         @Override
-        public void service(ServletRequest req, ServletResponse res) throws ServletException, IOException
+        public void service(ServletRequest req, ServletResponse res)
         {
             this.getServletContext().getContext("/A/s");
         }
@@ -304,7 +362,7 @@ public class WebAppContextTest
     class ServletB extends GenericServlet
     {
         @Override
-        public void service(ServletRequest req, ServletResponse res) throws ServletException, IOException
+        public void service(ServletRequest req, ServletResponse res)
         {
             this.getServletContext().getContext("/B/s");
         }
@@ -422,8 +480,9 @@ public class WebAppContextTest
         WebAppContext context = new WebAppContext();
         context.setBaseResource(webapp);
         context.setContextPath("/test");
-        new WebInfConfiguration().preConfigure(context);
+        context.setServer(new Server());
+        new MetaInfConfiguration().preConfigure(context);
         assertEquals(Arrays.asList("acme.jar", "alpha.jar", "omega.jar"),
-            context.getMetaData().getWebInfJars().stream().map(r -> r.getURI().toString().replaceFirst(".+/", "")).collect(Collectors.toList()));
+            context.getMetaData().getWebInfResources(false).stream().map(r -> r.getURI().toString().replaceFirst(".+/", "")).collect(Collectors.toList()));
     }
 }

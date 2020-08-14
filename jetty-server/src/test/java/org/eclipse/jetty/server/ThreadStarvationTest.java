@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.server;
@@ -28,7 +28,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.Callable;
-import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -50,7 +49,6 @@ import org.eclipse.jetty.toolchain.test.MavenTestingUtils;
 import org.eclipse.jetty.util.IO;
 import org.eclipse.jetty.util.ssl.SslContextFactory;
 import org.eclipse.jetty.util.thread.QueuedThreadPool;
-import org.eclipse.jetty.util.thread.Scheduler;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -83,25 +81,21 @@ public class ThreadStarvationTest
         List<Scenario> params = new ArrayList<>();
 
         // HTTP
-        ConnectorProvider http = (server, acceptors, selectors) -> new ServerConnector(server, acceptors, selectors);
-        ClientSocketProvider httpClient = (host, port) -> new Socket(host, port);
+        ConnectorProvider http = ServerConnector::new;
+        ClientSocketProvider httpClient = Socket::new;
         params.add(new Scenario("http", http, httpClient));
 
         // HTTPS/SSL/TLS
         ConnectorProvider https = (server, acceptors, selectors) ->
         {
-            Path keystorePath = MavenTestingUtils.getTestResourcePath("keystore");
-            SslContextFactory sslContextFactory = new SslContextFactory.Server();
+            Path keystorePath = MavenTestingUtils.getTestResourcePath("keystore.p12");
+            SslContextFactory.Server sslContextFactory = new SslContextFactory.Server();
             sslContextFactory.setKeyStorePath(keystorePath.toString());
             sslContextFactory.setKeyStorePassword("storepwd");
-            sslContextFactory.setKeyManagerPassword("keypwd");
-            sslContextFactory.setTrustStorePath(keystorePath.toString());
-            sslContextFactory.setTrustStorePassword("storepwd");
             ByteBufferPool pool = new LeakTrackingByteBufferPool(new MappedByteBufferPool.Tagged());
 
             HttpConnectionFactory httpConnectionFactory = new HttpConnectionFactory();
-            ServerConnector connector = new ServerConnector(server, (Executor)null, (Scheduler)null,
-                pool, acceptors, selectors,
+            ServerConnector connector = new ServerConnector(server, null, null, pool, acceptors, selectors,
                 AbstractConnectionFactory.getFactories(sslContextFactory, httpConnectionFactory));
             SecureRequestCustomizer secureRequestCustomer = new SecureRequestCustomizer();
             secureRequestCustomer.setSslSessionAttribute("SSL_SESSION");
@@ -348,7 +342,7 @@ public class ThreadStarvationTest
             for (Future<Long> responseFut : responses)
             {
                 Long bodyCount = responseFut.get();
-                assertThat(bodyCount.longValue(), is(expected));
+                assertThat(bodyCount, is(expected));
             }
         }
         finally

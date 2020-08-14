@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.fcgi.client.http;
@@ -34,6 +34,8 @@ import org.eclipse.jetty.client.HttpClient;
 import org.eclipse.jetty.client.HttpConnection;
 import org.eclipse.jetty.client.HttpDestination;
 import org.eclipse.jetty.client.HttpExchange;
+import org.eclipse.jetty.client.HttpRequest;
+import org.eclipse.jetty.client.IConnection;
 import org.eclipse.jetty.client.SendFailure;
 import org.eclipse.jetty.client.api.Connection;
 import org.eclipse.jetty.client.api.Request;
@@ -49,34 +51,36 @@ import org.eclipse.jetty.io.AbstractConnection;
 import org.eclipse.jetty.io.ByteBufferPool;
 import org.eclipse.jetty.io.EndPoint;
 import org.eclipse.jetty.io.RetainableByteBuffer;
+import org.eclipse.jetty.util.Attachable;
 import org.eclipse.jetty.util.BufferUtil;
 import org.eclipse.jetty.util.Callback;
 import org.eclipse.jetty.util.Promise;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
+import org.eclipse.jetty.util.thread.AutoLock;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-public class HttpConnectionOverFCGI extends AbstractConnection implements Connection
+public class HttpConnectionOverFCGI extends AbstractConnection implements IConnection, Attachable
 {
-    private static final Logger LOG = Log.getLogger(HttpConnectionOverFCGI.class);
+    private static final Logger LOG = LoggerFactory.getLogger(HttpConnectionOverFCGI.class);
 
+    private final AutoLock lock = new AutoLock();
     private final LinkedList<Integer> requests = new LinkedList<>();
     private final Map<Integer, HttpChannelOverFCGI> activeChannels = new ConcurrentHashMap<>();
     private final Queue<HttpChannelOverFCGI> idleChannels = new ConcurrentLinkedQueue<>();
     private final AtomicBoolean closed = new AtomicBoolean();
     private final HttpDestination destination;
     private final Promise<Connection> promise;
-    private final boolean multiplexed;
     private final Flusher flusher;
     private final Delegate delegate;
     private final ClientParser parser;
     private RetainableByteBuffer networkBuffer;
+    private Object attachment;
 
-    public HttpConnectionOverFCGI(EndPoint endPoint, HttpDestination destination, Promise<Connection> promise, boolean multiplexed)
+    public HttpConnectionOverFCGI(EndPoint endPoint, HttpDestination destination, Promise<Connection> promise)
     {
         super(endPoint, destination.getHttpClient().getExecutor());
         this.destination = destination;
         this.promise = promise;
-        this.multiplexed = multiplexed;
         this.flusher = new Flusher(endPoint);
         this.delegate = new Delegate(destination);
         this.parser = new ClientParser(new ResponseListener());
@@ -99,7 +103,8 @@ public class HttpConnectionOverFCGI extends AbstractConnection implements Connec
         delegate.send(request, listener);
     }
 
-    protected SendFailure send(HttpExchange exchange)
+    @Override
+    public SendFailure send(HttpExchange exchange)
     {
         return delegate.send(exchange);
     }
@@ -135,8 +140,7 @@ public class HttpConnectionOverFCGI extends AbstractConnection implements Connec
     {
         HttpClient client = destination.getHttpClient();
         ByteBufferPool bufferPool = client.getByteBufferPool();
-        // TODO: configure directness.
-        return new RetainableByteBuffer(bufferPool, client.getResponseBufferSize(), true);
+        return new RetainableByteBuffer(bufferPool, client.getResponseBufferSize(), client.isUseInputDirectByteBuffers());
     }
 
     private void releaseNetworkBuffer()
@@ -153,9 +157,9 @@ public class HttpConnectionOverFCGI extends AbstractConnection implements Connec
 
     void process()
     {
+        EndPoint endPoint = getEndPoint();
         try
         {
-            EndPoint endPoint = getEndPoint();
             while (true)
             {
                 if (parse(networkBuffer.getBuffer()))
@@ -186,7 +190,7 @@ public class HttpConnectionOverFCGI extends AbstractConnection implements Connec
         catch (Exception x)
         {
             if (LOG.isDebugEnabled())
-                LOG.debug(x);
+                LOG.debug("Unable to fill from endpoint {}", endPoint, x);
             networkBuffer.clear();
             releaseNetworkBuffer();
             close(x);
@@ -213,8 +217,6 @@ public class HttpConnectionOverFCGI extends AbstractConnection implements Connec
     {
         long idleTimeout = getEndPoint().getIdleTimeout();
         boolean close = delegate.onIdleTimeout(idleTimeout);
-        if (multiplexed)
-            close &= isFillInterested();
         if (close)
             close(new TimeoutException("Idle timeout " + idleTimeout + " ms"));
         return false;
@@ -267,10 +269,20 @@ public class HttpConnectionOverFCGI extends AbstractConnection implements Connec
         return closed.get();
     }
 
+    @Override
+    public void setAttachment(Object obj)
+    {
+        this.attachment = obj;
+    }
+
+    @Override
+    public Object getAttachment()
+    {
+        return attachment;
+    }
+
     protected boolean closeByHTTP(HttpFields fields)
     {
-        if (multiplexed)
-            return false;
         if (!fields.contains(HttpHeader.CONNECTION, HttpHeaderValue.CLOSE.asString()))
             return false;
         close();
@@ -311,7 +323,7 @@ public class HttpConnectionOverFCGI extends AbstractConnection implements Connec
 
     private int acquireRequest()
     {
-        synchronized (requests)
+        try (AutoLock l = lock.lock())
         {
             int last = requests.getLast();
             int request = last + 1;
@@ -322,7 +334,7 @@ public class HttpConnectionOverFCGI extends AbstractConnection implements Connec
 
     private void releaseRequest(int request)
     {
-        synchronized (requests)
+        try (AutoLock l = lock.lock())
         {
             requests.removeFirstOccurrence(request);
         }
@@ -360,9 +372,9 @@ public class HttpConnectionOverFCGI extends AbstractConnection implements Connec
         }
 
         @Override
-        protected SendFailure send(HttpExchange exchange)
+        public SendFailure send(HttpExchange exchange)
         {
-            Request request = exchange.getRequest();
+            HttpRequest request = exchange.getRequest();
             normalizeRequest(request);
 
             // FCGI may be multiplexed, so one channel for each exchange.

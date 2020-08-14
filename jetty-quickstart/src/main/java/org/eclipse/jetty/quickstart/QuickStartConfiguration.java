@@ -1,80 +1,220 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.quickstart;
 
+import java.io.File;
+import java.io.IOException;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.stream.Collectors;
+
 import org.eclipse.jetty.annotations.AnnotationConfiguration;
 import org.eclipse.jetty.annotations.AnnotationDecorator;
 import org.eclipse.jetty.annotations.ServletContainerInitializersStarter;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
+import org.eclipse.jetty.server.Server;
+import org.eclipse.jetty.util.StringUtil;
 import org.eclipse.jetty.util.resource.Resource;
+import org.eclipse.jetty.webapp.AbstractConfiguration;
+import org.eclipse.jetty.webapp.Configuration;
 import org.eclipse.jetty.webapp.StandardDescriptorProcessor;
-import org.eclipse.jetty.webapp.WebAppClassLoader;
 import org.eclipse.jetty.webapp.WebAppContext;
+import org.eclipse.jetty.webapp.WebDescriptor;
 import org.eclipse.jetty.webapp.WebInfConfiguration;
+import org.eclipse.jetty.webapp.WebXmlConfiguration;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * QuickStartConfiguration
  * <p>
- * Re-inflate a deployable webapp from a saved effective-web.xml
- * which combines all pre-parsed web xml descriptors and annotations.
+ * Prepare for quickstart generation, or usage.
  */
-public class QuickStartConfiguration extends WebInfConfiguration
+public class QuickStartConfiguration extends AbstractConfiguration
 {
-    private static final Logger LOG = Log.getLogger(QuickStartConfiguration.class);
+    private static final Logger LOG = LoggerFactory.getLogger(QuickStartConfiguration.class);
 
-    /**
-     * @see org.eclipse.jetty.webapp.AbstractConfiguration#preConfigure(org.eclipse.jetty.webapp.WebAppContext)
+    public static final Set<Class<? extends Configuration>> __replacedConfigurations = new HashSet<>();
+    public static final String ORIGIN_ATTRIBUTE = "org.eclipse.jetty.quickstart.origin";
+    public static final String QUICKSTART_WEB_XML = "org.eclipse.jetty.quickstart.xml";
+    public static final String MODE = "org.eclipse.jetty.quickstart.mode";
+
+    static
+    {
+        __replacedConfigurations.add(org.eclipse.jetty.webapp.WebXmlConfiguration.class);
+        __replacedConfigurations.add(org.eclipse.jetty.webapp.MetaInfConfiguration.class);
+        __replacedConfigurations.add(org.eclipse.jetty.webapp.FragmentConfiguration.class);
+        __replacedConfigurations.add(org.eclipse.jetty.annotations.AnnotationConfiguration.class);
+    }
+
+    /** Configure the server for the quickstart mode.
+     * <p>In practise this means calling <code>server.setDryRun(true)</code> for GENERATE mode</p>
+     * @see Server#setDryRun(boolean)
+     * @param server The server to configure
+     * @param mode The quickstart mode
      */
+    public static void configureMode(Server server, String mode)
+    {
+        if (mode != null && Mode.valueOf(mode) == Mode.GENERATE)
+            server.setDryRun(true);
+    }
+
+    public enum Mode
+    {
+        GENERATE,  // Generate quickstart-web.xml and then stop
+        AUTO,      // use or generate depending on the existance of quickstart-web.xml
+        QUICKSTART // Use quickstart-web.xml
+    }
+
+    private Mode _mode = Mode.AUTO;
+    private boolean _quickStart;
+
+    public QuickStartConfiguration()
+    {
+        super(true);
+        addDependencies(WebInfConfiguration.class);
+        addDependents(WebXmlConfiguration.class);
+    }
+
     @Override
     public void preConfigure(WebAppContext context) throws Exception
     {
         //check that webapp is suitable for quick start - it is not a packed war
         String war = context.getWar();
-        if (war == null || war.length() <= 0)
-            throw new IllegalStateException("No location for webapp");
-
-        //Make a temp directory for the webapp if one is not already set
-        resolveTempDirectory(context);
-
-        Resource webApp = context.newResource(war);
-
-        // Accept aliases for WAR files
-        if (webApp.isAlias())
-        {
-            LOG.debug(webApp + " anti-aliased to " + webApp.getAlias());
-            webApp = context.newResource(webApp.getAlias());
-        }
-
-        // Is the WAR usable directly?
-        if (!webApp.exists() || !webApp.isDirectory() || webApp.toString().startsWith("jar:"))
-            throw new IllegalStateException("Webapp does not exist or is not unpacked");
-
-        context.setBaseResource(webApp);
-
-        LOG.debug("webapp={}", webApp);
+        if (war == null || war.length() <= 0 || !context.getBaseResource().isDirectory())
+            throw new IllegalStateException("Bad Quickstart location");
 
         //look for quickstart-web.xml in WEB-INF of webapp
         Resource quickStartWebXml = getQuickStartWebXml(context);
-        LOG.debug("quickStartWebXml={}", quickStartWebXml);
+        LOG.debug("quickStartWebXml={} exists={}", quickStartWebXml, quickStartWebXml.exists());
 
-        context.getMetaData().setWebXml(quickStartWebXml);
+        //Get the mode
+        Mode mode = (Mode)context.getAttribute(MODE);
+        if (mode != null)
+            _mode = mode;
+        
+        _quickStart = false;
+        
+        switch (_mode)
+        {
+            case GENERATE:
+            {
+                if (quickStartWebXml.exists())
+                    LOG.info("Regenerating {}", quickStartWebXml);
+                else
+                    LOG.info("Generating {}", quickStartWebXml);
+                
+                super.preConfigure(context);
+                //generate the quickstart file then abort
+                QuickStartGeneratorConfiguration generator = new QuickStartGeneratorConfiguration(true);
+                configure(generator, context);
+                context.addConfiguration(generator);
+                break;
+            }
+            case AUTO:
+            {
+                if (quickStartWebXml.exists())
+                {
+                    quickStart(context);
+                }
+                else
+                {
+                    if (LOG.isDebugEnabled())
+                        LOG.debug("No quickstart xml file, starting webapp {} normally", context);
+                    super.preConfigure(context);
+                }
+                break;
+            }
+            case QUICKSTART:
+                if (quickStartWebXml.exists())
+                    quickStart(context);
+                else
+                    throw new IllegalStateException("No " + quickStartWebXml);
+                break;
+
+            default:
+                throw new IllegalStateException(_mode.toString());
+        }
+    }
+
+    protected void configure(QuickStartGeneratorConfiguration generator, WebAppContext context) throws IOException
+    {
+        Object attr;
+        attr = context.getAttribute(ORIGIN_ATTRIBUTE);
+        if (attr != null)
+            generator.setOriginAttribute(attr.toString());
+
+        generator.setQuickStartWebXml((Resource)context.getAttribute(QUICKSTART_WEB_XML));
+    }
+
+    @Override
+    public void configure(WebAppContext context) throws Exception
+    {
+        if (!_quickStart)
+        {
+            super.configure(context);
+        }
+        else
+        {
+            //add the processor to handle normal web.xml content
+            context.getMetaData().addDescriptorProcessor(new StandardDescriptorProcessor());
+
+            //add a processor to handle extended web.xml format
+            context.getMetaData().addDescriptorProcessor(new QuickStartDescriptorProcessor());
+
+            //add a decorator that will find introspectable annotations
+            context.getObjectFactory().addDecorator(new AnnotationDecorator(context)); //this must be the last Decorator because they are run in reverse order!
+
+            //add a context bean that will run ServletContainerInitializers as the context starts
+            ServletContainerInitializersStarter starter = (ServletContainerInitializersStarter)context.getAttribute(AnnotationConfiguration.CONTAINER_INITIALIZER_STARTER);
+            if (starter != null)
+                throw new IllegalStateException("ServletContainerInitializersStarter already exists");
+            starter = new ServletContainerInitializersStarter(context);
+            context.setAttribute(AnnotationConfiguration.CONTAINER_INITIALIZER_STARTER, starter);
+            context.addBean(starter, true);
+
+            LOG.debug("configured {}", this);
+        }
+    }
+
+    @Override
+    public void postConfigure(WebAppContext context) throws Exception
+    {
+        super.postConfigure(context);
+        ServletContainerInitializersStarter starter = (ServletContainerInitializersStarter)context.getAttribute(AnnotationConfiguration.CONTAINER_INITIALIZER_STARTER);
+        if (starter != null)
+        {
+            context.removeBean(starter);
+            context.removeAttribute(AnnotationConfiguration.CONTAINER_INITIALIZER_STARTER);
+        }
+    }
+
+    protected void quickStart(WebAppContext context)
+        throws Exception
+    {
+        LOG.info("Quickstarting {}", context);
+        _quickStart = true;
+        context.setConfigurations(context.getConfigurations().stream()
+            .filter(c -> !__replacedConfigurations.contains(c.replaces()) && !__replacedConfigurations.contains(c.getClass()))
+            .collect(Collectors.toList()).toArray(new Configuration[]{}));
+        context.getMetaData().setWebDescriptor(new WebDescriptor((Resource)context.getAttribute(QUICKSTART_WEB_XML)));
+        context.getServletContext().setEffectiveMajorVersion(context.getMetaData().getWebDescriptor().getMajorVersion());
+        context.getServletContext().setEffectiveMinorVersion(context.getMetaData().getWebDescriptor().getMinorVersion());
     }
 
     /**
@@ -86,63 +226,38 @@ public class QuickStartConfiguration extends WebInfConfiguration
      */
     public Resource getQuickStartWebXml(WebAppContext context) throws Exception
     {
+        Object attr = context.getAttribute(QUICKSTART_WEB_XML);
+        if (attr instanceof Resource)
+            return (Resource)attr;
+
         Resource webInf = context.getWebInf();
         if (webInf == null || !webInf.exists())
-            throw new IllegalStateException("No WEB-INF");
-        LOG.debug("webinf={}", webInf);
-
-        Resource quickStartWebXml = webInf.addPath("quickstart-web.xml");
-        if (!quickStartWebXml.exists())
-            throw new IllegalStateException("No WEB-INF/quickstart-web.xml");
-        return quickStartWebXml;
-    }
-
-    /**
-     * @see org.eclipse.jetty.webapp.AbstractConfiguration#configure(org.eclipse.jetty.webapp.WebAppContext)
-     */
-    @Override
-    public void configure(WebAppContext context) throws Exception
-    {
-        LOG.debug("configure {}", this);
-        if (context.isStarted())
         {
-            LOG.warn("Cannot configure webapp after it is started");
-            return;
+            File tmp = new File(context.getBaseResource().getFile(), "WEB-INF");
+            tmp.mkdirs();
+            webInf = context.getWebInf();
         }
 
-        //Temporary:  set up the classpath here. This should be handled by the QuickStartDescriptorProcessor
-        Resource webInf = context.getWebInf();
-
-        if (webInf != null && webInf.isDirectory() && context.getClassLoader() instanceof WebAppClassLoader)
+        Resource qstart;
+        if (attr == null || StringUtil.isBlank(attr.toString()))
         {
-            // Look for classes directory
-            Resource classes = webInf.addPath("classes/");
-            if (classes.exists())
-                ((WebAppClassLoader)context.getClassLoader()).addClassPath(classes);
-
-            // Look for jars
-            Resource lib = webInf.addPath("lib/");
-            if (lib.exists() || lib.isDirectory())
-                ((WebAppClassLoader)context.getClassLoader()).addJars(lib);
+            qstart = webInf.addPath("quickstart-web.xml");
         }
-
-        //add the processor to handle normal web.xml content
-        context.getMetaData().addDescriptorProcessor(new StandardDescriptorProcessor());
-
-        //add a processor to handle extended web.xml format
-        context.getMetaData().addDescriptorProcessor(new QuickStartDescriptorProcessor());
-
-        //add a decorator that will find introspectable annotations
-        context.getObjectFactory().addDecorator(new AnnotationDecorator(context)); //this must be the last Decorator because they are run in reverse order!
-
-        //add a context bean that will run ServletContainerInitializers as the context starts
-        ServletContainerInitializersStarter starter = (ServletContainerInitializersStarter)context.getAttribute(AnnotationConfiguration.CONTAINER_INITIALIZER_STARTER);
-        if (starter != null)
-            throw new IllegalStateException("ServletContainerInitializersStarter already exists");
-        starter = new ServletContainerInitializersStarter(context);
-        context.setAttribute(AnnotationConfiguration.CONTAINER_INITIALIZER_STARTER, starter);
-        context.addBean(starter, true);
-
-        LOG.debug("configured {}", this);
+        else
+        {
+            try
+            {
+                // Try a relative resolution
+                qstart = Resource.newResource(webInf.getFile().toPath().resolve(attr.toString()));
+            }
+            catch (Throwable th)
+            {
+                // try as a resource
+                qstart = (Resource.newResource(attr.toString()));
+            }
+            context.setAttribute(QUICKSTART_WEB_XML, qstart);
+        }
+        context.setAttribute(QUICKSTART_WEB_XML, qstart);
+        return  qstart;
     }
 }

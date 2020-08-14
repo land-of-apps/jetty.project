@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.client.ssl;
@@ -28,7 +28,9 @@ import javax.net.ssl.SSLSession;
 import org.eclipse.jetty.client.EmptyServerHandler;
 import org.eclipse.jetty.client.HttpClient;
 import org.eclipse.jetty.client.api.ContentResponse;
+import org.eclipse.jetty.client.http.HttpClientTransportOverHTTP;
 import org.eclipse.jetty.http.HttpStatus;
+import org.eclipse.jetty.io.ClientConnector;
 import org.eclipse.jetty.io.ssl.SslHandshakeListener;
 import org.eclipse.jetty.server.Handler;
 import org.eclipse.jetty.server.Server;
@@ -57,7 +59,7 @@ public class NeedWantClientAuthTest
     private ServerConnector connector;
     private HttpClient client;
 
-    private void startServer(SslContextFactory sslContextFactory, Handler handler) throws Exception
+    private void startServer(SslContextFactory.Server sslContextFactory, Handler handler) throws Exception
     {
         QueuedThreadPool serverThreads = new QueuedThreadPool();
         serverThreads.setName("server");
@@ -70,12 +72,15 @@ public class NeedWantClientAuthTest
         server.start();
     }
 
-    private void startClient(SslContextFactory sslContextFactory) throws Exception
+    private void startClient(SslContextFactory.Client sslContextFactory) throws Exception
     {
+        ClientConnector clientConnector = new ClientConnector();
+        clientConnector.setSelectors(1);
         QueuedThreadPool clientThreads = new QueuedThreadPool();
         clientThreads.setName("client");
-        client = new HttpClient(sslContextFactory);
-        client.setExecutor(clientThreads);
+        clientConnector.setExecutor(clientThreads);
+        clientConnector.setSslContextFactory(sslContextFactory);
+        client = new HttpClient(new HttpClientTransportOverHTTP(clientConnector));
         client.start();
     }
 
@@ -103,7 +108,7 @@ public class NeedWantClientAuthTest
         serverSSL.setWantClientAuth(true);
         startServer(serverSSL, new EmptyServerHandler());
 
-        SslContextFactory clientSSL = new SslContextFactory.Client(true);
+        SslContextFactory.Client clientSSL = new SslContextFactory.Client(true);
         startClient(clientSSL);
 
         ContentResponse response = client.newRequest("https://localhost:" + connector.getLocalPort())
@@ -140,7 +145,7 @@ public class NeedWantClientAuthTest
             }
         });
 
-        SslContextFactory clientSSL = new SslContextFactory.Client(true);
+        SslContextFactory.Client clientSSL = new SslContextFactory.Client(true);
         clientSSL.setKeyStorePath("src/test/resources/client_keystore.p12");
         clientSSL.setKeyStorePassword("storepwd");
         startClient(clientSSL);
@@ -167,7 +172,7 @@ public class NeedWantClientAuthTest
         serverSSL.setNeedClientAuth(true);
         startServer(serverSSL, new EmptyServerHandler());
 
-        SslContextFactory clientSSL = new SslContextFactory.Client(true);
+        SslContextFactory.Client clientSSL = new SslContextFactory.Client(true);
         startClient(clientSSL);
         CountDownLatch handshakeLatch = new CountDownLatch(1);
         client.addBean(new SslHandshakeListener()
@@ -231,7 +236,7 @@ public class NeedWantClientAuthTest
             }
         });
 
-        SslContextFactory clientSSL = new SslContextFactory.Client(true);
+        SslContextFactory.Client clientSSL = new SslContextFactory.Client(true);
         clientSSL.setKeyStorePath("src/test/resources/client_keystore.p12");
         clientSSL.setKeyStorePassword("storepwd");
         startClient(clientSSL);

@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.server;
@@ -43,55 +43,55 @@ public interface Connector extends LifeCycle, Container, Graceful
     /**
      * @return the {@link Server} instance associated with this {@link Connector}
      */
-    Server getServer();
+    public Server getServer();
 
     /**
      * @return the {@link Executor} used to submit tasks
      */
-    Executor getExecutor();
+    public Executor getExecutor();
 
     /**
      * @return the {@link Scheduler} used to schedule tasks
      */
-    Scheduler getScheduler();
+    public Scheduler getScheduler();
 
     /**
      * @return the {@link ByteBufferPool} to acquire buffers from and release buffers to
      */
-    ByteBufferPool getByteBufferPool();
+    public ByteBufferPool getByteBufferPool();
 
     /**
      * @param nextProtocol the next protocol
      * @return the {@link ConnectionFactory} associated with the protocol name
      */
-    ConnectionFactory getConnectionFactory(String nextProtocol);
+    public ConnectionFactory getConnectionFactory(String nextProtocol);
 
-    <T> T getConnectionFactory(Class<T> factoryType);
+    public <T> T getConnectionFactory(Class<T> factoryType);
 
     /**
      * @return the default {@link ConnectionFactory} associated with the default protocol name
      */
-    ConnectionFactory getDefaultConnectionFactory();
+    public ConnectionFactory getDefaultConnectionFactory();
 
-    Collection<ConnectionFactory> getConnectionFactories();
+    public Collection<ConnectionFactory> getConnectionFactories();
 
-    List<String> getProtocols();
+    public List<String> getProtocols();
 
     /**
      * @return the max idle timeout for connections in milliseconds
      */
     @ManagedAttribute("maximum time a connection can be idle before being closed (in ms)")
-    long getIdleTimeout();
+    public long getIdleTimeout();
 
     /**
      * @return the underlying socket, channel, buffer etc. for the connector.
      */
-    Object getTransport();
+    public Object getTransport();
 
     /**
      * @return immutable collection of connected endpoints
      */
-    Collection<EndPoint> getConnectedEndPoints();
+    public Collection<EndPoint> getConnectedEndPoints();
 
     /**
      * Get the connector name if set.
@@ -101,5 +101,5 @@ public interface Connector extends LifeCycle, Container, Graceful
      *
      * @return The connector name or null.
      */
-    String getName();
+    public String getName();
 }

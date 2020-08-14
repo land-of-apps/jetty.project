@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.client.http;
@@ -22,6 +22,7 @@ import java.io.EOFException;
 import java.nio.ByteBuffer;
 
 import org.eclipse.jetty.client.HttpClient;
+import org.eclipse.jetty.client.HttpClientTransport;
 import org.eclipse.jetty.client.HttpExchange;
 import org.eclipse.jetty.client.HttpReceiver;
 import org.eclipse.jetty.client.HttpResponse;
@@ -37,9 +38,13 @@ import org.eclipse.jetty.io.EndPoint;
 import org.eclipse.jetty.io.RetainableByteBuffer;
 import org.eclipse.jetty.util.BufferUtil;
 import org.eclipse.jetty.util.Callback;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class HttpReceiverOverHTTP extends HttpReceiver implements HttpParser.ResponseHandler
 {
+    private static final Logger LOG = LoggerFactory.getLogger(HttpReceiverOverHTTP.class);
+
     private final HttpParser parser;
     private RetainableByteBuffer networkBuffer;
     private boolean shutdown;
@@ -48,7 +53,15 @@ public class HttpReceiverOverHTTP extends HttpReceiver implements HttpParser.Res
     public HttpReceiverOverHTTP(HttpChannelOverHTTP channel)
     {
         super(channel);
-        parser = new HttpParser(this, -1, channel.getHttpDestination().getHttpClient().getHttpCompliance());
+        HttpClient httpClient = channel.getHttpDestination().getHttpClient();
+        parser = new HttpParser(this, -1, httpClient.getHttpCompliance());
+        HttpClientTransport transport = httpClient.getTransport();
+        if (transport instanceof HttpClientTransportOverHTTP)
+        {
+            HttpClientTransportOverHTTP httpTransport = (HttpClientTransportOverHTTP)transport;
+            parser.setHeaderCacheSize(httpTransport.getHeaderCacheSize());
+            parser.setHeaderCacheCaseSensitive(httpTransport.isHeaderCacheCaseSensitive());
+        }
     }
 
     @Override
@@ -100,7 +113,8 @@ public class HttpReceiverOverHTTP extends HttpReceiver implements HttpParser.Res
     {
         HttpClient client = getHttpDestination().getHttpClient();
         ByteBufferPool bufferPool = client.getByteBufferPool();
-        return new RetainableByteBuffer(bufferPool, client.getResponseBufferSize(), true);
+        boolean direct = client.isUseInputDirectByteBuffers();
+        return new RetainableByteBuffer(bufferPool, client.getResponseBufferSize(), direct);
     }
 
     private void releaseNetworkBuffer()
@@ -117,7 +131,8 @@ public class HttpReceiverOverHTTP extends HttpReceiver implements HttpParser.Res
     {
         if (networkBuffer.hasRemaining())
         {
-            ByteBuffer upgradeBuffer = BufferUtil.allocate(networkBuffer.remaining());
+            HttpClient client = getHttpDestination().getHttpClient();
+            ByteBuffer upgradeBuffer = BufferUtil.allocate(networkBuffer.remaining(), client.isUseInputDirectByteBuffers());
             BufferUtil.clearToFill(upgradeBuffer);
             BufferUtil.put(networkBuffer.getBuffer(), upgradeBuffer);
             BufferUtil.flipToFlush(upgradeBuffer, 0);
@@ -128,10 +143,10 @@ public class HttpReceiverOverHTTP extends HttpReceiver implements HttpParser.Res
 
     private void process()
     {
+        HttpConnectionOverHTTP connection = getHttpConnection();
+        EndPoint endPoint = connection.getEndPoint();
         try
         {
-            HttpConnectionOverHTTP connection = getHttpConnection();
-            EndPoint endPoint = connection.getEndPoint();
             while (true)
             {
                 // Always parse even empty buffers to advance the parser.
@@ -181,7 +196,7 @@ public class HttpReceiverOverHTTP extends HttpReceiver implements HttpParser.Res
         catch (Throwable x)
         {
             if (LOG.isDebugEnabled())
-                LOG.debug(x);
+                LOG.debug("Error processing {}", endPoint, x);
             releaseNetworkBuffer();
             failAndClose(x);
         }
@@ -252,25 +267,18 @@ public class HttpReceiverOverHTTP extends HttpReceiver implements HttpParser.Res
     }
 
     @Override
-    public int getHeaderCacheSize()
-    {
-        HttpClientTransportOverHTTP transport = (HttpClientTransportOverHTTP)getHttpDestination().getHttpClient().getTransport();
-        return transport.getHeaderCacheSize();
-    }
-
-    @Override
-    public boolean startResponse(HttpVersion version, int status, String reason)
+    public void startResponse(HttpVersion version, int status, String reason)
     {
         HttpExchange exchange = getHttpExchange();
         if (exchange == null)
-            return false;
+            return;
 
         String method = exchange.getRequest().getMethod();
         parser.setHeadResponse(HttpMethod.HEAD.is(method) ||
             (HttpMethod.CONNECT.is(method) && status == HttpStatus.OK_200));
         exchange.getResponse().version(version).status(status).reason(reason);
 
-        return !responseBegin(exchange);
+        responseBegin(exchange);
     }
 
     @Override
@@ -290,6 +298,8 @@ public class HttpReceiverOverHTTP extends HttpReceiver implements HttpParser.Res
         if (exchange == null)
             return false;
 
+        // Store the EndPoint is case of upgrades, tunnels, etc.
+        exchange.getRequest().getConversation().setAttribute(EndPoint.class.getName(), getHttpConnection().getEndPoint());
         return !responseHeaders(exchange);
     }
 

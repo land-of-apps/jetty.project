@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.server.handler;
@@ -88,7 +88,7 @@ public class ContextHandlerTest
         IsHandledHandler handlerC = new IsHandledHandler();
         contextC.setHandler(handlerC);
 
-        HandlerCollection c = new HandlerCollection();
+        HandlerList c = new HandlerList();
 
         c.addHandler(contextA);
         c.addHandler(contextB);
@@ -177,7 +177,7 @@ public class ContextHandlerTest
         contextH.setHandler(handlerH);
         contextH.setVirtualHosts(new String[]{"*.com"});
 
-        HandlerCollection c = new HandlerCollection();
+        HandlerList c = new HandlerList();
         c.addHandler(contextA);
         c.addHandler(contextB);
         c.addHandler(contextC);
@@ -270,7 +270,7 @@ public class ContextHandlerTest
         }
 
         // Reversed order to check priority when multiple matches
-        HandlerCollection d = new HandlerCollection();
+        HandlerList d = new HandlerList();
         d.addHandler(contextH);
         d.addHandler(contextG);
         d.addHandler(contextF);
@@ -413,6 +413,18 @@ public class ContextHandlerTest
 
         // check that all contexts start normally
         server.start();
+        assertThat(connector.getResponse("GET / HTTP/1.0\n\n"), Matchers.containsString("ctx=''"));
+        assertThat(connector.getResponse("GET /foo/xxx HTTP/1.0\n\n"), Matchers.containsString("ctx='/foo'"));
+        assertThat(connector.getResponse("GET /foo/bar/xxx HTTP/1.0\n\n"), Matchers.containsString("ctx='/foo/bar'"));
+
+        // If we make foobar unavailable, then requests will be handled by 503
+        foobar.setAvailable(false);
+        assertThat(connector.getResponse("GET / HTTP/1.0\n\n"), Matchers.containsString("ctx=''"));
+        assertThat(connector.getResponse("GET /foo/xxx HTTP/1.0\n\n"), Matchers.containsString("ctx='/foo'"));
+        assertThat(connector.getResponse("GET /foo/bar/xxx HTTP/1.0\n\n"), Matchers.containsString(" 503 "));
+
+        // If we make foobar available, then requests will be handled normally
+        foobar.setAvailable(true);
         assertThat(connector.getResponse("GET / HTTP/1.0\n\n"), Matchers.containsString("ctx=''"));
         assertThat(connector.getResponse("GET /foo/xxx HTTP/1.0\n\n"), Matchers.containsString("ctx='/foo'"));
         assertThat(connector.getResponse("GET /foo/bar/xxx HTTP/1.0\n\n"), Matchers.containsString("ctx='/foo/bar'"));

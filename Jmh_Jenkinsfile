@@ -1,9 +1,9 @@
 #!groovy
 
-def branch = params.get("JETTY_BRANCH" ,"jetty-9.4.x")
+def branch = params.get("JETTY_BRANCH" ,"jetty-10.0.x")
 def owner = params.get("REPO_OWNER", "eclipse")
-def jdk = params.get("JDK", "jdk8")
-def jmhJarPath = params.get("jmhJarPath","jetty-jmh/target/benchmarks.jar")
+def jdk = params.get("JDK", "jdk11")
+def jmhJarPath = params.get("jmhJarPath","tests/jetty-jmh/target/benchmarks.jar")
 currentBuild.description = "Build branch $branch with jdk $jdk"
 
 node("linux") {

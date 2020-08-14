@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.servlet;
@@ -43,6 +43,9 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
 import org.eclipse.jetty.http.BadMessageException;
+import org.eclipse.jetty.http.HttpHeader;
+import org.eclipse.jetty.http.tools.HttpTester;
+import org.eclipse.jetty.logging.StacklessLogging;
 import org.eclipse.jetty.server.Dispatcher;
 import org.eclipse.jetty.server.HttpChannel;
 import org.eclipse.jetty.server.HttpChannelState;
@@ -50,21 +53,24 @@ import org.eclipse.jetty.server.LocalConnector;
 import org.eclipse.jetty.server.Request;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.handler.HandlerWrapper;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.StacklessLogging;
 import org.hamcrest.Matchers;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class ErrorPageTest
 {
+    private static final Logger LOG = LoggerFactory.getLogger(ErrorPageTest.class);
+
     private Server _server;
     private LocalConnector _connector;
     private StacklessLogging _stackless;
@@ -98,6 +104,7 @@ public class ErrorPageTest
         _context.addServlet(UnavailableServlet.class, "/unavailable/*");
         _context.addServlet(DeleteServlet.class, "/delete/*");
         _context.addServlet(ErrorAndStatusServlet.class, "/error-and-status/*");
+        _context.addServlet(ErrorContentTypeCharsetWriterInitializedServlet.class, "/error-mime-charset-writer/*");
 
         HandlerWrapper noopHandler = new HandlerWrapper()
         {
@@ -135,6 +142,36 @@ public class ErrorPageTest
         _stackless.close();
         _server.stop();
         _server.join();
+    }
+
+    @Test
+    public void testErrorOverridesMimeTypeAndCharset() throws Exception
+    {
+        StringBuilder rawRequest = new StringBuilder();
+        rawRequest.append("GET /error-mime-charset-writer/ HTTP/1.1\r\n");
+        rawRequest.append("Host: test\r\n");
+        rawRequest.append("Connection: close\r\n");
+        rawRequest.append("Accept: */*\r\n");
+        rawRequest.append("Accept-Charset: *\r\n");
+        rawRequest.append("\r\n");
+
+        String rawResponse = _connector.getResponse(rawRequest.toString());
+        System.out.println(rawResponse);
+        HttpTester.Response response = HttpTester.parseResponse(rawResponse);
+
+        assertThat(response.getStatus(), is(595));
+        String actualContentType = response.get(HttpHeader.CONTENT_TYPE);
+        // should not expect to see charset line from servlet
+        assertThat(actualContentType, not(containsString("charset=US-ASCII")));
+        String body = response.getContent();
+
+        assertThat(body, containsString("ERROR_PAGE: /595"));
+        assertThat(body, containsString("ERROR_MESSAGE: 595"));
+        assertThat(body, containsString("ERROR_CODE: 595"));
+        assertThat(body, containsString("ERROR_EXCEPTION: null"));
+        assertThat(body, containsString("ERROR_EXCEPTION_TYPE: null"));
+        assertThat(body, containsString("ERROR_SERVLET: org.eclipse.jetty.servlet.ErrorPageTest$ErrorContentTypeCharsetWriterInitializedServlet-"));
+        assertThat(body, containsString("ERROR_REQUEST_URI: /error-mime-charset-writer/"));
     }
 
     @Test
@@ -556,7 +593,7 @@ public class ErrorPageTest
                         }
                         catch (IllegalStateException e)
                         {
-                            Log.getLog().ignore(e);
+                            LOG.trace("IGNORED", e);
                         }
                         finally
                         {
@@ -565,7 +602,7 @@ public class ErrorPageTest
                     }
                     catch (IOException e)
                     {
-                        Log.getLog().warn(e);
+                        LOG.warn("Unable to send error", e);
                     }
                 });
                 hold.await();
@@ -604,8 +641,20 @@ public class ErrorPageTest
             }
             catch (Throwable ignore)
             {
-                Log.getLog().ignore(ignore);
+                LOG.trace("IGNORED", ignore);
             }
+        }
+    }
+
+    public static class ErrorContentTypeCharsetWriterInitializedServlet extends HttpServlet
+    {
+        @Override
+        protected void doGet(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException
+        {
+            response.setContentType("text/html; charset=US-ASCII");
+            PrintWriter writer = response.getWriter();
+            writer.println("Intentionally using sendError(595)");
+            response.sendError(595);
         }
     }
 

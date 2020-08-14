@@ -1,29 +1,31 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.server;
 
 import javax.servlet.AsyncContext;
 import javax.servlet.AsyncEvent;
+import javax.servlet.RequestDispatcher;
 import javax.servlet.ServletContext;
 import javax.servlet.ServletRequest;
 import javax.servlet.ServletResponse;
 
+import org.eclipse.jetty.http.HttpURI;
 import org.eclipse.jetty.server.handler.ContextHandler.Context;
 import org.eclipse.jetty.util.thread.Scheduler;
 
@@ -31,6 +33,7 @@ public class AsyncContextEvent extends AsyncEvent implements Runnable
 {
     private final Context _context;
     private final AsyncContextState _asyncContext;
+    private final HttpURI _baseURI;
     private final HttpChannelState _state;
     private ServletContext _dispatchContext;
     private String _dispatchPath;
@@ -39,14 +42,25 @@ public class AsyncContextEvent extends AsyncEvent implements Runnable
 
     public AsyncContextEvent(Context context, AsyncContextState asyncContext, HttpChannelState state, Request baseRequest, ServletRequest request, ServletResponse response)
     {
+        this (context, asyncContext, state, baseRequest, request, response, null);
+    }
+
+    public AsyncContextEvent(Context context, AsyncContextState asyncContext, HttpChannelState state, Request baseRequest, ServletRequest request, ServletResponse response, HttpURI baseURI)
+    {
         super(null, request, response, null);
         _context = context;
         _asyncContext = asyncContext;
         _state = state;
+        _baseURI = baseURI;
 
         // We are setting these attributes during startAsync, when the spec implies that
         // they are only available after a call to AsyncContext.dispatch(...);
         baseRequest.setAsyncAttributes();
+    }
+
+    public HttpURI getBaseURI()
+    {
+        return _baseURI;
     }
 
     public ServletContext getSuspendedContext()
@@ -67,14 +81,6 @@ public class AsyncContextEvent extends AsyncEvent implements Runnable
     public ServletContext getServletContext()
     {
         return _dispatchContext == null ? _context : _dispatchContext;
-    }
-
-    /**
-     * @return The path in the context (encoded with possible query string)
-     */
-    public String getPath()
-    {
-        return _dispatchPath;
     }
 
     public void setTimeoutTask(Scheduler.Task task)
@@ -110,6 +116,14 @@ public class AsyncContextEvent extends AsyncEvent implements Runnable
     public void setDispatchContext(ServletContext context)
     {
         _dispatchContext = context;
+    }
+
+    /**
+     * @return The path in the context (encoded with possible query string)
+     */
+    public String getDispatchPath()
+    {
+        return _dispatchPath;
     }
 
     /**

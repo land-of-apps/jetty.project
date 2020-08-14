@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.util;
@@ -29,8 +29,12 @@ import java.time.temporal.ChronoUnit;
 import java.util.Date;
 import java.util.Locale;
 import java.util.TimeZone;
-import java.util.Timer;
-import java.util.TimerTask;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+
+import org.eclipse.jetty.util.thread.AutoLock;
 
 /**
  * RolloverFileOutputStream.
@@ -46,22 +50,26 @@ import java.util.TimerTask;
  */
 public class RolloverFileOutputStream extends OutputStream
 {
-    private static Timer __rollover;
-
     static final String YYYY_MM_DD = "yyyy_mm_dd";
     static final String ROLLOVER_FILE_DATE_FORMAT = "yyyy_MM_dd";
     static final String ROLLOVER_FILE_BACKUP_FORMAT = "HHmmssSSS";
     static final int ROLLOVER_FILE_RETAIN_DAYS = 31;
+    private static final ScheduledExecutorService __scheduler = Executors.newSingleThreadScheduledExecutor(job ->
+    {
+        Thread thread = new Thread(job, RolloverFileOutputStream.class.getName());
+        thread.setDaemon(true);
+        return thread;
+    });
 
+    private final AutoLock _lock = new AutoLock();
     private OutputStream _out;
-    private RollTask _rollTask;
-    private SimpleDateFormat _fileBackupFormat;
-    private SimpleDateFormat _fileDateFormat;
-
+    private ScheduledFuture<?> _rollTask;
+    private final SimpleDateFormat _fileBackupFormat;
+    private final SimpleDateFormat _fileDateFormat;
     private String _filename;
     private File _file;
-    private boolean _append;
-    private int _retainDays;
+    private final boolean _append;
+    private final int _retainDays;
 
     /**
      * @param filename The filename must include the string "yyyy_mm_dd",
@@ -176,12 +184,6 @@ public class RolloverFileOutputStream extends OutputStream
         // Calculate Today's Midnight, based on Configured TimeZone (will be in past, even if by a few milliseconds)
         setFile(now);
 
-        synchronized (RolloverFileOutputStream.class)
-        {
-            if (__rollover == null)
-                __rollover = new Timer(RolloverFileOutputStream.class.getName(), true);
-        }
-
         // This will schedule the rollover event to the next midnight
         scheduleNextRollover(now);
     }
@@ -199,16 +201,12 @@ public class RolloverFileOutputStream extends OutputStream
 
     private void scheduleNextRollover(ZonedDateTime now)
     {
-        _rollTask = new RollTask();
         // Get tomorrow's midnight based on Configured TimeZone
         ZonedDateTime midnight = toMidnight(now);
 
         // Schedule next rollover event to occur, based on local machine's Unix Epoch milliseconds
         long delay = midnight.toInstant().toEpochMilli() - now.toInstant().toEpochMilli();
-        synchronized (RolloverFileOutputStream.class)
-        {
-            __rollover.schedule(_rollTask, delay);
-        }
+        _rollTask = __scheduler.schedule(this::rollOver, delay, TimeUnit.MILLISECONDS);
     }
 
     public String getFilename()
@@ -234,7 +232,7 @@ public class RolloverFileOutputStream extends OutputStream
         File oldFile = null;
         File newFile = null;
         File backupFile = null;
-        synchronized (this)
+        try (AutoLock l = _lock.lock())
         {
             // Check directory
             File file = new File(_filename);
@@ -350,27 +348,25 @@ public class RolloverFileOutputStream extends OutputStream
     @Override
     public void write(int b) throws IOException
     {
-        synchronized (this)
+        try (AutoLock l = _lock.lock())
         {
             _out.write(b);
         }
     }
 
     @Override
-    public void write(byte[] buf)
-        throws IOException
+    public void write(byte[] buf) throws IOException
     {
-        synchronized (this)
+        try (AutoLock l = _lock.lock())
         {
             _out.write(buf);
         }
     }
 
     @Override
-    public void write(byte[] buf, int off, int len)
-        throws IOException
+    public void write(byte[] buf, int off, int len) throws IOException
     {
-        synchronized (this)
+        try (AutoLock l = _lock.lock())
         {
             _out.write(buf, off, len);
         }
@@ -379,17 +375,16 @@ public class RolloverFileOutputStream extends OutputStream
     @Override
     public void flush() throws IOException
     {
-        synchronized (this)
+        try (AutoLock l = _lock.lock())
         {
             _out.flush();
         }
     }
 
     @Override
-    public void close()
-        throws IOException
+    public void close() throws IOException
     {
-        synchronized (this)
+        try (AutoLock l = _lock.lock())
         {
             try
             {
@@ -402,32 +397,24 @@ public class RolloverFileOutputStream extends OutputStream
             }
         }
 
-        synchronized (RolloverFileOutputStream.class)
-        {
-            if (_rollTask != null)
-            {
-                _rollTask.cancel();
-            }
-        }
+        ScheduledFuture<?> rollTask = _rollTask;
+        if (rollTask != null)
+            rollTask.cancel(false);
     }
 
-    private class RollTask extends TimerTask
+    private void rollOver()
     {
-        @Override
-        public void run()
+        try
         {
-            try
-            {
-                ZonedDateTime now = ZonedDateTime.now(_fileDateFormat.getTimeZone().toZoneId());
-                RolloverFileOutputStream.this.setFile(now);
-                RolloverFileOutputStream.this.removeOldFiles(now);
-                RolloverFileOutputStream.this.scheduleNextRollover(now);
-            }
-            catch (Throwable t)
-            {
-                // Cannot log this exception to a LOG, as RolloverFOS can be used by logging
-                t.printStackTrace(System.err);
-            }
+            ZonedDateTime now = ZonedDateTime.now(_fileDateFormat.getTimeZone().toZoneId());
+            RolloverFileOutputStream.this.setFile(now);
+            RolloverFileOutputStream.this.removeOldFiles(now);
+            RolloverFileOutputStream.this.scheduleNextRollover(now);
+        }
+        catch (Throwable t)
+        {
+            // Cannot log this exception to a LOG, as RolloverFOS can be used by logging
+            t.printStackTrace(System.err);
         }
     }
 }

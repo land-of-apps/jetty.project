@@ -1,24 +1,25 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.osgi.boot;
 
 import java.io.File;
+import java.net.URI;
 import java.net.URL;
 import java.util.Dictionary;
 import java.util.Enumeration;
@@ -31,13 +32,9 @@ import org.eclipse.jetty.osgi.boot.internal.serverfactory.ServerInstanceWrapper;
 import org.eclipse.jetty.osgi.boot.internal.webapp.OSGiWebappClassLoader;
 import org.eclipse.jetty.osgi.boot.utils.BundleFileLocatorHelperFactory;
 import org.eclipse.jetty.server.handler.ContextHandler;
-import org.eclipse.jetty.util.Loader;
 import org.eclipse.jetty.util.component.AbstractLifeCycle;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
 import org.eclipse.jetty.util.resource.JarResource;
 import org.eclipse.jetty.util.resource.Resource;
-import org.eclipse.jetty.webapp.Configuration;
 import org.eclipse.jetty.webapp.WebAppClassLoader;
 import org.eclipse.jetty.webapp.WebAppContext;
 import org.eclipse.jetty.xml.XmlConfiguration;
@@ -45,6 +42,8 @@ import org.osgi.framework.Bundle;
 import org.osgi.framework.BundleContext;
 import org.osgi.framework.ServiceReference;
 import org.osgi.service.packageadmin.PackageAdmin;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * AbstractWebAppProvider
@@ -54,51 +53,7 @@ import org.osgi.service.packageadmin.PackageAdmin;
  */
 public abstract class AbstractWebAppProvider extends AbstractLifeCycle implements AppProvider
 {
-    private static final Logger LOG = Log.getLogger(AbstractWebAppProvider.class);
-
-    /**
-     * Check if we should be enabling annotation processing
-     *
-     * @return true if the jetty-annotations.jar is present, false otherwise
-     */
-    private static boolean annotationsAvailable()
-    {
-        boolean result = false;
-        try
-        {
-            Loader.loadClass(AbstractWebAppProvider.class, "org.eclipse.jetty.annotations.AnnotationConfiguration");
-            result = true;
-            LOG.debug("Annotation support detected");
-        }
-        catch (ClassNotFoundException e)
-        {
-            result = false;
-            LOG.debug("No annotation support detected");
-        }
-
-        return result;
-    }
-
-    /**
-     * Check if jndi is support is present.
-     *
-     * @return true if the jetty-jndi.jar is present, false otherwise
-     */
-    private static boolean jndiAvailable()
-    {
-        try
-        {
-            Loader.loadClass(AbstractWebAppProvider.class, "org.eclipse.jetty.plus.jndi.Resource");
-            Loader.loadClass(AbstractWebAppProvider.class, "org.eclipse.jetty.plus.webapp.EnvConfiguration");
-            LOG.debug("JNDI support detected");
-            return true;
-        }
-        catch (ClassNotFoundException e)
-        {
-            LOG.debug("No JNDI support detected");
-            return false;
-        }
-    }
+    private static final Logger LOG = LoggerFactory.getLogger(AbstractWebAppProvider.class);
 
     private boolean _parentLoaderPriority;
 
@@ -109,8 +64,6 @@ public abstract class AbstractWebAppProvider extends AbstractLifeCycle implement
     private String _tldBundles;
 
     private DeploymentManager _deploymentManager;
-
-    private String[] _configurationClasses;
 
     private ServerInstanceWrapper _serverWrapper;
 
@@ -268,9 +221,8 @@ public abstract class AbstractWebAppProvider extends AbstractLifeCycle implement
 
             if (url == null)
             {
-                throw new IllegalArgumentException(String.format("Unable to locate %s in %s",
-                    _webAppPath,
-                    (bundleInstallLocation != null ? bundleInstallLocation.getAbsolutePath() : "missing bundle '" + _bundle.getSymbolicName() + "'")));
+                throw new IllegalArgumentException("Unable to locate " + _webAppPath + " in " +
+                    (bundleInstallLocation != null ? bundleInstallLocation.getAbsolutePath() : "unlocated bundle '" + _bundle.getSymbolicName() + "'"));
             }
 
             //Sets the location of the war file
@@ -280,10 +232,6 @@ public abstract class AbstractWebAppProvider extends AbstractLifeCycle implement
             // Set up what has been configured on the provider
             _webApp.setParentLoaderPriority(isParentLoaderPriority());
             _webApp.setExtractWAR(isExtract());
-            _webApp.setConfigurationClasses(getConfigurationClasses());
-
-            if (getDefaultsDescriptor() != null)
-                _webApp.setDefaultsDescriptor(getDefaultsDescriptor());
 
             //Set up configuration from manifest headers
             //extra classpath
@@ -330,7 +278,20 @@ public abstract class AbstractWebAppProvider extends AbstractLifeCycle implement
 
             // apply any META-INF/context.xml file that is found to configure
             // the webapp first
-            applyMetaInfContextXml(rootResource, overrideBundleInstallLocation);
+            try
+            {
+                final Resource finalRootResource = rootResource;
+                WebAppClassLoader.runWithServerClassAccess(() ->
+                {
+                    applyMetaInfContextXml(finalRootResource, overrideBundleInstallLocation);
+                    return null;
+                });
+            }
+            catch (Exception e)
+            {
+                LOG.warn("Error applying context xml");
+                throw e;
+            }
 
             _webApp.setAttribute(OSGiWebappConstants.REQUIRE_TLD_BUNDLE, requireTldBundles);
 
@@ -370,8 +331,8 @@ public abstract class AbstractWebAppProvider extends AbstractLifeCycle implement
                 Bundle[] bs = packageAdmin.getBundles(symbName, null);
                 if (bs == null || bs.length == 0)
                 {
-                    throw new IllegalArgumentException("Unable to locate the bundle '" + symbName +
-                        "' specified by " + OSGiWebappConstants.REQUIRE_TLD_BUNDLE + " in manifest of " +
+                    throw new IllegalArgumentException("Unable to locate the bundle '" + symbName + "' specified by " +
+                        OSGiWebappConstants.REQUIRE_TLD_BUNDLE + " in manifest of " +
                         (_bundle == null ? "unknown" : _bundle.getSymbolicName()));
                 }
 
@@ -400,11 +361,17 @@ public abstract class AbstractWebAppProvider extends AbstractLifeCycle implement
 
                 Thread.currentThread().setContextClassLoader(_webApp.getClassLoader());
 
+                URI contextXmlUri = null;
+
                 //TODO replace this with getting the InputStream so we don't cache in URL
                 //Try looking for a context xml file in META-INF with a specific name
-                URL contextXmlUrl = _bundle.getEntry("/META-INF/jetty-webapp-context.xml");
+                URL url = _bundle.getEntry("/META-INF/jetty-webapp-context.xml");
+                if (url != null)
+                {
+                    contextXmlUri = url.toURI();
+                }
 
-                if (contextXmlUrl == null)
+                if (contextXmlUri == null)
                 {
                     //Didn't find specially named file, try looking for a property that names a context xml file to use
                     if (_properties != null)
@@ -421,18 +388,20 @@ public abstract class AbstractWebAppProvider extends AbstractLifeCycle implement
                                     jettyHome = System.getProperty(OSGiServerConstants.JETTY_HOME);
                                 Resource res = findFile(filename, jettyHome, overrideBundleInstallLocation, _bundle);
                                 if (res != null)
-                                    contextXmlUrl = res.getURL();
+                                {
+                                    contextXmlUri = res.getURI();
+                                }
                             }
                         }
                     }
                 }
-                if (contextXmlUrl == null)
+                if (contextXmlUri == null)
                     return;
 
                 // Apply it just as the standard jetty ContextProvider would do
-                LOG.info("Applying " + contextXmlUrl + " to " + _webApp);
+                LOG.info("Applying " + contextXmlUri + " to " + _webApp);
 
-                XmlConfiguration xmlConfiguration = new XmlConfiguration(contextXmlUrl);
+                XmlConfiguration xmlConfiguration = new XmlConfiguration(Resource.newResource(contextXmlUri));
                 WebAppClassLoader.runWithServerClassAccess(() ->
                 {
                     HashMap<String, String> properties = new HashMap<>();
@@ -546,40 +515,6 @@ public abstract class AbstractWebAppProvider extends AbstractLifeCycle implement
         return _tldBundles;
     }
 
-    /**
-     * @param configurations The configuration class names.
-     */
-    public void setConfigurationClasses(String[] configurations)
-    {
-        _configurationClasses = configurations == null ? null : configurations.clone();
-    }
-
-    public String[] getConfigurationClasses()
-    {
-        if (_configurationClasses != null)
-            return _configurationClasses;
-
-        Configuration.ClassList defaults = Configuration.ClassList.serverDefault(_serverWrapper.getServer());
-
-        //add before JettyWebXmlConfiguration
-        if (annotationsAvailable() && !defaults.contains("org.eclipse.jetty.osgi.annotations.AnnotationConfiguration"))
-            defaults.addBefore("org.eclipse.jetty.webapp.JettyWebXmlConfiguration",
-                "org.eclipse.jetty.osgi.annotations.AnnotationConfiguration");
-
-        //add in EnvConfiguration and PlusConfiguration just after FragmentConfiguration
-        if (jndiAvailable())
-        {
-            if (!defaults.contains("org.eclipse.jetty.plus.webapp.EnvConfiguration"))
-                defaults.addAfter("org.eclipse.jetty.webapp.FragmentConfiguration",
-                    "org.eclipse.jetty.plus.webapp.EnvConfiguration");
-            if (!defaults.contains("org.eclipse.jetty.plus.webapp.PlusConfiguration"))
-                defaults.addAfter("org.eclipse.jetty.plus.webapp.EnvConfiguration", "org.eclipse.jetty.plus.webapp.PlusConfiguration");
-        }
-
-        String[] asArray = new String[defaults.size()];
-        return defaults.toArray(asArray);
-    }
-
     public void setServerInstanceWrapper(ServerInstanceWrapper wrapper)
     {
         _serverWrapper = wrapper;
@@ -595,9 +530,6 @@ public abstract class AbstractWebAppProvider extends AbstractLifeCycle implement
         return _deploymentManager;
     }
 
-    /**
-     * @see org.eclipse.jetty.deploy.AppProvider#setDeploymentManager(org.eclipse.jetty.deploy.DeploymentManager)
-     */
     @Override
     public void setDeploymentManager(DeploymentManager deploymentManager)
     {

@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.http2.client;
@@ -42,12 +42,9 @@ import org.eclipse.jetty.util.thread.Scheduler;
 
 public class HTTP2ClientConnectionFactory implements ClientConnectionFactory
 {
-    public static final String CLIENT_CONTEXT_KEY = "http2.client";
-    public static final String BYTE_BUFFER_POOL_CONTEXT_KEY = "http2.client.byteBufferPool";
-    public static final String EXECUTOR_CONTEXT_KEY = "http2.client.executor";
-    public static final String SCHEDULER_CONTEXT_KEY = "http2.client.scheduler";
-    public static final String SESSION_LISTENER_CONTEXT_KEY = "http2.client.sessionListener";
-    public static final String SESSION_PROMISE_CONTEXT_KEY = "http2.client.sessionPromise";
+    public static final String CLIENT_CONTEXT_KEY = "org.eclipse.jetty.client.http2";
+    public static final String SESSION_LISTENER_CONTEXT_KEY = "org.eclipse.jetty.client.http2.sessionListener";
+    public static final String SESSION_PROMISE_CONTEXT_KEY = "org.eclipse.jetty.client.http2.sessionPromise";
 
     private final Connection.Listener connectionListener = new ConnectionListener();
 
@@ -55,9 +52,9 @@ public class HTTP2ClientConnectionFactory implements ClientConnectionFactory
     public Connection newConnection(EndPoint endPoint, Map<String, Object> context)
     {
         HTTP2Client client = (HTTP2Client)context.get(CLIENT_CONTEXT_KEY);
-        ByteBufferPool byteBufferPool = (ByteBufferPool)context.get(BYTE_BUFFER_POOL_CONTEXT_KEY);
-        Executor executor = (Executor)context.get(EXECUTOR_CONTEXT_KEY);
-        Scheduler scheduler = (Scheduler)context.get(SCHEDULER_CONTEXT_KEY);
+        ByteBufferPool byteBufferPool = client.getByteBufferPool();
+        Executor executor = client.getExecutor();
+        Scheduler scheduler = client.getScheduler();
         Session.Listener listener = (Session.Listener)context.get(SESSION_LISTENER_CONTEXT_KEY);
         @SuppressWarnings("unchecked")
         Promise<Session> promise = (Promise<Session>)context.get(SESSION_PROMISE_CONTEXT_KEY);
@@ -66,6 +63,9 @@ public class HTTP2ClientConnectionFactory implements ClientConnectionFactory
         FlowControlStrategy flowControl = client.getFlowControlStrategyFactory().newFlowControlStrategy();
         HTTP2ClientSession session = new HTTP2ClientSession(scheduler, endPoint, generator, listener, flowControl);
         session.setMaxRemoteStreams(client.getMaxConcurrentPushedStreams());
+        long streamIdleTimeout = client.getStreamIdleTimeout();
+        if (streamIdleTimeout > 0)
+            session.setStreamIdleTimeout(streamIdleTimeout);
 
         Parser parser = new Parser(byteBufferPool, session, 4096, 8192);
         parser.setMaxFrameLength(client.getMaxFrameLength());
@@ -73,7 +73,9 @@ public class HTTP2ClientConnectionFactory implements ClientConnectionFactory
 
         HTTP2ClientConnection connection = new HTTP2ClientConnection(client, byteBufferPool, executor, endPoint,
             parser, session, client.getInputBufferSize(), promise, listener);
-        connection.addListener(connectionListener);
+        connection.setUseInputDirectByteBuffers(client.isUseInputDirectByteBuffers());
+        connection.setUseOutputDirectByteBuffers(client.isUseOutputDirectByteBuffers());
+        connection.addEventListener(connectionListener);
         return customize(connection, context);
     }
 

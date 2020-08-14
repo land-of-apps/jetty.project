@@ -1,29 +1,31 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.client;
 
 import java.nio.file.Path;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.stream.Stream;
 
 import org.eclipse.jetty.client.http.HttpClientTransportOverHTTP;
 import org.eclipse.jetty.http.HttpScheme;
+import org.eclipse.jetty.io.ClientConnector;
 import org.eclipse.jetty.server.Handler;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
@@ -44,13 +46,13 @@ public abstract class AbstractHttpClientServerTest
     protected HttpClient client;
     protected ServerConnector connector;
 
-    public void start(final Scenario scenario, Handler handler) throws Exception
+    public void start(Scenario scenario, Handler handler) throws Exception
     {
         startServer(scenario, handler);
         startClient(scenario);
     }
 
-    protected void startServer(final Scenario scenario, Handler handler) throws Exception
+    protected void startServer(Scenario scenario, Handler handler) throws Exception
     {
         if (server == null)
         {
@@ -65,32 +67,36 @@ public abstract class AbstractHttpClientServerTest
         server.start();
     }
 
-    protected void startClient(final Scenario scenario) throws Exception
+    protected void startClient(Scenario scenario) throws Exception
     {
-        startClient(scenario, null, null);
+        startClient(scenario, null);
     }
 
-    protected void startClient(final Scenario scenario, HttpClientTransport transport, Consumer<HttpClient> config) throws Exception
+    protected void startClient(Scenario scenario, Consumer<HttpClient> config) throws Exception
     {
-        if (transport == null)
-            transport = new HttpClientTransportOverHTTP(1);
+        startClient(scenario, HttpClientTransportOverHTTP::new, config);
+    }
 
+    protected void startClient(Scenario scenario, Function<ClientConnector, HttpClientTransportOverHTTP> transport, Consumer<HttpClient> config) throws Exception
+    {
+        ClientConnector clientConnector = new ClientConnector();
+        clientConnector.setSelectors(1);
+        clientConnector.setSslContextFactory(scenario.newClientSslContextFactory());
         QueuedThreadPool executor = new QueuedThreadPool();
         executor.setName("client");
+        clientConnector.setExecutor(executor);
         Scheduler scheduler = new ScheduledExecutorScheduler("client-scheduler", false);
-        client = newHttpClient(scenario, transport);
-        client.setExecutor(executor);
-        client.setScheduler(scheduler);
+        clientConnector.setScheduler(scheduler);
+        client = newHttpClient(transport.apply(clientConnector));
         client.setSocketAddressResolver(new SocketAddressResolver.Sync());
         if (config != null)
             config.accept(client);
-
         client.start();
     }
 
-    public HttpClient newHttpClient(Scenario scenario, HttpClientTransport transport)
+    public HttpClient newHttpClient(HttpClientTransport transport)
     {
-        return new HttpClient(transport, scenario.newClientSslContextFactory());
+        return new HttpClient(transport);
     }
 
     @AfterEach
@@ -140,9 +146,9 @@ public abstract class AbstractHttpClientServerTest
 
     public interface Scenario
     {
-        SslContextFactory newClientSslContextFactory();
+        SslContextFactory.Client newClientSslContextFactory();
 
-        SslContextFactory newServerSslContextFactory();
+        SslContextFactory.Server newServerSslContextFactory();
 
         String getScheme();
     }
@@ -150,13 +156,13 @@ public abstract class AbstractHttpClientServerTest
     public static class NormalScenario implements Scenario
     {
         @Override
-        public SslContextFactory newClientSslContextFactory()
+        public SslContextFactory.Client newClientSslContextFactory()
         {
             return null;
         }
 
         @Override
-        public SslContextFactory newServerSslContextFactory()
+        public SslContextFactory.Server newServerSslContextFactory()
         {
             return null;
         }
@@ -177,7 +183,7 @@ public abstract class AbstractHttpClientServerTest
     public static class SslScenario implements Scenario
     {
         @Override
-        public SslContextFactory newClientSslContextFactory()
+        public SslContextFactory.Client newClientSslContextFactory()
         {
             SslContextFactory.Client result = new SslContextFactory.Client();
             result.setEndpointIdentificationAlgorithm(null);
@@ -186,7 +192,7 @@ public abstract class AbstractHttpClientServerTest
         }
 
         @Override
-        public SslContextFactory newServerSslContextFactory()
+        public SslContextFactory.Server newServerSslContextFactory()
         {
             SslContextFactory.Server result = new SslContextFactory.Server();
             configure(result);

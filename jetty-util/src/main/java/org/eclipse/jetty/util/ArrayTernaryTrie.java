@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.util;
@@ -302,7 +302,7 @@ public class ArrayTernaryTrie<V> extends AbstractTrie<V>
             }
         }
 
-        return _value[t];
+        return (V)_value[t];
     }
 
     @Override
@@ -357,7 +357,7 @@ public class ArrayTernaryTrie<V> extends AbstractTrie<V>
                     break loop;
             }
         }
-        return _value[node];
+        return (V)_value[node];
     }
 
     @Override
@@ -408,7 +408,7 @@ public class ArrayTernaryTrie<V> extends AbstractTrie<V>
                     break loop;
             }
         }
-        return _value[node];
+        return (V)_value[node];
     }
 
     private V getBest(int t, ByteBuffer b, int offset, int len)
@@ -451,7 +451,7 @@ public class ArrayTernaryTrie<V> extends AbstractTrie<V>
                     break loop;
             }
         }
-        return _value[node];
+        return (V)_value[node];
     }
 
     @Override
@@ -573,12 +573,6 @@ public class ArrayTernaryTrie<V> extends AbstractTrie<V>
         }
 
         @Override
-        public boolean put(V v)
-        {
-            return put(v.toString(), v);
-        }
-
-        @Override
         public int hashCode()
         {
             return _trie.hashCode();
@@ -588,24 +582,6 @@ public class ArrayTernaryTrie<V> extends AbstractTrie<V>
         public V remove(String s)
         {
             return _trie.remove(s);
-        }
-
-        @Override
-        public V get(String s)
-        {
-            return _trie.get(s);
-        }
-
-        @Override
-        public V get(ByteBuffer b)
-        {
-            return _trie.get(b);
-        }
-
-        @Override
-        public V getBest(byte[] b, int offset, int len)
-        {
-            return _trie.getBest(b, offset, len);
         }
 
         @Override
@@ -627,6 +603,12 @@ public class ArrayTernaryTrie<V> extends AbstractTrie<V>
         }
 
         @Override
+        public boolean put(V v)
+        {
+            return put(v.toString(), v);
+        }
+
+        @Override
         public boolean put(String s, V v)
         {
             boolean added = _trie.put(s, v);
@@ -645,6 +627,18 @@ public class ArrayTernaryTrie<V> extends AbstractTrie<V>
         }
 
         @Override
+        public V get(String s)
+        {
+            return _trie.get(s);
+        }
+
+        @Override
+        public V get(ByteBuffer b)
+        {
+            return _trie.get(b);
+        }
+
+        @Override
         public V get(String s, int offset, int len)
         {
             return _trie.get(s, offset, len);
@@ -654,6 +648,12 @@ public class ArrayTernaryTrie<V> extends AbstractTrie<V>
         public V get(ByteBuffer b, int offset, int len)
         {
             return _trie.get(b, offset, len);
+        }
+
+        @Override
+        public V getBest(byte[] b, int offset, int len)
+        {
+            return _trie.getBest(b, offset, len);
         }
 
         @Override

@@ -1,25 +1,24 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.jndi;
 
 import java.io.IOException;
-import java.util.Collections;
 import java.util.Hashtable;
 import java.util.Map;
 import java.util.WeakHashMap;
@@ -32,8 +31,9 @@ import javax.naming.spi.ObjectFactory;
 
 import org.eclipse.jetty.server.handler.ContextHandler;
 import org.eclipse.jetty.util.component.Dumpable;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
+import org.eclipse.jetty.util.thread.AutoLock;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * ContextFactory
@@ -58,12 +58,12 @@ import org.eclipse.jetty.util.log.Logger;
  */
 public class ContextFactory implements ObjectFactory
 {
-    private static final Logger LOG = Log.getLogger(ContextFactory.class);
+    private static final Logger LOG = LoggerFactory.getLogger(ContextFactory.class);
 
     /**
      * Map of classloaders to contexts.
      */
-    private static final Map<ClassLoader, Context> __contextMap = Collections.synchronizedMap(new WeakHashMap<>());
+    private static final Map<ClassLoader, Context> __contextMap = new WeakHashMap<>();
 
     /**
      * Threadlocal for injecting a context to use
@@ -76,6 +76,8 @@ public class ContextFactory implements ObjectFactory
      * when finding the comp context.
      */
     private static final ThreadLocal<ClassLoader> __threadClassLoader = new ThreadLocal<ClassLoader>();
+
+    private static final AutoLock __lock = new AutoLock();
 
     /**
      * Find or create a context which pertains to a classloader.
@@ -101,7 +103,7 @@ public class ContextFactory implements ObjectFactory
         throws Exception
     {
         //First, see if we have had a context injected into us to use.
-        Context ctx = __threadContext.get();
+        Context ctx = (Context)__threadContext.get();
         if (ctx != null)
         {
             if (LOG.isDebugEnabled())
@@ -111,12 +113,12 @@ public class ContextFactory implements ObjectFactory
 
         //See if there is a classloader to use for finding the comp context
         //Don't use its parent hierarchy if set.
-        ClassLoader loader = __threadClassLoader.get();
+        ClassLoader loader = (ClassLoader)__threadClassLoader.get();
         if (loader != null)
         {
             if (LOG.isDebugEnabled())
                 LOG.debug("Using threadlocal classloader");
-            synchronized (__contextMap)
+            try (AutoLock l = __lock.lock())
             {
                 ctx = getContextForClassLoader(loader);
                 if (ctx == null)
@@ -137,7 +139,7 @@ public class ContextFactory implements ObjectFactory
         {
             if (LOG.isDebugEnabled())
                 LOG.debug("Trying thread context classloader");
-            synchronized (__contextMap)
+            try (AutoLock l = __lock.lock())
             {
                 while (ctx == null && loader != null)
                 {
@@ -163,10 +165,10 @@ public class ContextFactory implements ObjectFactory
         {
             if (LOG.isDebugEnabled() && loader != null)
                 LOG.debug("Trying classloader of current org.eclipse.jetty.server.handler.ContextHandler");
-            synchronized (__contextMap)
+            try (AutoLock l = __lock.lock())
             {
                 loader = ContextHandler.getCurrentContext().getContextHandler().getClassLoader();
-                ctx = __contextMap.get(loader);
+                ctx = (Context)__contextMap.get(loader);
 
                 if (ctx == null && loader != null)
                 {
@@ -200,7 +202,9 @@ public class ContextFactory implements ObjectFactory
         StringRefAddr parserAddr = (StringRefAddr)ref.get("parser");
         String parserClassName = (parserAddr == null ? null : (String)parserAddr.getContent());
         NameParser parser =
-            (NameParser)(parserClassName == null ? null : loader.loadClass(parserClassName).getDeclaredConstructor().newInstance());
+            (NameParser)(parserClassName == null
+                ? null
+                : loader.loadClass(parserClassName).getDeclaredConstructor().newInstance());
 
         return new NamingContext(env,
             name.get(0),
@@ -218,8 +222,10 @@ public class ContextFactory implements ObjectFactory
     {
         if (loader == null)
             return null;
-
-        return __contextMap.get(loader);
+        try (AutoLock l = __lock.lock())
+        {
+            return __contextMap.get(loader);
+        }
     }
 
     /**
@@ -231,7 +237,7 @@ public class ContextFactory implements ObjectFactory
      */
     public static Context associateContext(final Context ctx)
     {
-        Context previous = __threadContext.get();
+        Context previous = (Context)__threadContext.get();
         __threadContext.set(ctx);
         return previous;
     }
@@ -243,7 +249,7 @@ public class ContextFactory implements ObjectFactory
 
     public static ClassLoader associateClassLoader(final ClassLoader loader)
     {
-        ClassLoader prev = __threadClassLoader.get();
+        ClassLoader prev = (ClassLoader)__threadClassLoader.get();
         __threadClassLoader.set(loader);
         return prev;
     }
@@ -255,7 +261,7 @@ public class ContextFactory implements ObjectFactory
 
     public static void dump(Appendable out, String indent) throws IOException
     {
-        synchronized (__contextMap)
+        try (AutoLock l = __lock.lock())
         {
             Dumpable.dumpObjects(out, indent, String.format("o.e.j.jndi.ContextFactory@%x", __contextMap.hashCode()), __contextMap);
         }

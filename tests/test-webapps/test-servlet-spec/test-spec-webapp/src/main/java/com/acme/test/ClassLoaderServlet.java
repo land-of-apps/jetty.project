@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package com.acme.test;
@@ -30,8 +30,6 @@ import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
-import org.eclipse.jetty.util.IO;
-
 @WebServlet(urlPatterns = "/classloader")
 public class ClassLoaderServlet extends HttpServlet
 {
@@ -47,6 +45,8 @@ public class ClassLoaderServlet extends HttpServlet
             writer.println("<body>");
             writer.println("<h1>ClassLoader Isolation Test</h1>");
 
+            // TODO uncomment the following once 9.4.19 is released with a fix for #3726
+            /*
             Class<?> webappIO = IO.class;
             URI webappURI = getLocationOfClass(webappIO);
             String webappVersion = webappIO.getPackage().getImplementationVersion();
@@ -54,8 +54,8 @@ public class ClassLoaderServlet extends HttpServlet
             URI serverURI = getLocationOfClass(serverIO);
             String serverVersion = serverIO.getPackage().getImplementationVersion();
 
-            writer.printf("<p>Webapp loaded <code>org.eclipse.jetty.util.IO</code>(%s) from %s%n", webappVersion, webappURI);
-            writer.printf("<br/>Server loaded <code>org.eclipse.jetty.util.IO</code>(%s) from %s%n", serverVersion, serverURI);
+            writer.printf("<p>Webapp loaded <code>org.eclipse.jetty.util.IO</code>(%s) from %s%n",webappVersion,webappURI);
+            writer.printf("<br/>Server loaded <code>org.eclipse.jetty.util.IO</code>(%s) from %s%n",serverVersion, serverURI);
             if (webappVersion.equals(serverVersion))
                 writer.println("<br/><b>Version Result: <span class=\"fail\">FAIL</span></b>");
             else
@@ -64,6 +64,7 @@ public class ClassLoaderServlet extends HttpServlet
                 writer.println("<br/><b>URI Result: <span class=\"fail\">FAIL</span></b></p>");
             else
                 writer.println("<br/><b>URI Result: <span class=\"pass\">PASS</span></b></p>");
+            */
 
             writer.println("</body>");
             writer.println("</html>");

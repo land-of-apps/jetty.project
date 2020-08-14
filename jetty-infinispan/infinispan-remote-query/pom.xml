@@ -2,11 +2,11 @@
   <parent>
     <groupId>org.eclipse.jetty</groupId>
     <artifactId>infinispan-parent</artifactId>
-    <version>9.4.31.v20200723</version>
+    <version>10.0.0-SNAPSHOT</version>
   </parent>
   <modelVersion>4.0.0</modelVersion>
   <artifactId>infinispan-remote-query</artifactId>
-  <name>Jetty :: Infinispan Session Manager Remote</name>
+  <name>Jetty :: Infinispan Session Manager Remote with Querying</name>
   <properties>
     <bundle-symbolic-name>${project.groupId}.infinispan.remote.query</bundle-symbolic-name>
     <infinispan.docker.image.version>9.4.8.Final</infinispan.docker.image.version>

@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.server;
@@ -35,7 +35,6 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.eclipse.jetty.io.ByteBufferPool;
-import org.eclipse.jetty.io.ChannelEndPoint;
 import org.eclipse.jetty.io.Connection;
 import org.eclipse.jetty.io.EndPoint;
 import org.eclipse.jetty.io.ManagedSelector;
@@ -154,7 +153,7 @@ public class ServerConnector extends AbstractNetworkConnector
      */
     public ServerConnector(
         @Name("server") Server server,
-        @Name("sslContextFactory") SslContextFactory sslContextFactory)
+        @Name("sslContextFactory") SslContextFactory.Server sslContextFactory)
     {
         this(server, null, null, null, -1, -1, AbstractConnectionFactory.getFactories(sslContextFactory, new HttpConnectionFactory()));
     }
@@ -173,7 +172,7 @@ public class ServerConnector extends AbstractNetworkConnector
         @Name("server") Server server,
         @Name("acceptors") int acceptors,
         @Name("selectors") int selectors,
-        @Name("sslContextFactory") SslContextFactory sslContextFactory)
+        @Name("sslContextFactory") SslContextFactory.Server sslContextFactory)
     {
         this(server, null, null, null, acceptors, selectors, AbstractConnectionFactory.getFactories(sslContextFactory, new HttpConnectionFactory()));
     }
@@ -186,7 +185,7 @@ public class ServerConnector extends AbstractNetworkConnector
      */
     public ServerConnector(
         @Name("server") Server server,
-        @Name("sslContextFactory") SslContextFactory sslContextFactory,
+        @Name("sslContextFactory") SslContextFactory.Server sslContextFactory,
         @Name("factories") ConnectionFactory... factories)
     {
         this(server, null, null, null, -1, -1, AbstractConnectionFactory.getFactories(sslContextFactory, factories));
@@ -226,10 +225,8 @@ public class ServerConnector extends AbstractNetworkConnector
     @Override
     protected void doStart() throws Exception
     {
-        for (EventListener l : getBeans(EventListener.class))
-        {
+        for (EventListener l : getBeans(SelectorManager.SelectorManagerListener.class))
             _manager.addEventListener(l);
-        }
 
         super.doStart();
 
@@ -372,7 +369,7 @@ public class ServerConnector extends AbstractNetworkConnector
                 }
                 catch (IOException e)
                 {
-                    LOG.warn(e);
+                    LOG.warn("Unable to close {}", serverChannel, e);
                 }
             }
         }
@@ -410,7 +407,7 @@ public class ServerConnector extends AbstractNetworkConnector
         }
         catch (SocketException e)
         {
-            LOG.ignore(e);
+            LOG.trace("IGNORED", e);
         }
     }
 
@@ -433,36 +430,11 @@ public class ServerConnector extends AbstractNetworkConnector
         return _localPort;
     }
 
-    protected ChannelEndPoint newEndPoint(SocketChannel channel, ManagedSelector selectSet, SelectionKey key) throws IOException
+    protected SocketChannelEndPoint newEndPoint(SocketChannel channel, ManagedSelector selectSet, SelectionKey key) throws IOException
     {
         SocketChannelEndPoint endpoint = new SocketChannelEndPoint(channel, selectSet, key, getScheduler());
         endpoint.setIdleTimeout(getIdleTimeout());
         return endpoint;
-    }
-
-    /**
-     * Returns the socket close linger time.
-     *
-     * @return -1 as the socket close linger time is always disabled.
-     * @see java.net.StandardSocketOptions#SO_LINGER
-     * @deprecated don't use as socket close linger time has undefined behavior for non-blocking sockets
-     */
-    @ManagedAttribute(value = "Socket close linger time. Deprecated, always returns -1", readonly = true)
-    @Deprecated
-    public int getSoLingerTime()
-    {
-        return -1;
-    }
-
-    /**
-     * @param lingerTime the socket close linger time; use -1 to disable.
-     * @see java.net.StandardSocketOptions#SO_LINGER
-     * @deprecated don't use as socket close linger time has undefined behavior for non-blocking sockets
-     */
-    @Deprecated
-    public void setSoLingerTime(int lingerTime)
-    {
-        LOG.warn("Ignoring deprecated socket close linger time");
     }
 
     /**
@@ -607,9 +579,9 @@ public class ServerConnector extends AbstractNetworkConnector
         }
 
         @Override
-        protected ChannelEndPoint newEndPoint(SelectableChannel channel, ManagedSelector selectSet, SelectionKey selectionKey) throws IOException
+        protected SocketChannelEndPoint newEndPoint(SelectableChannel channel, ManagedSelector selector, SelectionKey selectionKey) throws IOException
         {
-            return ServerConnector.this.newEndPoint((SocketChannel)channel, selectSet, selectionKey);
+            return ServerConnector.this.newEndPoint((SocketChannel)channel, selector, selectionKey);
         }
 
         @Override

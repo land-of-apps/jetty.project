@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.quickstart;
@@ -21,11 +21,19 @@ package org.eclipse.jetty.quickstart;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
+import org.eclipse.jetty.annotations.AnnotationConfiguration;
+import org.eclipse.jetty.plus.webapp.EnvConfiguration;
+import org.eclipse.jetty.plus.webapp.PlusConfiguration;
 import org.eclipse.jetty.server.NetworkConnector;
 import org.eclipse.jetty.server.Server;
+import org.eclipse.jetty.toolchain.test.MavenTestingUtils;
 import org.eclipse.jetty.util.IO;
+import org.eclipse.jetty.util.resource.PathResource;
 import org.eclipse.jetty.util.resource.Resource;
+import org.eclipse.jetty.webapp.WebAppContext;
 import org.eclipse.jetty.webapp.WebDescriptor;
 import org.eclipse.jetty.xml.XmlConfiguration;
 import org.eclipse.jetty.xml.XmlParser.Node;
@@ -34,6 +42,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class QuickStartTest
 {
@@ -41,11 +50,11 @@ public class QuickStartTest
     @Test
     public void testStandardTestWar() throws Exception
     {
+        //Generate the quickstart
         PreconfigureStandardTestWar.main(new String[]{});
 
         WebDescriptor descriptor = new WebDescriptor(Resource.newResource("./target/test-standard-preconfigured/WEB-INF/quickstart-web.xml"));
-        descriptor.setValidating(true);
-        descriptor.parse();
+        descriptor.parse(WebDescriptor.getParser(!QuickStartGeneratorConfiguration.LOG.isDebugEnabled()));
         Node node = descriptor.getRoot();
         assertThat(node, Matchers.notNullValue());
 
@@ -59,8 +68,12 @@ public class QuickStartTest
 
         Server server = new Server(0);
 
-        QuickStartWebApp webapp = new QuickStartWebApp();
-        webapp.setAutoPreconfigure(true);
+        WebAppContext webapp = new WebAppContext();
+        webapp.addConfiguration(new QuickStartConfiguration(),
+            new EnvConfiguration(),
+            new PlusConfiguration(),
+            new AnnotationConfiguration());
+        webapp.setAttribute(QuickStartConfiguration.MODE, QuickStartConfiguration.Mode.QUICKSTART);
         webapp.setWar(war);
         webapp.setContextPath("/");
 
@@ -68,7 +81,7 @@ public class QuickStartTest
         if (contextXml != null)
         {
             // System.err.println("Applying "+contextXml);
-            XmlConfiguration xmlConfiguration = new XmlConfiguration(contextXml.getURL());
+            XmlConfiguration xmlConfiguration = new XmlConfiguration(contextXml);
             xmlConfiguration.configure(webapp);
         }
 
@@ -87,11 +100,14 @@ public class QuickStartTest
     @Test
     public void testSpecWar() throws Exception
     {
+        //Generate the quickstart xml
         PreconfigureSpecWar.main(new String[]{});
 
-        WebDescriptor descriptor = new WebDescriptor(Resource.newResource("./target/test-spec-preconfigured/WEB-INF/quickstart-web.xml"));
-        descriptor.setValidating(true);
-        descriptor.parse();
+        Path webXmlPath = MavenTestingUtils.getTargetPath().resolve("test-spec-preconfigured/WEB-INF/quickstart-web.xml");
+        assertTrue(Files.exists(webXmlPath), "Path should exist:" + webXmlPath);
+
+        WebDescriptor descriptor = new WebDescriptor(new PathResource(webXmlPath));
+        descriptor.parse(WebDescriptor.getParser(!QuickStartGeneratorConfiguration.LOG.isDebugEnabled()));
         Node node = descriptor.getRoot();
         assertThat(node, Matchers.notNullValue());
 
@@ -105,8 +121,12 @@ public class QuickStartTest
 
         Server server = new Server(0);
 
-        QuickStartWebApp webapp = new QuickStartWebApp();
-        webapp.setAutoPreconfigure(true);
+        WebAppContext webapp = new WebAppContext();
+        webapp.addConfiguration(new QuickStartConfiguration(),
+            new EnvConfiguration(),
+            new PlusConfiguration(),
+            new AnnotationConfiguration());
+        webapp.setAttribute(QuickStartConfiguration.MODE, QuickStartConfiguration.Mode.QUICKSTART);
         webapp.setWar(war);
         webapp.setContextPath("/");
 
@@ -114,7 +134,7 @@ public class QuickStartTest
         if (contextXml != null)
         {
             // System.err.println("Applying "+contextXml);
-            XmlConfiguration xmlConfiguration = new XmlConfiguration(contextXml.getURL());
+            XmlConfiguration xmlConfiguration = new XmlConfiguration(contextXml);
             xmlConfiguration.configure(webapp);
         }
 
@@ -133,11 +153,11 @@ public class QuickStartTest
     @Test
     public void testJNDIWar() throws Exception
     {
+        //Generate the quickstart
         PreconfigureJNDIWar.main(new String[]{});
 
         WebDescriptor descriptor = new WebDescriptor(Resource.newResource("./target/test-jndi-preconfigured/WEB-INF/quickstart-web.xml"));
-        descriptor.setValidating(true);
-        descriptor.parse();
+        descriptor.parse(WebDescriptor.getParser(!QuickStartGeneratorConfiguration.LOG.isDebugEnabled()));
         Node node = descriptor.getRoot();
         assertThat(node, Matchers.notNullValue());
 
@@ -151,8 +171,12 @@ public class QuickStartTest
 
         Server server = new Server(0);
 
-        QuickStartWebApp webapp = new QuickStartWebApp();
-        webapp.setAutoPreconfigure(true);
+        WebAppContext webapp = new WebAppContext();
+        webapp.addConfiguration(new QuickStartConfiguration(),
+            new EnvConfiguration(),
+            new PlusConfiguration(),
+            new AnnotationConfiguration());
+        webapp.setAttribute(QuickStartConfiguration.MODE, QuickStartConfiguration.Mode.QUICKSTART);
         webapp.setWar(war);
         webapp.setContextPath("/");
 
@@ -160,7 +184,7 @@ public class QuickStartTest
         if (contextXml != null)
         {
             // System.err.println("Applying "+contextXml);
-            XmlConfiguration xmlConfiguration = new XmlConfiguration(contextXml.getURI().toURL());
+            XmlConfiguration xmlConfiguration = new XmlConfiguration(contextXml);
             xmlConfiguration.configure(webapp);
         }
 

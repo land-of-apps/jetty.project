@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.http;
@@ -36,8 +36,8 @@ import org.eclipse.jetty.util.ArrayTrie;
 import org.eclipse.jetty.util.BufferUtil;
 import org.eclipse.jetty.util.StringUtil;
 import org.eclipse.jetty.util.Trie;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * MIME Type enum and utilities
@@ -45,7 +45,7 @@ import org.eclipse.jetty.util.log.Logger;
 public class MimeTypes
 {
 
-    private static final Logger LOG = Log.getLogger(MimeTypes.class);
+    private static final Logger LOG = LoggerFactory.getLogger(MimeTypes.class);
     private static final Trie<ByteBuffer> TYPES = new ArrayTrie<ByteBuffer>(512);
     private static final Map<String, String> __dftMimeMap = new HashMap<String, String>();
     private static final Map<String, String> __inferredEncodings = new HashMap<String, String>();
@@ -189,8 +189,8 @@ public class MimeTypes
                 __assumedEncodings.put(type.asString(), type.getCharsetString());
         }
 
-        String resourceName = "org/eclipse/jetty/http/mime.properties";
-        try (InputStream stream = MimeTypes.class.getClassLoader().getResourceAsStream(resourceName))
+        String resourceName = "mime.properties";
+        try (InputStream stream = MimeTypes.class.getResourceAsStream(resourceName))
         {
             if (stream == null)
             {
@@ -218,19 +218,23 @@ public class MimeTypes
                 }
                 catch (IOException e)
                 {
-                    LOG.warn(e.toString());
-                    LOG.debug(e);
+                    if (LOG.isDebugEnabled())
+                        LOG.warn("Unable to read mime-type resource: {}", resourceName, e);
+                    else
+                        LOG.warn("Unable to read mime-type resource: {} - {}", resourceName, e.toString());
                 }
             }
         }
         catch (IOException e)
         {
-            LOG.warn(e.toString());
-            LOG.debug(e);
+            if (LOG.isDebugEnabled())
+                LOG.warn("Unable to load mime-type resource: {}", resourceName, e);
+            else
+                LOG.warn("Unable to load mime-type resource: {} - {}", resourceName, e.toString());
         }
 
-        resourceName = "org/eclipse/jetty/http/encoding.properties";
-        try (InputStream stream = MimeTypes.class.getClassLoader().getResourceAsStream(resourceName))
+        resourceName = "encoding.properties";
+        try (InputStream stream = MimeTypes.class.getResourceAsStream(resourceName))
         {
             if (stream == null)
                 LOG.warn("Missing encoding resource: {}", resourceName);
@@ -262,15 +266,19 @@ public class MimeTypes
                 }
                 catch (IOException e)
                 {
-                    LOG.warn(e.toString());
-                    LOG.debug(e);
+                    if (LOG.isDebugEnabled())
+                        LOG.warn("Unable to read encoding resource: {}", resourceName, e);
+                    else
+                        LOG.warn("Unable to read encoding resource: {} - {}", resourceName, e.toString());
                 }
             }
         }
         catch (IOException e)
         {
-            LOG.warn(e.toString());
-            LOG.debug(e);
+            if (LOG.isDebugEnabled())
+                LOG.warn("Unable to load encoding resource: {}", resourceName, e);
+            else
+                LOG.warn("Unable to load encoding resource: {} - {}", resourceName, e.toString());
         }
     }
 
@@ -283,7 +291,7 @@ public class MimeTypes
     {
     }
 
-    public synchronized Map<String, String> getMimeMap()
+    public Map<String, String> getMimeMap()
     {
         return _mimeMap;
     }
@@ -483,14 +491,12 @@ public class MimeTypes
                     else
                         state = 0;
                     break;
-
                 case 8:
                     if ('=' == b)
                         state = 9;
                     else if (' ' != b)
                         state = 0;
                     break;
-
                 case 9:
                     if (' ' == b)
                         break;
@@ -504,11 +510,13 @@ public class MimeTypes
                     start = i;
                     state = 10;
                     break;
-
                 case 10:
                     if (!quote && (';' == b || ' ' == b) ||
                         (quote && '"' == b))
                         return StringUtil.normalizeCharset(value, start, i - start);
+                    break;
+                default:
+                    throw new IllegalStateException();
             }
         }
 
@@ -542,12 +550,6 @@ public class MimeTypes
         return __assumedEncodings;
     }
 
-    @Deprecated
-    public static String inferCharsetFromContentType(String contentType)
-    {
-        return getCharsetAssumedFromContentType(contentType);
-    }
-
     public static String getCharsetInferredFromContentType(String contentType)
     {
         return __inferredEncodings.get(contentType);
@@ -572,7 +574,14 @@ public class MimeTypes
 
             if ('"' == b)
             {
-                quote = !quote;
+                if (quote)
+                {
+                    quote = false;
+                }
+                else
+                {
+                    quote = true;
+                }
 
                 switch (state)
                 {
@@ -657,7 +666,6 @@ public class MimeTypes
                     else if (' ' != b)
                         state = 0;
                     break;
-
                 case 9:
                     if (' ' == b)
                         break;
@@ -665,7 +673,6 @@ public class MimeTypes
                     builder.append(value, 0, start + 1);
                     state = 10;
                     break;
-
                 case 10:
                     if (';' == b)
                     {
@@ -676,6 +683,9 @@ public class MimeTypes
                 case 11:
                     if (' ' != b)
                         builder.append(b);
+                    break;
+                default:
+                    throw new IllegalStateException();
             }
         }
         if (builder == null)

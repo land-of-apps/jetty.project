@@ -1,25 +1,28 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.http;
 
+import java.util.Map;
 import java.util.Objects;
+import java.util.StringTokenizer;
 
+import org.eclipse.jetty.util.QuotedStringTokenizer;
 import org.eclipse.jetty.util.StringUtil;
 
 /**
@@ -27,7 +30,7 @@ import org.eclipse.jetty.util.StringUtil;
  */
 public class HttpField
 {
-    private static final String ZEROQUALITY = "q=0";
+    private static final String __zeroquality = "q=0";
     private final HttpHeader _header;
     private final String _name;
     private final String _value;
@@ -59,43 +62,76 @@ public class HttpField
         this(HttpHeader.CACHE.get(name), name, value);
     }
 
-    public HttpHeader getHeader()
+    /**
+     * Get field value parameters. Some field values can have parameters. This method separates the
+     * value from the parameters and optionally populates a map with the parameters. For example:
+     *
+     * <PRE>
+     *
+     * FieldName : Value ; param1=val1 ; param2=val2
+     *
+     * </PRE>
+     *
+     * @param value The Field value, possibly with parameters.
+     * @param parameters A map to populate with the parameters, or null
+     * @return The value.
+     */
+    public static String getValueParameters(String value, Map<String, String> parameters)
     {
-        return _header;
-    }
-
-    public String getName()
-    {
-        return _name;
-    }
-
-    public String getLowerCaseName()
-    {
-        return _header != null ? _header.lowerCaseName() : StringUtil.asciiToLowerCase(_name);
-    }
-
-    public String getValue()
-    {
-        return _value;
-    }
-
-    public int getIntValue()
-    {
-        return Integer.parseInt(_value);
-    }
-
-    public long getLongValue()
-    {
-        return Long.parseLong(_value);
-    }
-
-    public String[] getValues()
-    {
-        if (_value == null)
+        if (value == null)
             return null;
 
-        QuotedCSV list = new QuotedCSV(false, _value);
-        return list.getValues().toArray(new String[list.size()]);
+        int i = value.indexOf(';');
+        if (i < 0)
+            return value;
+        if (parameters == null)
+            return value.substring(0, i).trim();
+
+        StringTokenizer tok1 = new QuotedStringTokenizer(value.substring(i), ";", false, true);
+        while (tok1.hasMoreTokens())
+        {
+            String token = tok1.nextToken();
+            StringTokenizer tok2 = new QuotedStringTokenizer(token, "= ");
+            if (tok2.hasMoreTokens())
+            {
+                String paramName = tok2.nextToken();
+                String paramVal = null;
+                if (tok2.hasMoreTokens())
+                    paramVal = tok2.nextToken();
+                parameters.put(paramName, paramVal);
+            }
+        }
+
+        return value.substring(0, i).trim();
+    }
+
+    /**
+     * Get field value without parameters. Some field values can have parameters. This method separates the
+     * value from the parameters and optionally populates a map with the parameters. For example:
+     *
+     * <PRE>
+     *
+     * FieldName : Value ; param1=val1 ; param2=val2
+     *
+     * </PRE>
+     *
+     * @param value The Field value, possibly with parameters.
+     * @return The value.
+     */
+    public static String stripParameters(String value)
+    {
+        if (value == null)
+            return null;
+
+        int i = value.indexOf(';');
+        if (i < 0)
+            return value;
+        return value.substring(0, i).trim();
+    }
+
+    public static String valueParameters(String value, Map<String, String> parameters)
+    {
+        return getValueParameters(value, parameters);
     }
 
     /**
@@ -245,7 +281,7 @@ public class HttpField
                     {
                         case ',': // end token
                             // Have we matched the token and not q=0?
-                            if (param != ZEROQUALITY.length() && match == search.length())
+                            if (param != __zeroquality.length() && match == search.length())
                                 return true;
                             param = 0;
                             state = 0;
@@ -258,8 +294,8 @@ public class HttpField
                         default:
                             if (param >= 0)
                             {
-                                if (param < ZEROQUALITY.length())
-                                    param = Character.toLowerCase(c) == ZEROQUALITY.charAt(param) ? (param + 1) : -1;
+                                if (param < __zeroquality.length())
+                                    param = Character.toLowerCase(c) == __zeroquality.charAt(param) ? (param + 1) : -1;
                                 else if (c != '0' && c != '.')
                                     param = -1;
                             }
@@ -271,14 +307,70 @@ public class HttpField
             }
         }
 
-        return param != ZEROQUALITY.length() && match == search.length();
+        return param != __zeroquality.length() && match == search.length();
     }
 
     @Override
-    public String toString()
+    public boolean equals(Object o)
     {
-        String v = getValue();
-        return getName() + ": " + (v == null ? "" : v);
+        if (o == this)
+            return true;
+        if (!(o instanceof HttpField))
+            return false;
+        HttpField field = (HttpField)o;
+        if (_header != field.getHeader())
+            return false;
+        if (!_name.equalsIgnoreCase(field.getName()))
+            return false;
+        return Objects.equals(_value, field.getValue());
+    }
+
+    public HttpHeader getHeader()
+    {
+        return _header;
+    }
+
+    public int getIntValue()
+    {
+        return Integer.parseInt(_value);
+    }
+
+    public long getLongValue()
+    {
+        return Long.parseLong(_value);
+    }
+
+    public String getLowerCaseName()
+    {
+        return _header != null ? _header.lowerCaseName() : StringUtil.asciiToLowerCase(_name);
+    }
+
+    public String getName()
+    {
+        return _name;
+    }
+
+    public String getValue()
+    {
+        return _value;
+    }
+
+    public String[] getValues()
+    {
+        if (_value == null)
+            return null;
+
+        QuotedCSV list = new QuotedCSV(false, _value);
+        return list.getValues().toArray(new String[list.size()]);
+    }
+
+    @Override
+    public int hashCode()
+    {
+        int vhc = Objects.hashCode(_value);
+        if (_header == null)
+            return vhc ^ nameHashCode();
+        return vhc ^ _header.hashCode();
     }
 
     public boolean isSameName(HttpField field)
@@ -290,6 +382,13 @@ public class HttpField
         if (_header != null && _header == field.getHeader())
             return true;
         return _name.equalsIgnoreCase(field.getName());
+    }
+
+    @Override
+    public String toString()
+    {
+        String v = getValue();
+        return getName() + ": " + (v == null ? "" : v);
     }
 
     private int nameHashCode()
@@ -310,30 +409,6 @@ public class HttpField
             this.hash = h;
         }
         return h;
-    }
-
-    @Override
-    public int hashCode()
-    {
-        int vhc = Objects.hashCode(_value);
-        if (_header == null)
-            return vhc ^ nameHashCode();
-        return vhc ^ _header.hashCode();
-    }
-
-    @Override
-    public boolean equals(Object o)
-    {
-        if (o == this)
-            return true;
-        if (!(o instanceof HttpField))
-            return false;
-        HttpField field = (HttpField)o;
-        if (_header != field.getHeader())
-            return false;
-        if (!_name.equalsIgnoreCase(field.getName()))
-            return false;
-        return Objects.equals(_value, field.getValue());
     }
 
     public static class IntValueHttpField extends HttpField

@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.servlets;
@@ -39,12 +39,12 @@ public interface EventSource
      * @param emitter the {@link Emitter} instance that allows to operate on the connection
      * @throws IOException if the implementation of the method throws such exception
      */
-    void onOpen(Emitter emitter) throws IOException;
+    public void onOpen(Emitter emitter) throws IOException;
 
     /**
      * <p>Callback method invoked when an event source connection is closed.</p>
      */
-    void onClose();
+    public void onClose();
 
     /**
      * <p>{@link Emitter} is the active half of an event source connection, and allows applications
@@ -52,7 +52,7 @@ public interface EventSource
      * <p>An {@link Emitter} instance will be created for each new event source connection.</p>
      * <p>{@link Emitter} instances are fully thread safe and can be used from multiple threads.</p>
      */
-    interface Emitter
+    public interface Emitter
     {
         /**
          * <p>Sends a named event with data to the client.</p>
@@ -67,7 +67,7 @@ public interface EventSource
          * @throws IOException if an I/O failure occurred
          * @see #data(String)
          */
-        void event(String name, String data) throws IOException;
+        public void event(String name, String data) throws IOException;
 
         /**
          * <p>Sends a default event with data to the client.</p>
@@ -86,7 +86,7 @@ public interface EventSource
          * @param data the data to be sent
          * @throws IOException if an I/O failure occurred
          */
-        void data(String data) throws IOException;
+        public void data(String data) throws IOException;
 
         /**
          * <p>Sends a comment to the client.</p>
@@ -98,11 +98,11 @@ public interface EventSource
          * @param comment the comment to send
          * @throws IOException if an I/O failure occurred
          */
-        void comment(String comment) throws IOException;
+        public void comment(String comment) throws IOException;
 
         /**
          * <p>Closes this event source connection.</p>
          */
-        void close();
+        public void close();
     }
 }

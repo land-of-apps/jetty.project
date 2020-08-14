@@ -1,28 +1,26 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.server.handler.gzip;
 
-import java.io.File;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.EnumSet;
-import java.util.ListIterator;
 import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.zip.Deflater;
@@ -47,10 +45,9 @@ import org.eclipse.jetty.server.handler.HandlerWrapper;
 import org.eclipse.jetty.util.IncludeExclude;
 import org.eclipse.jetty.util.RegexSet;
 import org.eclipse.jetty.util.StringUtil;
-import org.eclipse.jetty.util.URIUtil;
 import org.eclipse.jetty.util.compression.DeflaterPool;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * A Handler that can dynamically GZIP uncompress requests, and compress responses.
@@ -152,25 +149,20 @@ import org.eclipse.jetty.util.log.Logger;
  */
 public class GzipHandler extends HandlerWrapper implements GzipFactory
 {
+    public static final EnumSet<HttpHeader> ETAG_HEADERS = EnumSet.of(HttpHeader.IF_MATCH, HttpHeader.IF_NONE_MATCH);
     public static final String GZIP = "gzip";
     public static final String DEFLATE = "deflate";
     public static final int DEFAULT_MIN_GZIP_SIZE = 32;
     public static final int BREAK_EVEN_GZIP_SIZE = 23;
-    private static final Logger LOG = Log.getLogger(GzipHandler.class);
+    private static final Logger LOG = LoggerFactory.getLogger(GzipHandler.class);
     private static final HttpField X_CE_GZIP = new PreEncodedHttpField("X-Content-Encoding", "gzip");
     private static final HttpField TE_CHUNKED = new PreEncodedHttpField(HttpHeader.TRANSFER_ENCODING, HttpHeaderValue.CHUNKED.asString());
     private static final Pattern COMMA_GZIP = Pattern.compile(".*, *gzip");
 
-    private int _poolCapacity = -1;
+    private int poolCapacity = -1;
     private DeflaterPool _deflaterPool = null;
 
     private int _minGzipSize = DEFAULT_MIN_GZIP_SIZE;
-    private int _compressionLevel = Deflater.DEFAULT_COMPRESSION;
-    /**
-     * @deprecated feature will be removed in Jetty 10.x, with no replacement.
-     */
-    @Deprecated
-    private boolean _checkGzExists = false;
     private boolean _syncFlush = false;
     private int _inflateBufferSize = -1;
     private EnumSet<DispatcherType> _dispatchers = EnumSet.of(DispatcherType.REQUEST);
@@ -420,30 +412,15 @@ public class GzipHandler extends HandlerWrapper implements GzipFactory
     @Override
     protected void doStart() throws Exception
     {
-        _deflaterPool = newDeflaterPool(_poolCapacity);
+        _deflaterPool = newDeflaterPool(poolCapacity);
         _vary = (_agentPatterns.size() > 0) ? GzipHttpOutputInterceptor.VARY_ACCEPT_ENCODING_USER_AGENT : GzipHttpOutputInterceptor.VARY_ACCEPT_ENCODING;
         super.doStart();
-    }
-
-    /**
-     * @deprecated feature will be removed in Jetty 10.x, with no replacement.
-     */
-    @Deprecated
-    public boolean getCheckGzExists()
-    {
-        return _checkGzExists;
-    }
-
-    public int getCompressionLevel()
-    {
-        return _compressionLevel;
     }
 
     @Override
     public Deflater getDeflater(Request request, long contentLength)
     {
-        HttpFields httpFields = request.getHttpFields();
-        String ua = httpFields.get(HttpHeader.USER_AGENT);
+        String ua = request.getHttpFields().get(HttpHeader.USER_AGENT);
         if (ua != null && !isAgentGzipable(ua))
         {
             LOG.debug("{} excluded user agent {}", this, request);
@@ -457,7 +434,7 @@ public class GzipHandler extends HandlerWrapper implements GzipFactory
         }
 
         // check the accept encoding header
-        if (!httpFields.contains(HttpHeader.ACCEPT_ENCODING, "gzip"))
+        if (!request.getHttpFields().contains(HttpHeader.ACCEPT_ENCODING, "gzip"))
         {
             LOG.debug("{} excluded not gzip accept {}", this, request);
             return null;
@@ -563,18 +540,6 @@ public class GzipHandler extends HandlerWrapper implements GzipFactory
     }
 
     /**
-     * Get the current filter list of included HTTP methods
-     *
-     * @return the filter list of included HTTP methods
-     * @deprecated use {@link #getIncludedMethods()} instead.  (Will be removed in Jetty 10)
-     */
-    @Deprecated
-    public String[] getMethods()
-    {
-        return getIncludedMethods();
-    }
-
-    /**
      * Get the minimum size, in bytes, that a response {@code Content-Length} must be
      * before compression will trigger.
      *
@@ -615,8 +580,8 @@ public class GzipHandler extends HandlerWrapper implements GzipFactory
     @Override
     public void handle(String target, Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException
     {
-        ServletContext context = baseRequest.getServletContext();
-        String path = context == null ? baseRequest.getRequestURI() : URIUtil.addPaths(baseRequest.getServletPath(), baseRequest.getPathInfo());
+        final ServletContext context = baseRequest.getServletContext();
+        final String path = baseRequest.getPathInContext();
         LOG.debug("{} handle {} in {}", this, baseRequest, context);
 
         if (!_dispatchers.contains(baseRequest.getDispatcherType()))
@@ -627,87 +592,99 @@ public class GzipHandler extends HandlerWrapper implements GzipFactory
         }
 
         // Handle request inflation
-        if (_inflateBufferSize > 0)
+        HttpFields httpFields = baseRequest.getHttpFields();
+        boolean inflated = _inflateBufferSize > 0 && httpFields.contains(HttpHeader.CONTENT_ENCODING, "gzip");
+        if (inflated)
         {
-            boolean inflate = false;
-            for (ListIterator<HttpField> i = baseRequest.getHttpFields().listIterator(); i.hasNext(); )
-            {
-                HttpField field = i.next();
-
-                if (field.getHeader() == HttpHeader.CONTENT_ENCODING)
-                {
-                    if (field.getValue().equalsIgnoreCase("gzip"))
-                    {
-                        i.set(X_CE_GZIP);
-                        inflate = true;
-                        break;
-                    }
-
-                    if (COMMA_GZIP.matcher(field.getValue()).matches())
-                    {
-                        String v = field.getValue();
-                        v = v.substring(0, v.lastIndexOf(','));
-                        i.set(new HttpField(HttpHeader.CONTENT_ENCODING, v));
-                        i.add(X_CE_GZIP);
-                        inflate = true;
-                        break;
-                    }
-                }
-            }
-
-            if (inflate)
-            {
-                if (LOG.isDebugEnabled())
-                    LOG.debug("{} inflate {}", this, request);
-
-                baseRequest.getHttpInput().addInterceptor(new GzipHttpInputInterceptor(baseRequest.getHttpChannel().getByteBufferPool(), _inflateBufferSize));
-
-                for (ListIterator<HttpField> i = baseRequest.getHttpFields().listIterator(); i.hasNext(); )
-                {
-                    HttpField field = i.next();
-                    if (field.getHeader() == HttpHeader.CONTENT_LENGTH)
-                    {
-                        i.set(new HttpField("X-Content-Length", field.getValue()));
-                        break;
-                    }
-                }
-            }
+            if (LOG.isDebugEnabled())
+                LOG.debug("{} inflate {}", this, request);
+            baseRequest.getHttpInput().addInterceptor(new GzipHttpInputInterceptor(baseRequest.getHttpChannel().getByteBufferPool(), _inflateBufferSize));
         }
 
         // Are we already being gzipped?
         HttpOutput out = baseRequest.getResponse().getHttpOutput();
         HttpOutput.Interceptor interceptor = out.getInterceptor();
+        boolean alreadyGzipped = false;
         while (interceptor != null)
         {
             if (interceptor instanceof GzipHttpOutputInterceptor)
             {
-                LOG.debug("{} already intercepting {}", this, request);
-                _handler.handle(target, baseRequest, request, response);
-                return;
+                alreadyGzipped = true;
+                break;
             }
             interceptor = interceptor.getNextInterceptor();
         }
 
-        // Special handling for etags
-        for (ListIterator<HttpField> fields = baseRequest.getHttpFields().listIterator(); fields.hasNext(); )
+        // Update headers for etags and inflation
+        if (inflated || httpFields.contains(ETAG_HEADERS))
         {
-            HttpField field = fields.next();
-            if (field.getHeader() == HttpHeader.IF_NONE_MATCH || field.getHeader() == HttpHeader.IF_MATCH)
+            HttpFields.Mutable newFields = HttpFields.build(httpFields.size() + 1);
+            for (HttpField field : httpFields)
             {
-                String etag = field.getValue();
-                int i = etag.indexOf(CompressedContentFormat.GZIP._etagQuote);
-                if (i > 0)
+                if (field.getHeader() == null)
                 {
-                    baseRequest.setAttribute("o.e.j.s.h.gzip.GzipHandler.etag", etag);
-                    while (i >= 0)
+                    newFields.add(field);
+                    continue;
+                }
+
+                switch (field.getHeader())
+                {
+                    case IF_MATCH:
+                    case IF_NONE_MATCH:
                     {
-                        etag = etag.substring(0, i) + etag.substring(i + CompressedContentFormat.GZIP._etag.length());
-                        i = etag.indexOf(CompressedContentFormat.GZIP._etagQuote, i);
+                        String etag = field.getValue();
+                        int i = etag.indexOf(CompressedContentFormat.GZIP._etagQuote);
+                        if (i <= 0 || alreadyGzipped)
+                            newFields.add(field);
+                        else
+                        {
+                            baseRequest.setAttribute("o.e.j.s.h.gzip.GzipHandler.etag", etag);
+                            while (i >= 0)
+                            {
+                                etag = etag.substring(0, i) + etag.substring(i + CompressedContentFormat.GZIP._etag.length());
+                                i = etag.indexOf(CompressedContentFormat.GZIP._etagQuote, i);
+                            }
+                            newFields.add(new HttpField(field.getHeader(), etag));
+                        }
+                        break;
                     }
 
-                    fields.set(new HttpField(field.getHeader(), etag));
+                    case CONTENT_LENGTH:
+                        newFields.add(inflated ? new HttpField("X-Content-Length", field.getValue()) : field);
+                        break;
+
+                    case CONTENT_ENCODING:
+                        if (inflated)
+                        {
+                            if (field.getValue().equalsIgnoreCase("gzip"))
+                                newFields.add(X_CE_GZIP);
+                            else if (COMMA_GZIP.matcher(field.getValue()).matches())
+                            {
+                                String v = field.getValue();
+                                v = v.substring(0, v.lastIndexOf(','));
+                                newFields.add(X_CE_GZIP);
+                                newFields.add(new HttpField(HttpHeader.CONTENT_ENCODING, v));
+                            }
+                        }
+                        else
+                        {
+                            newFields.add(field);
+                        }
+                        break;
+
+                    default:
+                        newFields.add(field);
                 }
             }
+            baseRequest.setHttpFields(newFields);
+        }
+
+        // Don't gzip if already gzipped;
+        if (alreadyGzipped)
+        {
+            LOG.debug("{} already intercepting {}", this, request);
+            _handler.handle(target, baseRequest, request, response);
+            return;
         }
 
         // If not a supported method - no Vary because no matter what client, this URI is always excluded
@@ -738,22 +715,6 @@ public class GzipHandler extends HandlerWrapper implements GzipFactory
                 // handle normally without setting vary header
                 _handler.handle(target, baseRequest, request, response);
                 return;
-            }
-        }
-
-        if (_checkGzExists && context != null)
-        {
-            String realpath = request.getServletContext().getRealPath(path);
-            if (realpath != null)
-            {
-                File gz = new File(realpath + ".gz");
-                if (gz.exists())
-                {
-                    LOG.debug("{} gzip exists {}", this, request);
-                    // allow default servlet to handle
-                    _handler.handle(target, baseRequest, request, response);
-                    return;
-                }
             }
         }
 
@@ -821,33 +782,9 @@ public class GzipHandler extends HandlerWrapper implements GzipFactory
     }
 
     /**
-     * Set the Check if {@code *.gz} file for the incoming file exists.
+     * if(isStarted())
+     * throw new IllegalStateException(getState());
      *
-     * @param checkGzExists whether to check if a static gz file exists for
-     * the resource that the DefaultServlet may serve as precompressed.
-     * @deprecated feature will be removed in Jetty 10.x, with no replacement.
-     */
-    @Deprecated
-    public void setCheckGzExists(boolean checkGzExists)
-    {
-        _checkGzExists = checkGzExists;
-    }
-
-    /**
-     * Set the Compression level that {@link Deflater} uses.
-     *
-     * @param compressionLevel The compression level to use to initialize {@link Deflater#setLevel(int)}
-     * @see Deflater#setLevel(int)
-     */
-    public void setCompressionLevel(int compressionLevel)
-    {
-        if (isStarted())
-            throw new IllegalStateException(getState());
-
-        _compressionLevel = compressionLevel;
-    }
-
-    /**
      * Set the excluded filter list of User-Agent patterns (replacing any previously set)
      *
      * @param patterns Regular expressions list matching user agents to exclude
@@ -1014,7 +951,7 @@ public class GzipHandler extends HandlerWrapper implements GzipFactory
      */
     public int getDeflaterPoolCapacity()
     {
-        return _poolCapacity;
+        return poolCapacity;
     }
 
     /**
@@ -1025,12 +962,12 @@ public class GzipHandler extends HandlerWrapper implements GzipFactory
         if (isStarted())
             throw new IllegalStateException(getState());
 
-        _poolCapacity = capacity;
+        poolCapacity = capacity;
     }
 
     protected DeflaterPool newDeflaterPool(int capacity)
     {
-        return new DeflaterPool(capacity, getCompressionLevel(), true);
+        return new DeflaterPool(capacity, Deflater.DEFAULT_COMPRESSION, true);
     }
 
     @Override

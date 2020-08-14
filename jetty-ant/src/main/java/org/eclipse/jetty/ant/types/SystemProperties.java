@@ -31,6 +31,7 @@ import org.eclipse.jetty.ant.utils.TaskLog;
  */
 public class SystemProperties
 {
+
     private List systemProperties = new ArrayList();
 
     public List getSystemProperties()

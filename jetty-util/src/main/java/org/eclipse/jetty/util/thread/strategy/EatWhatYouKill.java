@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.util.thread.strategy;
@@ -29,11 +29,12 @@ import org.eclipse.jetty.util.annotation.ManagedAttribute;
 import org.eclipse.jetty.util.annotation.ManagedObject;
 import org.eclipse.jetty.util.annotation.ManagedOperation;
 import org.eclipse.jetty.util.component.ContainerLifeCycle;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
+import org.eclipse.jetty.util.thread.AutoLock;
 import org.eclipse.jetty.util.thread.ExecutionStrategy;
 import org.eclipse.jetty.util.thread.Invocable;
 import org.eclipse.jetty.util.thread.TryExecutor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * <p>A strategy where the thread that produces will run the resulting task if it
@@ -56,7 +57,7 @@ import org.eclipse.jetty.util.thread.TryExecutor;
 @ManagedObject("eat what you kill execution strategy")
 public class EatWhatYouKill extends ContainerLifeCycle implements ExecutionStrategy, Runnable
 {
-    private static final Logger LOG = Log.getLogger(EatWhatYouKill.class);
+    private static final Logger LOG = LoggerFactory.getLogger(EatWhatYouKill.class);
 
     private enum State
     {
@@ -72,6 +73,7 @@ public class EatWhatYouKill extends ContainerLifeCycle implements ExecutionStrat
         EXECUTE_PRODUCE_CONSUME // Eat What You Kill!
     }
 
+    private final AutoLock _lock = new AutoLock();
     private final LongAdder _pcMode = new LongAdder();
     private final LongAdder _picMode = new LongAdder();
     private final LongAdder _pecMode = new LongAdder();
@@ -97,7 +99,7 @@ public class EatWhatYouKill extends ContainerLifeCycle implements ExecutionStrat
     public void dispatch()
     {
         boolean execute = false;
-        synchronized (this)
+        try (AutoLock l = _lock.lock())
         {
             switch (_state)
             {
@@ -140,7 +142,7 @@ public class EatWhatYouKill extends ContainerLifeCycle implements ExecutionStrat
         if (LOG.isDebugEnabled())
             LOG.debug("{} tryProduce {}", this, wasPending);
 
-        synchronized (this)
+        try (AutoLock l = _lock.lock())
         {
             if (wasPending)
                 _pending = false;
@@ -172,9 +174,9 @@ public class EatWhatYouKill extends ContainerLifeCycle implements ExecutionStrat
                     continue;
                 return;
             }
-            catch (Throwable ex)
+            catch (Throwable th)
             {
-                LOG.warn(ex);
+                LOG.warn("Unable to produce", th);
             }
         }
     }
@@ -185,7 +187,7 @@ public class EatWhatYouKill extends ContainerLifeCycle implements ExecutionStrat
 
         if (task == null)
         {
-            synchronized (this)
+            try (AutoLock l = _lock.lock())
             {
                 // Could another task just have been queued with a produce call?
                 switch (_state)
@@ -237,7 +239,7 @@ public class EatWhatYouKill extends ContainerLifeCycle implements ExecutionStrat
                 case BLOCKING:
                     // The task is blocking, so PC is not an option. Thus we choose
                     // between EPC and PEC based on the availability of a reserved thread.
-                    synchronized (this)
+                    try (AutoLock l = _lock.lock())
                     {
                         if (_pending)
                         {
@@ -260,7 +262,7 @@ public class EatWhatYouKill extends ContainerLifeCycle implements ExecutionStrat
                 case EITHER:
                     // The task may be non blocking, so PC is an option. Thus we choose
                     // between EPC and PC based on the availability of a reserved thread.
-                    synchronized (this)
+                    try (AutoLock l = _lock.lock())
                     {
                         if (_pending)
                         {
@@ -313,7 +315,7 @@ public class EatWhatYouKill extends ContainerLifeCycle implements ExecutionStrat
                 runTask(task);
 
                 // Try to produce again?
-                synchronized (this)
+                try (AutoLock l = _lock.lock())
                 {
                     if (_state == State.IDLE)
                     {
@@ -337,7 +339,7 @@ public class EatWhatYouKill extends ContainerLifeCycle implements ExecutionStrat
         }
         catch (Throwable x)
         {
-            LOG.warn(x);
+            LOG.warn("Task run failed", x);
         }
     }
 
@@ -349,7 +351,7 @@ public class EatWhatYouKill extends ContainerLifeCycle implements ExecutionStrat
         }
         catch (Throwable x)
         {
-            LOG.warn(x);
+            LOG.warn("Task invoke failed", x);
         }
     }
 
@@ -361,7 +363,7 @@ public class EatWhatYouKill extends ContainerLifeCycle implements ExecutionStrat
         }
         catch (Throwable e)
         {
-            LOG.warn(e);
+            LOG.warn("Task produce failed", e);
             return null;
         }
     }
@@ -375,9 +377,9 @@ public class EatWhatYouKill extends ContainerLifeCycle implements ExecutionStrat
         catch (RejectedExecutionException e)
         {
             if (isRunning())
-                LOG.warn(e);
+                LOG.warn("Execute failed", e);
             else
-                LOG.ignore(e);
+                LOG.trace("IGNORED", e);
 
             if (task instanceof Closeable)
             {
@@ -385,9 +387,9 @@ public class EatWhatYouKill extends ContainerLifeCycle implements ExecutionStrat
                 {
                     ((Closeable)task).close();
                 }
-                catch (Throwable ex2)
+                catch (Throwable e2)
                 {
-                    LOG.ignore(ex2);
+                    LOG.trace("IGNORED", e2);
                 }
             }
         }
@@ -420,7 +422,7 @@ public class EatWhatYouKill extends ContainerLifeCycle implements ExecutionStrat
     @ManagedAttribute(value = "whether this execution strategy is idle", readonly = true)
     public boolean isIdle()
     {
-        synchronized (this)
+        try (AutoLock l = _lock.lock())
         {
             return _state == State.IDLE;
         }
@@ -438,7 +440,7 @@ public class EatWhatYouKill extends ContainerLifeCycle implements ExecutionStrat
     @Override
     public String toString()
     {
-        synchronized (this)
+        try (AutoLock l = _lock.lock())
         {
             return toStringLocked();
         }

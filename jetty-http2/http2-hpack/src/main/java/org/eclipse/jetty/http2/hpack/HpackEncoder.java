@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.http2.hpack;
@@ -36,14 +36,14 @@ import org.eclipse.jetty.http.MetaData;
 import org.eclipse.jetty.http.PreEncodedHttpField;
 import org.eclipse.jetty.http2.hpack.HpackContext.Entry;
 import org.eclipse.jetty.http2.hpack.HpackContext.StaticEntry;
+import org.eclipse.jetty.util.BufferUtil;
 import org.eclipse.jetty.util.StringUtil;
-import org.eclipse.jetty.util.TypeUtil;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class HpackEncoder
 {
-    private static final Logger LOG = Log.getLogger(HpackEncoder.class);
+    private static final Logger LOG = LoggerFactory.getLogger(HpackEncoder.class);
     private static final HttpField[] STATUSES = new HttpField[599];
     static final EnumSet<HttpHeader> DO_NOT_HUFFMAN =
         EnumSet.of(
@@ -195,14 +195,21 @@ public class HpackEncoder
             {
                 MetaData.Request request = (MetaData.Request)metadata;
 
-                String scheme = request.getURI().getScheme();
-                encode(buffer, HttpScheme.HTTPS.is(scheme) ? C_SCHEME_HTTPS : C_SCHEME_HTTP);
                 String method = request.getMethod();
                 HttpMethod httpMethod = method == null ? null : HttpMethod.fromString(method);
                 HttpField methodField = C_METHODS.get(httpMethod);
                 encode(buffer, methodField == null ? new HttpField(HttpHeader.C_METHOD, method) : methodField);
                 encode(buffer, new HttpField(HttpHeader.C_AUTHORITY, request.getURI().getAuthority()));
-                encode(buffer, new HttpField(HttpHeader.C_PATH, request.getURI().getPathQuery()));
+                boolean isConnect = HttpMethod.CONNECT.is(request.getMethod());
+                String protocol = request.getProtocol();
+                if (!isConnect || protocol != null)
+                {
+                    String scheme = request.getURI().getScheme();
+                    encode(buffer, HttpScheme.HTTPS.is(scheme) ? C_SCHEME_HTTPS : C_SCHEME_HTTP);
+                    encode(buffer, new HttpField(HttpHeader.C_PATH, request.getURI().getPathQuery()));
+                    if (protocol != null)
+                        encode(buffer,new HttpField(HttpHeader.C_PROTOCOL,protocol));
+                }
             }
             else if (metadata.isResponse())
             {
@@ -294,8 +301,6 @@ public class HpackEncoder
 
         int fieldSize = field.getName().length() + field.getValue().length();
         _headerListSize += fieldSize + 32;
-
-        final int p = _debug ? buffer.position() : -1;
 
         String encoding = null;
 
@@ -425,10 +430,8 @@ public class HpackEncoder
 
         if (_debug)
         {
-            byte[] bytes = new byte[buffer.position() - p];
-            buffer.position(p);
-            buffer.get(bytes);
-            LOG.debug("encode {}:'{}' to '{}'", encoding, field, TypeUtil.toHexString(bytes));
+            if (LOG.isDebugEnabled())
+                LOG.debug("encode {}:'{}' to '{}'", encoding, field, BufferUtil.toHexString(buffer.duplicate().flip()));
         }
     }
 

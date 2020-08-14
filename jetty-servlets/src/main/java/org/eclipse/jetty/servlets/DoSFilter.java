@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.servlets;
@@ -57,10 +57,11 @@ import org.eclipse.jetty.util.annotation.ManagedAttribute;
 import org.eclipse.jetty.util.annotation.ManagedObject;
 import org.eclipse.jetty.util.annotation.ManagedOperation;
 import org.eclipse.jetty.util.annotation.Name;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
+import org.eclipse.jetty.util.thread.AutoLock;
 import org.eclipse.jetty.util.thread.ScheduledExecutorScheduler;
 import org.eclipse.jetty.util.thread.Scheduler;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Denial of Service filter
@@ -127,7 +128,7 @@ import org.eclipse.jetty.util.thread.Scheduler;
 @ManagedObject("limits exposure to abuse from request flooding, whether malicious, or as a result of a misconfigured client")
 public class DoSFilter implements Filter
 {
-    private static final Logger LOG = Log.getLogger(DoSFilter.class);
+    private static final Logger LOG = LoggerFactory.getLogger(DoSFilter.class);
 
     private static final String IPv4_GROUP = "(\\d{1,3})";
     private static final Pattern IPv4_PATTERN = Pattern.compile(IPv4_GROUP + "\\." + IPv4_GROUP + "\\." + IPv4_GROUP + "\\." + IPv4_GROUP);
@@ -426,7 +427,7 @@ public class DoSFilter implements Filter
         }
         catch (InterruptedException e)
         {
-            LOG.ignore(e);
+            LOG.trace("IGNORED", e);
             response.sendError(getTooManyCode());
         }
         finally
@@ -465,7 +466,7 @@ public class DoSFilter implements Filter
     protected void doFilterChain(FilterChain chain, final HttpServletRequest request, final HttpServletResponse response) throws IOException, ServletException
     {
         final Thread thread = Thread.currentThread();
-        Runnable requestTimeout = () -> closeConnection(request, response, thread);
+        Runnable requestTimeout = () -> onRequestTimeout(request, response, thread);
         Scheduler.Task task = _scheduler.schedule(requestTimeout, getMaxRequestMs(), TimeUnit.MILLISECONDS);
         try
         {
@@ -498,29 +499,17 @@ public class DoSFilter implements Filter
             }
             catch (IllegalStateException ise)
             {
-                LOG.ignore(ise);
+                LOG.trace("IGNORED", ise);
                 // abort instead
                 response.sendError(-1);
             }
         }
         catch (Throwable x)
         {
-            LOG.info(x);
+            LOG.info("Failed to sendError", x);
         }
 
         handlingThread.interrupt();
-    }
-
-    /**
-     * @param request the current request
-     * @param response the current response
-     * @param thread the handling thread
-     * @deprecated use {@link #onRequestTimeout(HttpServletRequest, HttpServletResponse, Thread)} instead
-     */
-    @Deprecated
-    protected void closeConnection(HttpServletRequest request, HttpServletResponse response, Thread thread)
-    {
-        onRequestTimeout(request, response, thread);
     }
 
     /**
@@ -633,25 +622,6 @@ public class DoSFilter implements Filter
     protected boolean checkWhitelist(String candidate)
     {
         for (String address : _whitelist)
-        {
-            if (address.contains("/"))
-            {
-                if (subnetMatch(address, candidate))
-                    return true;
-            }
-            else
-            {
-                if (address.equals(candidate))
-                    return true;
-            }
-        }
-        return false;
-    }
-
-    @Deprecated
-    protected boolean checkWhitelist(List<String> whitelist, String candidate)
-    {
-        for (String address : whitelist)
         {
             if (address.contains("/"))
             {
@@ -780,7 +750,7 @@ public class DoSFilter implements Filter
         }
         catch (Exception x)
         {
-            LOG.ignore(x);
+            LOG.trace("IGNORED", x);
         }
     }
 
@@ -1158,6 +1128,7 @@ public class DoSFilter implements Filter
     {
         private static final long serialVersionUID = 3534663738034577872L;
 
+        final AutoLock _lock = new AutoLock();
         protected final String _filterName;
         protected transient ServletContext _context;
         protected final String _id;
@@ -1183,7 +1154,7 @@ public class DoSFilter implements Filter
         public boolean isRateExceeded(long now)
         {
             final long last;
-            synchronized (this)
+            try (AutoLock l = _lock.lock())
             {
                 last = _timestamps[_next];
                 _timestamps[_next] = now;
@@ -1312,7 +1283,7 @@ public class DoSFilter implements Filter
             // rate limit is never exceeded, but we keep track of the request timestamps
             // so that we know whether there was recent activity on this tracker
             // and whether it should be expired
-            synchronized (this)
+            try (AutoLock l = _lock.lock())
             {
                 _timestamps[_next] = now;
                 _next = (_next + 1) % _timestamps.length;

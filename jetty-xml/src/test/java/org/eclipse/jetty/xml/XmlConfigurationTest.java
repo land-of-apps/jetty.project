@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.xml;
@@ -22,7 +22,6 @@ import java.io.BufferedWriter;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
-import java.io.UnsupportedEncodingException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.URL;
@@ -35,28 +34,27 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Predicate;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
+import org.eclipse.jetty.logging.JettyLevel;
+import org.eclipse.jetty.logging.JettyLogger;
+import org.eclipse.jetty.logging.StdErrAppender;
+import org.eclipse.jetty.toolchain.test.MavenTestingUtils;
 import org.eclipse.jetty.toolchain.test.jupiter.WorkDir;
 import org.eclipse.jetty.toolchain.test.jupiter.WorkDirExtension;
 import org.eclipse.jetty.util.annotation.Name;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
-import org.eclipse.jetty.util.log.StdErrLog;
 import org.eclipse.jetty.util.resource.PathResource;
+import org.eclipse.jetty.util.resource.Resource;
 import org.hamcrest.Matchers;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.junit.jupiter.api.extension.ExtensionContext;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.ArgumentsProvider;
-import org.junit.jupiter.params.provider.ArgumentsSource;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.xml.sax.SAXException;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
@@ -82,38 +80,33 @@ public class XmlConfigurationTest
 {
     public WorkDir workDir;
 
-    public static class ScenarioProvider implements ArgumentsProvider
-    {
-        @Override
-        public Stream<? extends Arguments> provideArguments(ExtensionContext context)
-        {
-            return Stream.of(
-                "org/eclipse/jetty/xml/configureWithAttr.xml",
-                "org/eclipse/jetty/xml/configureWithElements.xml"
-            ).map(Arguments::of);
-        }
-    }
-
     private static final String STRING_ARRAY_XML = "<Array type=\"String\"><Item type=\"String\">String1</Item><Item type=\"String\">String2</Item></Array>";
     private static final String INT_ARRAY_XML = "<Array type=\"int\"><Item type=\"int\">1</Item><Item type=\"int\">2</Item></Array>";
 
     @Test
     public void testMortBay() throws Exception
     {
-        URL url = XmlConfigurationTest.class.getClassLoader().getResource("org/eclipse/jetty/xml/mortbay.xml");
-        XmlConfiguration configuration = new XmlConfiguration(url);
+        URL url = XmlConfigurationTest.class.getResource("mortbay.xml");
+        Resource resource = Resource.newResource(url);
+        XmlConfiguration configuration = new XmlConfiguration(resource);
         configuration.configure();
     }
 
+    public static String[] xmlConfigs()
+    {
+        return new String[]{"org/eclipse/jetty/xml/configureWithAttr.xml", "org/eclipse/jetty/xml/configureWithElements.xml"};
+    }
+
     @ParameterizedTest
-    @ArgumentsSource(ScenarioProvider.class)
+    @MethodSource("xmlConfigs")
     public void testPassedObject(String configure) throws Exception
     {
         Map<String, String> properties = new HashMap<>();
         properties.put("whatever", "xxx");
         TestConfiguration.VALUE = 77;
         URL url = XmlConfigurationTest.class.getClassLoader().getResource(configure);
-        XmlConfiguration configuration = new XmlConfiguration(url);
+        assertNotNull(url);
+        XmlConfiguration configuration = new XmlConfiguration(Resource.newResource(url));
         TestConfiguration tc = new TestConfiguration("tc");
         configuration.getProperties().putAll(properties);
         configuration.configure(tc);
@@ -175,12 +168,14 @@ public class XmlConfigurationTest
         assertEquals(tc.testField2, 2, "field to field");
         assertEquals(TestConfiguration.VALUE, 42, "literal to static");
 
-        assertEquals(((Map<String, String>)configuration.getIdMap().get("map")).get("key0"), "value0");
-        assertEquals(((Map<String, String>)configuration.getIdMap().get("map")).get("key1"), "value1");
+        @SuppressWarnings("unchecked")
+        Map<String, String> map = (Map<String, String>)configuration.getIdMap().get("map");
+        assertEquals(map.get("key0"), "value0");
+        assertEquals(map.get("key1"), "value1");
     }
 
     @ParameterizedTest
-    @ArgumentsSource(ScenarioProvider.class)
+    @MethodSource("xmlConfigs")
     public void testNewObject(String configure) throws Exception
     {
         TestConfiguration.VALUE = 71;
@@ -188,8 +183,9 @@ public class XmlConfigurationTest
         properties.put("whatever", "xxx");
 
         URL url = XmlConfigurationTest.class.getClassLoader().getResource(configure);
-        final AtomicInteger count = new AtomicInteger(0);
-        XmlConfiguration configuration = new XmlConfiguration(url)
+        assertNotNull(url);
+        AtomicInteger count = new AtomicInteger(0);
+        XmlConfiguration configuration = new XmlConfiguration(Resource.newResource(url))
         {
             @Override
             public void initializeDefaults(Object object)
@@ -269,11 +265,19 @@ public class XmlConfigurationTest
 
     public XmlConfiguration asXmlConfiguration(String rawXml) throws IOException, SAXException
     {
+        if (rawXml.indexOf("!DOCTYPE") < 0)
+            rawXml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
+                "<!DOCTYPE Configure PUBLIC \"-//Jetty//Configure//EN\" \"https://www.eclipse.org/jetty/configure_10_0.dtd\">\n" +
+                rawXml;
         return asXmlConfiguration("raw.xml", rawXml);
     }
 
     public XmlConfiguration asXmlConfiguration(String filename, String rawXml) throws IOException, SAXException
     {
+        if (rawXml.indexOf("!DOCTYPE") < 0)
+            rawXml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
+                "<!DOCTYPE Configure PUBLIC \"-//Jetty//Configure//EN\" \"https://www.eclipse.org/jetty/configure_10_0.dtd\">\n" +
+                rawXml;
         Path testFile = workDir.getEmptyPathDir().resolve(filename);
         try (BufferedWriter writer = Files.newBufferedWriter(testFile, UTF_8))
         {
@@ -308,15 +312,60 @@ public class XmlConfigurationTest
     }
 
     @Test
+    public void testSetWithProperty() throws Exception
+    {
+        XmlConfiguration configuration = asXmlConfiguration("<Configure class=\"org.eclipse.jetty.xml.TestConfiguration\"><Set name=\"TestString\" property=\"prop\" id=\"test\"/></Configure>");
+        configuration.getProperties().put("prop", "This is a property value");
+        TestConfiguration tc = new TestConfiguration();
+        tc.setTestString("default");
+        configuration.configure(tc);
+        assertEquals("This is a property value", tc.getTestString());
+        assertEquals(configuration.getIdMap().get("test"), "This is a property value");
+    }
+
+    @Test
+    public void testSetWithNullProperty() throws Exception
+    {
+        XmlConfiguration configuration = asXmlConfiguration("<Configure class=\"org.eclipse.jetty.xml.TestConfiguration\"><Set name=\"TestString\" property=\"prop\" id=\"test\"/></Configure>");
+        configuration.getProperties().remove("prop");
+        TestConfiguration tc = new TestConfiguration();
+        tc.setTestString("default");
+        configuration.configure(tc);
+        assertEquals("default", tc.getTestString());
+        assertNull(configuration.getIdMap().get("test"));
+    }
+
+    @Test
+    public void testSetWithPropertyAndValue() throws Exception
+    {
+        XmlConfiguration configuration = asXmlConfiguration("<Configure class=\"org.eclipse.jetty.xml.TestConfiguration\"><Set name=\"TestString\" property=\"prop\" id=\"test\">Value</Set></Configure>");
+        configuration.getProperties().put("prop", "This is a property value");
+        TestConfiguration tc = new TestConfiguration();
+        tc.setTestString("default");
+        configuration.configure(tc);
+        assertEquals("Value", tc.getTestString());
+        assertEquals(configuration.getIdMap().get("test"), "Value");
+    }
+
+    @Test
+    public void testSetWithNullPropertyAndValue() throws Exception
+    {
+        XmlConfiguration configuration = asXmlConfiguration("<Configure class=\"org.eclipse.jetty.xml.TestConfiguration\"><Set name=\"TestString\" property=\"prop\" id=\"test\">Value</Set></Configure>");
+        configuration.getProperties().remove("prop");
+        TestConfiguration tc = new TestConfiguration();
+        tc.setTestString("default");
+        configuration.configure(tc);
+        assertEquals("default", tc.getTestString());
+        assertNull(configuration.getIdMap().get("test"));
+    }
+
+    @Test
     public void testMeaningfullSetException() throws Exception
     {
         XmlConfiguration configuration = asXmlConfiguration("<Configure class=\"org.eclipse.jetty.xml.TestConfiguration\"><Set name=\"PropertyTest\"><Property name=\"null\"/></Set></Configure>");
         TestConfiguration tc = new TestConfiguration();
 
-        NoSuchMethodException e = assertThrows(NoSuchMethodException.class, () ->
-        {
-            configuration.configure(tc);
-        });
+        NoSuchMethodException e = assertThrows(NoSuchMethodException.class, () -> configuration.configure(tc));
 
         assertThat(e.getMessage(), containsString("Found setters for int"));
     }
@@ -356,10 +405,7 @@ public class XmlConfigurationTest
             "<New class=\"org.eclipse.jetty.xml.ConstructorArgTestClass\"><Arg type=\"List\">Some String</Arg></New></Configure>");
         TestConfiguration tc = new TestConfiguration();
 
-        assertThrows(IllegalArgumentException.class, () ->
-        {
-            xmlConfiguration.configure(tc);
-        });
+        assertThrows(IllegalArgumentException.class, () -> xmlConfiguration.configure(tc));
     }
 
     @Test
@@ -381,10 +427,7 @@ public class XmlConfigurationTest
         XmlConfiguration xmlConfiguration = asXmlConfiguration("<Configure class=\"org.eclipse.jetty.xml.TestConfiguration\">" +
             "<New class=\"org.eclipse.jetty.xml.ConstructorArgTestClass\"><Arg type=\"Set\">Some String</Arg></New></Configure>");
         TestConfiguration tc = new TestConfiguration();
-        assertThrows(IllegalArgumentException.class, () ->
-        {
-            xmlConfiguration.configure(tc);
-        });
+        assertThrows(IllegalArgumentException.class, () -> xmlConfiguration.configure(tc));
     }
 
     @Test
@@ -416,10 +459,7 @@ public class XmlConfigurationTest
             INT_ARRAY_XML + "</Set></Configure>");
         TestConfiguration tc = new TestConfiguration();
         assertThat("tc.getSet() returns null as it's not configured yet", tc.getList(), is(nullValue()));
-        assertThrows(NoSuchMethodException.class, () ->
-        {
-            xmlConfiguration.configure(tc);
-        });
+        assertThrows(NoSuchMethodException.class, () -> xmlConfiguration.configure(tc));
     }
 
     @Test
@@ -1066,7 +1106,7 @@ public class XmlConfigurationTest
                 "  <Set name=\"integer\">bad</Set>" +
                 "</Configure>");
 
-        assertThrows(InvocationTargetException.class, () -> xmlConfiguration.configure());
+        assertThrows(InvocationTargetException.class, xmlConfiguration::configure);
     }
 
     @Test
@@ -1077,7 +1117,7 @@ public class XmlConfigurationTest
                 "  <Set name=\"integer\">100 bas</Set>" +
                 "</Configure>");
 
-        assertThrows(InvocationTargetException.class, () -> xmlConfiguration.configure());
+        assertThrows(InvocationTargetException.class, xmlConfiguration::configure);
     }
 
     @Test
@@ -1144,7 +1184,7 @@ public class XmlConfigurationTest
                 "  <Set name=\"integer\">1.5</Set>" +
                 "</Configure>");
 
-        assertThrows(InvocationTargetException.class, () -> xmlConfiguration.configure());
+        assertThrows(InvocationTargetException.class, xmlConfiguration::configure);
     }
 
     @Test
@@ -1360,20 +1400,20 @@ public class XmlConfigurationTest
                 "  <Arg name=\"foo\"><Ref refid=\"foo\"/></Arg>\n" +
                 "</Configure>");
 
-        try (StdErrCapture logCapture = new StdErrCapture(XmlConfiguration.class))
+        ByteArrayOutputStream logBytes = captureLoggingBytes(() ->
         {
             Map<String, Object> idMap = mimicXmlConfigurationMain(xmlFoo, xmlBar);
             Object obj = idMap.get("bar");
             assertThat("BarNamed instance created", obj, instanceOf(BarNamed.class));
             BarNamed bar = (BarNamed)obj;
             assertThat("BarNamed has foo", bar.getFoo(), is("foozball"));
+        });
 
-            List<String> warnLogs = logCapture.getLines()
-                .stream().filter(line -> line.contains(":WARN:"))
-                .collect(Collectors.toList());
+        List<String> warnings = Arrays.stream(logBytes.toString(UTF_8.name()).split(System.lineSeparator()))
+            .filter(line -> line.contains(":WARN"))
+            .collect(Collectors.toList());
 
-            assertThat("WARN logs size", warnLogs.size(), is(0));
-        }
+        assertThat("WARN logs size", warnings.size(), is(0));
     }
 
     @Test
@@ -1390,20 +1430,20 @@ public class XmlConfigurationTest
                 "  <Arg><Ref refid=\"foo\"/></Arg>\n" + // no name specified
                 "</Configure>");
 
-        try (StdErrCapture logCapture = new StdErrCapture(XmlConfiguration.class))
+        ByteArrayOutputStream logBytes = captureLoggingBytes(() ->
         {
             Map<String, Object> idMap = mimicXmlConfigurationMain(xmlFoo, xmlBar);
             Object obj = idMap.get("bar");
             assertThat("BarNamed instance created", obj, instanceOf(BarNamed.class));
             BarNamed bar = (BarNamed)obj;
             assertThat("BarNamed has foo", bar.getFoo(), is("foozball"));
+        });
 
-            List<String> warnLogs = logCapture.getLines()
-                .stream().filter(line -> line.contains(":WARN:"))
-                .collect(Collectors.toList());
+        List<String> warnings = Arrays.stream(logBytes.toString(UTF_8.name()).split(System.lineSeparator()))
+            .filter(line -> line.contains(":WARN :"))
+            .collect(Collectors.toList());
 
-            assertThat("WARN logs size", warnLogs.size(), is(0));
-        }
+        assertThat("WARN logs size", warnings.size(), is(0));
     }
 
     @Test
@@ -1456,7 +1496,7 @@ public class XmlConfigurationTest
                 "  </Call>\n" +
                 "</Configure>");
 
-        try (StdErrCapture logCapture = new StdErrCapture(XmlConfiguration.class))
+        ByteArrayOutputStream logBytes = captureLoggingBytes(() ->
         {
             Map<String, Object> idMap = mimicXmlConfigurationMain(xmlFoo, xmlBar, xmlAddZed);
             Object obj = idMap.get("bar");
@@ -1466,19 +1506,19 @@ public class XmlConfigurationTest
             List<String> zeds = bar.getZeds();
             assertThat("BarNamed has zeds", zeds, not(empty()));
             assertThat("Zeds[0]", zeds.get(0), is("plain-zero"));
+        });
 
-            List<String> warnLogs = logCapture.getLines()
-                .stream().filter(line -> line.contains(":WARN:"))
-                .collect(Collectors.toList());
+        List<String> warnings = Arrays.stream(logBytes.toString(UTF_8.name()).split(System.lineSeparator()))
+            .filter(line -> line.contains(":WARN :"))
+            .collect(Collectors.toList());
 
-            assertThat("WARN logs count", warnLogs.size(), is(1));
+        assertThat("WARN logs count", warnings.size(), is(1));
 
-            String actualWarn = warnLogs.get(0);
-            assertThat("WARN logs", actualWarn,
-                allOf(containsString("Ignored arg <Arg name="),
-                    containsString("zed.xml")
-                ));
-        }
+        String actualWarn = warnings.get(0);
+        assertThat("WARN logs", actualWarn,
+            allOf(containsString("Ignored arg <Arg name="),
+                containsString("zed.xml")
+            ));
     }
 
     /**
@@ -1498,29 +1538,43 @@ public class XmlConfigurationTest
     }
 
     @Test
-    public void testDeprecatedMany() throws Exception
+    public void testJettyStandardIdsAndPropertiesJettyWebappsUri() throws Exception
+    {
+        Path war = MavenTestingUtils.getTargetPath("no.war");
+        XmlConfiguration configuration =
+            asXmlConfiguration(
+                "<Configure class=\"org.eclipse.jetty.xml.TestConfiguration\">" +
+                    "  <Set name=\"TestString\">" +
+                    "    <Property name=\"" + "jetty.webapps.uri" + "\"/>" +
+                    "  </Set>" +
+                    "</Configure>");
+
+        configuration.setJettyStandardIdsAndProperties(null, Resource.newResource(war));
+
+        TestConfiguration tc = new TestConfiguration();
+        configuration.configure(tc);
+
+        assertThat("jetty.webapps.uri", tc.getTestString(), is(XmlConfiguration.normalizeURI(war.getParent().toUri().toString())));
+    }
+
+    @Test
+    public void testDeprecated() throws Exception
     {
         Class<?> testClass = AnnotatedTestConfiguration.class;
         XmlConfiguration xmlConfiguration = asXmlConfiguration(
             "<Configure class=\"" + testClass.getName() + "\">" +
                 "  <Set name=\"deprecated\">foo</Set>" +
-                "  <Set name=\"timeout\"><Property name=\"test.timeout\" default=\"-1\"/></Set>" +
                 "  <Set name=\"obsolete\">" +
                 "    <Call name=\"setDeprecated\"><Arg><Get name=\"deprecated\" /></Arg></Call>" +
                 "  </Set>" +
                 "  <Get name=\"obsolete\" />" +
                 "</Configure>");
 
-        List<String> logLines;
-        try (StdErrCapture logCapture = new StdErrCapture(XmlConfiguration.class))
-        {
-            xmlConfiguration.getProperties().put("test.timeout", "-1");
-            xmlConfiguration.configure();
-            logLines = logCapture.getLines();
-        }
+        ByteArrayOutputStream logBytes = captureLoggingBytes(xmlConfiguration::configure);
 
-        List<String> warnings = logLines.stream()
-            .filter(line -> line.contains(":WARN:"))
+        String[] lines = logBytes.toString(UTF_8.name()).split(System.lineSeparator());
+        List<String> warnings = Arrays.stream(lines)
+            .filter(line -> line.contains(":WARN :"))
             .filter(line -> line.contains(testClass.getSimpleName()))
             .collect(Collectors.toList());
         // 1. Deprecated constructor
@@ -1532,244 +1586,35 @@ public class XmlConfigurationTest
         assertEquals(6, warnings.size());
     }
 
-    @Test
-    public void testDeprecatedPropertyUnSet() throws Exception
+    private ByteArrayOutputStream captureLoggingBytes(ThrowableAction action) throws Exception
     {
-        Class<?> testClass = AnnotatedTestConfiguration.class;
-        XmlConfiguration xmlConfiguration = asXmlConfiguration(
-            "<Configure class=\"" + testClass.getName() + "\">" +
-                "  <Set name=\"timeout\"><Property name=\"test.timeout\" default=\"-1\"/></Set>" +
-                "</Configure>");
-        assertDeprecatedPropertyUnSet(testClass, xmlConfiguration);
+        Logger slf4jLogger = LoggerFactory.getLogger(XmlConfiguration.class);
+        Assumptions.assumeTrue(slf4jLogger instanceof JettyLogger);
+
+        ByteArrayOutputStream logBytes = new ByteArrayOutputStream();
+        JettyLogger jettyLogger = (JettyLogger)slf4jLogger;
+        StdErrAppender appender = (StdErrAppender)jettyLogger.getAppender();
+        PrintStream oldStream = appender.getStream();
+        JettyLevel oldLevel = jettyLogger.getLevel();
+        try
+        {
+            // capture events
+            appender.setStream(new PrintStream(logBytes, true));
+            // make sure we are seeing WARN level events
+            jettyLogger.setLevel(JettyLevel.WARN);
+
+            action.run();
+        }
+        finally
+        {
+            appender.setStream(oldStream);
+            jettyLogger.setLevel(oldLevel);
+        }
+        return logBytes;
     }
 
-    @Test
-    public void testDeprecatedPropertyUnSetWhiteSpace() throws Exception
+    private interface ThrowableAction
     {
-        Class<?> testClass = AnnotatedTestConfiguration.class;
-        XmlConfiguration xmlConfiguration = asXmlConfiguration(
-            "<Configure class=\"" + testClass.getName() + "\">" +
-                "  <Set name=\"timeout\">" +
-                "    <Property name=\"test.timeout\" default=\"-1\"/>" +
-                "  </Set>" +
-                "</Configure>");
-        assertDeprecatedPropertyUnSet(testClass, xmlConfiguration);
-    }
-
-    private void assertDeprecatedPropertyUnSet(Class<?> testClass, XmlConfiguration xmlConfiguration) throws Exception
-    {
-        List<String> logLines;
-        try (StdErrCapture logCapture = new StdErrCapture(XmlConfiguration.class))
-        {
-            // Leave this line alone, as this tests what happens if property is unset,
-            // so that it relies on the <Property default=""> value
-            // xmlConfiguration.getProperties().put("test.timeout", "-1");
-            xmlConfiguration.configure();
-            logLines = logCapture.getLines();
-        }
-
-        List<String> warnings = logLines.stream()
-            .filter(LogPredicates.deprecatedWarnings(testClass))
-            .collect(Collectors.toList());
-        String[] expected = {
-            "Deprecated constructor public org.eclipse.jetty.xml.AnnotatedTestConfiguration"
-        };
-
-        assertHasExpectedLines("Warnings", warnings, expected);
-    }
-
-    @Test
-    public void testDeprecatedPropertySetToDefaultValue() throws Exception
-    {
-        Class<?> testClass = AnnotatedTestConfiguration.class;
-        XmlConfiguration xmlConfiguration = asXmlConfiguration(
-            "<Configure class=\"" + testClass.getName() + "\">" +
-                "  <Set name=\"timeout\"><Property name=\"test.timeout\" default=\"-1\"/></Set>" +
-                "</Configure>");
-
-        assertDeprecatedPropertySetToDefaultValue(testClass, xmlConfiguration);
-    }
-
-    @Test
-    public void testDeprecatedPropertySetToDefaultValueWhiteSpace() throws Exception
-    {
-        Class<?> testClass = AnnotatedTestConfiguration.class;
-        XmlConfiguration xmlConfiguration = asXmlConfiguration(
-            "<Configure class=\"" + testClass.getName() + "\">" +
-                "  <Set name=\"timeout\">" +
-                "    <Property name=\"test.timeout\" default=\"-1\"/>" +
-                "  </Set>" +
-                "</Configure>");
-
-        assertDeprecatedPropertySetToDefaultValue(testClass, xmlConfiguration);
-    }
-
-    private void assertDeprecatedPropertySetToDefaultValue(Class<?> testClass, XmlConfiguration xmlConfiguration) throws Exception
-    {
-        List<String> logLines;
-        try (StdErrCapture logCapture = new StdErrCapture(XmlConfiguration.class))
-        {
-            // Leave this line alone, as this tests what happens if property is set,
-            // and has the same value as declared on <Property default="">
-            xmlConfiguration.getProperties().put("test.timeout", "-1");
-            xmlConfiguration.configure();
-            logLines = logCapture.getLines();
-        }
-
-        List<String> warnings = logLines.stream()
-            .filter(LogPredicates.deprecatedWarnings(testClass))
-            .collect(Collectors.toList());
-
-        String[] expected = {
-            "Deprecated constructor public org.eclipse.jetty.xml.AnnotatedTestConfiguration",
-            };
-        assertHasExpectedLines("Warnings", warnings, expected);
-
-        List<String> debugs = logLines.stream()
-            .filter(LogPredicates.deprecatedDebug(testClass))
-            .collect(Collectors.toList());
-
-        expected = new String[]{
-            "Deprecated method public void org.eclipse.jetty.xml.AnnotatedTestConfiguration.setTimeout(long)"
-        };
-
-        assertHasExpectedLines("Debugs", debugs, expected);
-    }
-
-    @Test
-    public void testDeprecatedPropertySetToNewValue() throws Exception
-    {
-        Class<?> testClass = AnnotatedTestConfiguration.class;
-        XmlConfiguration xmlConfiguration = asXmlConfiguration(
-            "<Configure class=\"" + testClass.getName() + "\">" +
-                "  <Set name=\"timeout\"><Property name=\"test.timeout\" default=\"-1\"/></Set>" +
-                "</Configure>");
-
-        List<String> logLines;
-        try (StdErrCapture logCapture = new StdErrCapture(XmlConfiguration.class))
-        {
-            // Leave this line alone, as this tests what happens if property is set,
-            // and has the same value as declared on <Property default="">
-            xmlConfiguration.getProperties().put("test.timeout", "30000");
-            xmlConfiguration.configure();
-            logLines = logCapture.getLines();
-        }
-
-        List<String> warnings = logLines.stream()
-            .filter(LogPredicates.deprecatedWarnings(testClass))
-            .collect(Collectors.toList());
-        String[] expected = {
-            "Deprecated constructor public org.eclipse.jetty.xml.AnnotatedTestConfiguration",
-            "Deprecated method public void org.eclipse.jetty.xml.AnnotatedTestConfiguration.setTimeout(long)"
-        };
-        assertThat("Count of warnings", warnings.size(), is(expected.length));
-        for (int i = 0; i < expected.length; i++)
-        {
-            assertThat("Warning[" + i + "]", warnings.get(i), containsString(expected[i]));
-        }
-    }
-
-    @Test
-    public void testSetDeprecatedMultipleProperties() throws Exception
-    {
-        Class<?> testClass = AnnotatedTestConfiguration.class;
-        XmlConfiguration xmlConfiguration = asXmlConfiguration(
-            "<Configure class=\"" + testClass.getName() + "\">" +
-                "  <Set name=\"obsolete\">" +
-                "    <Property name=\"obs.1\" default=\"foo\"/>" +
-                "    <Property name=\"obs.2\" default=\"bar\"/>" +
-                "  </Set>" +
-                "</Configure>");
-
-        List<String> logLines;
-        try (StdErrCapture logCapture = new StdErrCapture(XmlConfiguration.class))
-        {
-            // Leave this line alone, as this tests what happens if property is set,
-            // and has the same value as declared on <Property default="">
-            // xmlConfiguration.getProperties().put("obs.1", "30000");
-            xmlConfiguration.configure();
-            logLines = logCapture.getLines();
-        }
-
-        List<String> warnings = logLines.stream()
-            .filter(LogPredicates.deprecatedWarnings(testClass))
-            .collect(Collectors.toList());
-        String[] expected = {
-            "Deprecated constructor public org.eclipse.jetty.xml.AnnotatedTestConfiguration",
-            "Deprecated field public java.lang.String org.eclipse.jetty.xml.AnnotatedTestConfiguration.obsolete"
-        };
-        assertThat("Count of warnings", warnings.size(), is(expected.length));
-        for (int i = 0; i < expected.length; i++)
-        {
-            assertThat("Warning[" + i + "]", warnings.get(i), containsString(expected[i]));
-        }
-    }
-
-    private static class LogPredicates
-    {
-        public static Predicate<String> deprecatedWarnings(Class<?> testClass)
-        {
-            return (line) -> line.contains(":WARN:") &&
-                line.contains(": Deprecated ") &&
-                line.contains(testClass.getName());
-        }
-
-        public static Predicate<String> deprecatedDebug(Class<?> testClass)
-        {
-            return (line) -> line.contains(":DBUG:") &&
-                line.contains(": Deprecated ") &&
-                line.contains(testClass.getName());
-        }
-    }
-
-    private void assertHasExpectedLines(String type, List<String> actualLines, String[] expectedLines)
-    {
-        assertThat("Count of " + type, actualLines.size(), is(expectedLines.length));
-        for (int i = 0; i < expectedLines.length; i++)
-        {
-            assertThat(type + "[" + i + "]", actualLines.get(i), containsString(expectedLines[i]));
-        }
-    }
-
-    private static class StdErrCapture implements AutoCloseable
-    {
-        private ByteArrayOutputStream logBytes;
-        private List<Logger> loggers = new ArrayList<>();
-        private final PrintStream logStream;
-
-        public StdErrCapture(Class<?>... classes)
-        {
-            for (Class<?> clazz : classes)
-            {
-                Logger logger = Log.getLogger(clazz);
-                loggers.add(logger);
-            }
-
-            logBytes = new ByteArrayOutputStream();
-            logStream = new PrintStream(logBytes);
-
-            loggers.forEach((logger) ->
-            {
-                logger.setDebugEnabled(true);
-                if (logger instanceof StdErrLog)
-                {
-                    StdErrLog stdErrLog = (StdErrLog)logger;
-                    stdErrLog.setStdErrStream(logStream);
-                }
-            });
-        }
-
-        public List<String> getLines() throws UnsupportedEncodingException
-        {
-            logStream.flush();
-            String[] lines = logBytes.toString(UTF_8.name()).split(System.lineSeparator());
-            return Arrays.asList(lines);
-        }
-
-        @Override
-        public void close()
-        {
-            loggers.forEach((logger) -> logger.setDebugEnabled(false));
-        }
+        void run() throws Exception;
     }
 }

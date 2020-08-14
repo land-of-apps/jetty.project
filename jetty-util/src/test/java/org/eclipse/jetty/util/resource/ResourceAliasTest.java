@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.util.resource;
@@ -23,19 +23,14 @@ import java.net.MalformedURLException;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.function.Function;
-import java.util.stream.Stream;
 
 import org.eclipse.jetty.toolchain.test.FS;
 import org.eclipse.jetty.toolchain.test.jupiter.WorkDir;
 import org.eclipse.jetty.toolchain.test.jupiter.WorkDirExtension;
-import org.eclipse.jetty.util.log.Log;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.MethodSource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
@@ -47,21 +42,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @ExtendWith(WorkDirExtension.class)
 public class ResourceAliasTest
 {
+    private static final Logger LOG = LoggerFactory.getLogger(ResourceAliasTest.class);
+
     public WorkDir workDir;
 
-    public static Stream<Function<Path, Resource>> resourceTypes()
-    {
-        List<Function<Path, Resource>> types = new ArrayList<>();
-
-        types.add((path) -> new PathResource(path));
-        types.add((path) -> new FileResource(path.toFile()));
-
-        return types.stream();
-    }
-
-    @ParameterizedTest
-    @MethodSource("resourceTypes")
-    public void testPercentPaths(Function<Path, Resource> resourceType) throws IOException
+    @Test
+    public void testPercentPaths() throws IOException
     {
         Path baseDir = workDir.getEmptyPathDir();
 
@@ -79,24 +65,18 @@ public class ResourceAliasTest
 
         assertTrue(Files.exists(text));
 
-        Resource baseResource = resourceType.apply(baseDir);
+        Resource baseResource = new PathResource(baseDir);
         assertTrue(baseResource.exists(), "baseResource exists");
 
         Resource fooResource = baseResource.addPath("%foo");
         assertTrue(fooResource.exists(), "fooResource exists");
         assertTrue(fooResource.isDirectory(), "fooResource isDir");
-        if (fooResource instanceof FileResource)
-            assertTrue(fooResource.isAlias(), "fooResource isAlias");
-        else
-            assertFalse(fooResource.isAlias(), "fooResource isAlias");
+        assertFalse(fooResource.isAlias(), "fooResource isAlias");
 
         Resource barResource = fooResource.addPath("bar%");
         assertTrue(barResource.exists(), "barResource exists");
         assertTrue(barResource.isDirectory(), "barResource isDir");
-        if (fooResource instanceof FileResource)
-            assertTrue(barResource.isAlias(), "barResource isAlias");
-        else
-            assertFalse(barResource.isAlias(), "barResource isAlias");
+        assertFalse(barResource.isAlias(), "barResource isAlias");
 
         Resource textResource = barResource.addPath("test.txt");
         assertTrue(textResource.exists(), "textResource exists");
@@ -166,7 +146,7 @@ public class ResourceAliasTest
         catch (InvalidPathException e)
         {
             // this file system does allow null char ending filenames
-            Log.getRootLogger().ignore(e);
+            LOG.trace("IGNORED", e);
         }
     }
 }

@@ -1,33 +1,35 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.util.thread;
 
 import java.io.Closeable;
+import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
-import org.eclipse.jetty.util.log.StacklessLogging;
+import org.eclipse.jetty.logging.StacklessLogging;
+import org.eclipse.jetty.util.component.LifeCycle;
 import org.eclipse.jetty.util.thread.ThreadPool.SizedThreadPool;
 import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
@@ -36,11 +38,12 @@ import static org.hamcrest.Matchers.lessThan;
 import static org.hamcrest.core.StringContains.containsString;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class QueuedThreadPoolTest extends AbstractThreadPoolTest
 {
-    private static final Logger LOG = Log.getLogger(QueuedThreadPoolTest.class);
+    private static final Logger LOG = LoggerFactory.getLogger(QueuedThreadPoolTest.class);
     private final AtomicInteger _jobs = new AtomicInteger();
 
     private static class TestQueuedThreadPool extends QueuedThreadPool
@@ -138,7 +141,7 @@ public class QueuedThreadPoolTest extends AbstractThreadPoolTest
             }
             catch (Exception e)
             {
-                LOG.debug(e);
+                LOG.debug("RunningJob failed", e);
             }
             finally
             {
@@ -751,6 +754,24 @@ public class QueuedThreadPoolTest extends AbstractThreadPoolTest
     public void testConstructorMinMaxThreadsValidation()
     {
         assertThrows(IllegalArgumentException.class, () -> new QueuedThreadPool(4, 8));
+    }
+
+    @Test
+    public void testJoinWithStopTimeout() throws Exception
+    {
+        final long stopTimeout = 100;
+        QueuedThreadPool threadPool = new QueuedThreadPool();
+        threadPool.setStopTimeout(100);
+        threadPool.start();
+
+        // Verify that join does not timeout after waiting twice the stopTimeout.
+        assertThrows(Throwable.class, () ->
+            assertTimeoutPreemptively(Duration.ofMillis(stopTimeout * 2), threadPool::join)
+        );
+
+        // After stopping the ThreadPool join should unblock.
+        LifeCycle.stop(threadPool);
+        assertTimeoutPreemptively(Duration.ofMillis(stopTimeout), threadPool::join);
     }
 
     @Test

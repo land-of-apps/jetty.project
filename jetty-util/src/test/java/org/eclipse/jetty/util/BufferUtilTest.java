@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.util;
@@ -25,15 +25,18 @@ import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.concurrent.ThreadLocalRandom;
 
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.sameInstance;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -230,7 +233,7 @@ public class BufferUtilTest
         assertEquals(length, count, "Count of bytes");
     }
 
-    private static final Logger LOG = Log.getLogger(BufferUtilTest.class);
+    private static final Logger LOG = LoggerFactory.getLogger(BufferUtilTest.class);
 
     @Test
     @Disabled("Very simple microbenchmark to compare different writeTo implementations. Only for development thus " +
@@ -328,6 +331,28 @@ public class BufferUtilTest
         b.flip();
         String result = BufferUtil.toDetailString(b);
         assertThat("result", result, containsString("\\x7f"));
+    }
+
+    @Test
+    public void testCopyIndirect()
+    {
+        ByteBuffer b = BufferUtil.toBuffer("Hello World");
+        ByteBuffer c = BufferUtil.copy(b);
+        assertEquals("Hello World", BufferUtil.toString(c));
+        assertFalse(c.isDirect());
+        assertThat(b, not(sameInstance(c)));
+        assertThat(b.array(), not(sameInstance(c.array())));
+    }
+
+    @Test
+    public void testCopyDirect()
+    {
+        ByteBuffer b = BufferUtil.allocateDirect(11);
+        BufferUtil.append(b, "Hello World");
+        ByteBuffer c = BufferUtil.copy(b);
+        assertEquals("Hello World", BufferUtil.toString(c));
+        assertTrue(c.isDirect());
+        assertThat(b, not(sameInstance(c)));
     }
 
     private void testWriteToWithBufferThatDoesNotExposeArray(int capacity) throws IOException

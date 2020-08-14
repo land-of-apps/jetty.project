@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.server.session;
@@ -30,15 +30,16 @@ import javax.servlet.http.HttpSession;
 import org.eclipse.jetty.client.HttpClient;
 import org.eclipse.jetty.client.api.ContentResponse;
 import org.eclipse.jetty.client.api.Request;
+import org.eclipse.jetty.logging.StacklessLogging;
 import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.eclipse.jetty.servlet.ServletHolder;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.StacklessLogging;
-import org.eclipse.jetty.util.thread.Locker.Lock;
+import org.eclipse.jetty.util.thread.AutoLock;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -82,7 +83,7 @@ public class IdleSessionTest
         _server1.start();
         int port1 = _server1.getPort();
 
-        try (StacklessLogging stackless = new StacklessLogging(Log.getLogger("org.eclipse.jetty.server.session")))
+        try (StacklessLogging stackless = new StacklessLogging(IdleSessionTest.class.getPackage()))
         {
             HttpClient client = new HttpClient();
             client.start();
@@ -94,7 +95,7 @@ public class IdleSessionTest
             ContentResponse response = client.GET(url + "?action=init");
             assertEquals(HttpServletResponse.SC_OK, response.getStatus());
             String sessionCookie = response.getHeaders().get("Set-Cookie");
-            assertTrue(sessionCookie != null);
+            assertNotNull(sessionCookie);
             
             //ensure request has finished being handled
             synchronizer.await(5, TimeUnit.SECONDS);
@@ -148,7 +149,7 @@ public class IdleSessionTest
             response = client.GET(url + "?action=init");
             assertEquals(HttpServletResponse.SC_OK, response.getStatus());
             sessionCookie = response.getHeaders().get("Set-Cookie");
-            assertTrue(sessionCookie != null);
+            assertNotNull(sessionCookie);
             id = TestServer.extractSessionId(sessionCookie);
             
             //ensure request has finished being handled
@@ -208,7 +209,7 @@ public class IdleSessionTest
         _server1.start();
         int port1 = _server1.getPort();
 
-        try (StacklessLogging stackless = new StacklessLogging(Log.getLogger("org.eclipse.jetty.server.session")))
+        try (StacklessLogging stackless = new StacklessLogging(IdleSessionTest.class.getPackage()))
         {
             HttpClient client = new HttpClient();
             client.start();
@@ -220,7 +221,7 @@ public class IdleSessionTest
             ContentResponse response = client.GET(url + "?action=init");
             assertEquals(HttpServletResponse.SC_OK, response.getStatus());
             String sessionCookie = response.getHeaders().get("Set-Cookie");
-            assertTrue(sessionCookie != null);
+            assertNotNull(sessionCookie);
             
             //ensure request has finished being handled
             synchronizer.await(5, TimeUnit.SECONDS);
@@ -265,7 +266,7 @@ public class IdleSessionTest
             response = client.GET(url + "?action=init");
             assertEquals(HttpServletResponse.SC_OK, response.getStatus());
             sessionCookie = response.getHeaders().get("Set-Cookie");
-            assertTrue(sessionCookie != null);
+            assertNotNull(sessionCookie);
             id = TestServer.extractSessionId(sessionCookie);
             
             //ensure request has finished being handled
@@ -314,10 +315,10 @@ public class IdleSessionTest
             if ("init".equals(action))
             {
                 HttpSession session = request.getSession(true);
-                session.setAttribute("value", new Integer(1));
+                session.setAttribute("value", 1);
                 originalId = session.getId();
                 Session s = (Session)session;
-                try (Lock lock = s.lock())
+                try (AutoLock lock = s.lock())
                 {
                     assertTrue(s.isResident());
                 }
@@ -326,21 +327,21 @@ public class IdleSessionTest
             else if ("test".equals(action))
             {
                 HttpSession session = request.getSession(false);
-                assertTrue(session != null);
-                assertTrue(originalId.equals(session.getId()));
+                assertNotNull(session);
+                assertEquals(originalId, session.getId());
                 Session s = (Session)session;
-                try (Lock lock = s.lock();)
+                try (AutoLock lock = s.lock())
                 {
                     assertTrue(s.isResident());
                 }
                 Integer v = (Integer)session.getAttribute("value");
-                session.setAttribute("value", new Integer(v.intValue() + 1));
+                session.setAttribute("value", v + 1);
                 _session = session;
             }
             else if ("testfail".equals(action))
             {
                 HttpSession session = request.getSession(false);
-                assertTrue(session == null);
+                assertNull(session);
                 _session = session;
             }
         }

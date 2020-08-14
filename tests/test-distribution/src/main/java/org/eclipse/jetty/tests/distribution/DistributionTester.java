@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.tests.distribution;
@@ -25,6 +25,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.io.RandomAccessFile;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.nio.file.Files;
@@ -65,8 +66,8 @@ import org.eclipse.aether.transport.http.HttpTransporterFactory;
 import org.eclipse.jetty.toolchain.test.FS;
 import org.eclipse.jetty.toolchain.test.MavenTestingUtils;
 import org.eclipse.jetty.util.IO;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * <p>Helper class to test the Jetty Distribution</p>.
@@ -108,7 +109,7 @@ import org.eclipse.jetty.util.log.Logger;
  */
 public class DistributionTester
 {
-    private static final Logger LOGGER = Log.getLogger(DistributionTester.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(DistributionTester.class);
 
     private Config config;
 
@@ -149,6 +150,10 @@ public class DistributionTester
 
         List<String> commands = new ArrayList<>();
         commands.add(getJavaExecutable());
+        if (!config.jvmArgs.isEmpty())
+        {
+            commands.addAll(config.jvmArgs);
+        }
         commands.add("-Djava.io.tmpdir=" + workDir.toAbsolutePath().toString());
         commands.add("-jar");
         commands.add(config.jettyHome.toAbsolutePath() + "/start.jar");
@@ -370,6 +375,7 @@ public class DistributionTester
         private String jettyVersion;
         private String mavenLocalRepository = System.getProperty("user.home") + "/.m2/repository";
         private Map<String, String> mavenRemoteRepositories = new HashMap<>();
+        private List<String> jvmArgs = new ArrayList<>();
 
         @Override
         public String toString()
@@ -479,9 +485,6 @@ public class DistributionTester
             consoleStreamers.forEach(ConsoleStreamer::stop);
         }
 
-        /**
-         * @see #destroy()
-         */
         @Override
         public void close()
         {
@@ -511,6 +514,38 @@ public class DistributionTester
         }
 
         /**
+         * Awaits the logs file to contain the given text, for the given amount of time.
+         *
+         * @param logFile the log file to test
+         * @param txt the text that must be present in the console logs
+         * @param time the time to wait
+         * @param unit the unit of time
+         * @return true if the text was found, false if the timeout elapsed
+         * @throws InterruptedException if the wait is interrupted
+         */
+        public boolean awaitLogsFileFor(Path logFile, String txt, long time, TimeUnit unit) throws InterruptedException
+        {
+            LogFileStreamer logFileStreamer = new LogFileStreamer(logFile);
+            Thread thread = new Thread(logFileStreamer, "LogFileStreamer/" + logFile);
+            thread.start();
+            try
+            {
+                long end = System.nanoTime() + unit.toNanos(time);
+                while (System.nanoTime() < end)
+                {
+                    boolean result = logs.stream().anyMatch(s -> s.contains(txt));
+                    if (result) return true;
+                    Thread.sleep(250);
+                }
+                return false;
+            }
+            finally
+            {
+                logFileStreamer.stop();
+            }
+        }
+
+        /**
          * Simple streamer for the console output from a Process
          */
         private class ConsoleStreamer implements Runnable
@@ -531,7 +566,7 @@ public class DistributionTester
                     String line;
                     while ((line = reader.readLine()) != null && !stop)
                     {
-                        LOGGER.info("{}", line);
+                        LOGGER.info(line);
                         logs.add(line);
                     }
                 }
@@ -550,6 +585,57 @@ public class DistributionTester
                 stop = true;
                 IO.close(reader);
             }
+        }
+
+        private class LogFileStreamer implements Runnable
+        {
+            private RandomAccessFile inputFile;
+            private volatile boolean stop;
+            private final Path logFile;
+
+            public LogFileStreamer(Path logFile)
+            {
+                this.logFile = logFile;
+            }
+
+            @Override
+            public void run()
+            {
+                String currentLine;
+                long pos = 0;
+                while (!stop)
+                {
+                    try
+                    {
+                        inputFile = new RandomAccessFile(logFile.toFile(), "r");
+                        inputFile.seek(pos);
+                        if ((currentLine = inputFile.readLine()) != null)
+                        {
+                            logs.add(currentLine);
+                        }
+                        pos = inputFile.getFilePointer();
+                    }
+                    catch (IOException e)
+                    {
+                        //ignore
+                    }
+                    finally
+                    {
+                        IO.close(inputFile);
+                    }
+                }
+            }
+
+            public void stop()
+            {
+                stop = true;
+                IO.close(inputFile);
+            }
+        }
+
+        public Queue<String> getLogs()
+        {
+            return logs;
         }
     }
 
@@ -616,6 +702,17 @@ public class DistributionTester
         public Builder addRemoteRepository(String id, String url)
         {
             config.mavenRemoteRepositories.put(id, url);
+            return this;
+        }
+
+        /**
+         *
+         * @param jvmArgs the jvm args to add
+         * @return the {@link Builder}
+         */
+        public Builder jvmArgs(List<String> jvmArgs)
+        {
+            config.jvmArgs = jvmArgs;
             return this;
         }
 

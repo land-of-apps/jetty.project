@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.util;
@@ -36,7 +36,7 @@ public interface Trie<V>
      * @param v The value of the entry
      * @return True if the Trie had capacity to add the field.
      */
-    boolean put(String s, V v);
+    public boolean put(String s, V v);
 
     /**
      * Put a value as both a key and a value.
@@ -44,9 +44,9 @@ public interface Trie<V>
      * @param v The value and key
      * @return True if the Trie had capacity to add the field.
      */
-    boolean put(V v);
+    public boolean put(V v);
 
-    V remove(String s);
+    public V remove(String s);
 
     /**
      * Get an exact match from a String key
@@ -54,7 +54,7 @@ public interface Trie<V>
      * @param s The key
      * @return the value for the string key
      */
-    V get(String s);
+    public V get(String s);
 
     /**
      * Get an exact match from a String key
@@ -64,7 +64,7 @@ public interface Trie<V>
      * @param len the length of the key
      * @return the value for the string / offset / length
      */
-    V get(String s, int offset, int len);
+    public V get(String s, int offset, int len);
 
     /**
      * Get an exact match from a segment of a ByteBuufer as key
@@ -72,7 +72,7 @@ public interface Trie<V>
      * @param b The buffer
      * @return The value or null if not found
      */
-    V get(ByteBuffer b);
+    public V get(ByteBuffer b);
 
     /**
      * Get an exact match from a segment of a ByteBuufer as key
@@ -82,7 +82,7 @@ public interface Trie<V>
      * @param len the length of the key
      * @return The value or null if not found
      */
-    V get(ByteBuffer b, int offset, int len);
+    public V get(ByteBuffer b, int offset, int len);
 
     /**
      * Get the best match from key in a String.
@@ -90,7 +90,7 @@ public interface Trie<V>
      * @param s The string
      * @return The value or null if not found
      */
-    V getBest(String s);
+    public V getBest(String s);
 
     /**
      * Get the best match from key in a String.
@@ -100,7 +100,7 @@ public interface Trie<V>
      * @param len the length of the key
      * @return The value or null if not found
      */
-    V getBest(String s, int offset, int len);
+    public V getBest(String s, int offset, int len);
 
     /**
      * Get the best match from key in a byte array.
@@ -111,7 +111,7 @@ public interface Trie<V>
      * @param len the length of the key
      * @return The value or null if not found
      */
-    V getBest(byte[] b, int offset, int len);
+    public V getBest(byte[] b, int offset, int len);
 
     /**
      * Get the best match from key in a byte buffer.
@@ -122,13 +122,13 @@ public interface Trie<V>
      * @param len the length of the key
      * @return The value or null if not found
      */
-    V getBest(ByteBuffer b, int offset, int len);
+    public V getBest(ByteBuffer b, int offset, int len);
 
-    Set<String> keySet();
+    public Set<String> keySet();
 
-    boolean isFull();
+    public boolean isFull();
 
-    boolean isCaseInsensitive();
+    public boolean isCaseInsensitive();
 
-    void clear();
+    public void clear();
 }

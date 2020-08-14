@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.http2.client;
@@ -25,11 +25,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 import javax.servlet.ServletInputStream;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
+import org.eclipse.jetty.http.HttpField;
 import org.eclipse.jetty.http.HttpFields;
 import org.eclipse.jetty.http.HttpHeader;
 import org.eclipse.jetty.http.HttpStatus;
@@ -70,7 +72,7 @@ public class TrailersTest extends AbstractTest
             {
                 MetaData.Request request = (MetaData.Request)frame.getMetaData();
                 assertFalse(frame.isEndStream());
-                assertTrue(request.getFields().containsKey("X-Request"));
+                assertTrue(request.getFields().contains("X-Request"));
                 return new Stream.Listener.Adapter()
                 {
                     @Override
@@ -78,7 +80,7 @@ public class TrailersTest extends AbstractTest
                     {
                         MetaData trailer = frame.getMetaData();
                         assertTrue(frame.isEndStream());
-                        assertTrue(trailer.getFields().containsKey("X-Trailer"));
+                        assertTrue(trailer.getFields().contains("X-Trailer"));
                         latch.countDown();
                     }
                 };
@@ -87,7 +89,7 @@ public class TrailersTest extends AbstractTest
 
         Session session = newClient(new Session.Listener.Adapter());
 
-        HttpFields requestFields = new HttpFields();
+        HttpFields.Mutable requestFields = HttpFields.build();
         requestFields.put("X-Request", "true");
         MetaData.Request request = newRequest("GET", requestFields);
         HeadersFrame requestFrame = new HeadersFrame(request, null, false);
@@ -96,7 +98,7 @@ public class TrailersTest extends AbstractTest
         Stream stream = streamPromise.get(5, TimeUnit.SECONDS);
 
         // Send the trailers.
-        HttpFields trailerFields = new HttpFields();
+        HttpFields.Mutable trailerFields = HttpFields.build();
         trailerFields.put("X-Trailer", "true");
         MetaData trailers = new MetaData(HttpVersion.HTTP_2, trailerFields);
         HeadersFrame trailerFrame = new HeadersFrame(stream.getId(), trailers, null, true);
@@ -116,7 +118,7 @@ public class TrailersTest extends AbstractTest
             {
                 Request jettyRequest = (Request)request;
                 // No trailers yet.
-                assertNull(jettyRequest.getTrailers());
+                assertNull(jettyRequest.getTrailerHttpFields());
 
                 trailerLatch.countDown();
 
@@ -130,7 +132,7 @@ public class TrailersTest extends AbstractTest
                 }
 
                 // Now we have the trailers.
-                HttpFields trailers = jettyRequest.getTrailers();
+                HttpFields trailers = jettyRequest.getTrailerHttpFields();
                 assertNotNull(trailers);
                 assertNotNull(trailers.get("X-Trailer"));
             }
@@ -138,7 +140,7 @@ public class TrailersTest extends AbstractTest
 
         Session session = newClient(new Session.Listener.Adapter());
 
-        HttpFields requestFields = new HttpFields();
+        HttpFields.Mutable requestFields = HttpFields.build();
         requestFields.put("X-Request", "true");
         MetaData.Request request = newRequest("GET", requestFields);
         HeadersFrame requestFrame = new HeadersFrame(request, null, false);
@@ -166,7 +168,7 @@ public class TrailersTest extends AbstractTest
         // Send the trailers.
         callback.thenRun(() ->
         {
-            HttpFields trailerFields = new HttpFields();
+            HttpFields.Mutable trailerFields = HttpFields.build();
             trailerFields.put("X-Trailer", "true");
             MetaData trailers = new MetaData(HttpVersion.HTTP_2, trailerFields);
             HeadersFrame trailerFrame = new HeadersFrame(stream.getId(), trailers, null, true);
@@ -184,7 +186,7 @@ public class TrailersTest extends AbstractTest
             @Override
             public Stream.Listener onNewStream(Stream stream, HeadersFrame frame)
             {
-                HttpFields responseFields = new HttpFields();
+                HttpFields.Mutable responseFields = HttpFields.build();
                 responseFields.put("X-Response", "true");
                 MetaData.Response response = new MetaData.Response(HttpVersion.HTTP_2, HttpStatus.OK_200, responseFields);
                 HeadersFrame responseFrame = new HeadersFrame(stream.getId(), response, null, false);
@@ -193,7 +195,7 @@ public class TrailersTest extends AbstractTest
                     @Override
                     public void succeeded()
                     {
-                        HttpFields trailerFields = new HttpFields();
+                        HttpFields.Mutable trailerFields = HttpFields.build();
                         trailerFields.put("X-Trailer", "true");
                         MetaData trailer = new MetaData(HttpVersion.HTTP_2, trailerFields);
                         HeadersFrame trailerFrame = new HeadersFrame(stream.getId(), trailer, null, true);
@@ -205,7 +207,7 @@ public class TrailersTest extends AbstractTest
         });
 
         Session session = newClient(new Session.Listener.Adapter());
-        MetaData.Request request = newRequest("GET", new HttpFields());
+        MetaData.Request request = newRequest("GET", HttpFields.EMPTY);
         HeadersFrame requestFrame = new HeadersFrame(request, null, true);
         CountDownLatch latch = new CountDownLatch(1);
         session.newStream(requestFrame, new Promise.Adapter<>(), new Stream.Listener.Adapter()
@@ -219,14 +221,14 @@ public class TrailersTest extends AbstractTest
                 {
                     MetaData.Response response = (MetaData.Response)frame.getMetaData();
                     assertEquals(HttpStatus.OK_200, response.getStatus());
-                    assertTrue(response.getFields().containsKey("X-Response"));
+                    assertTrue(response.getFields().contains("X-Response"));
                     assertFalse(frame.isEndStream());
                     responded = true;
                 }
                 else
                 {
                     MetaData trailer = frame.getMetaData();
-                    assertTrue(trailer.getFields().containsKey("X-Trailer"));
+                    assertTrue(trailer.getFields().contains("X-Trailer"));
                     assertTrue(frame.isEndStream());
                     latch.countDown();
                 }
@@ -248,8 +250,9 @@ public class TrailersTest extends AbstractTest
             {
                 Request jettyRequest = (Request)request;
                 Response jettyResponse = jettyRequest.getResponse();
-                HttpFields trailers = new HttpFields();
-                jettyResponse.setTrailers(() -> trailers);
+                HttpFields.Mutable trailers = HttpFields.build();
+                jettyResponse.setTrailerFields(() ->
+                    trailers.stream().collect(Collectors.toMap(HttpField::getName, HttpField::getValue)));
 
                 jettyResponse.getOutputStream().write("hello_trailers".getBytes(StandardCharsets.UTF_8));
                 jettyResponse.flushBuffer();
@@ -259,7 +262,7 @@ public class TrailersTest extends AbstractTest
         });
 
         Session session = newClient(new Session.Listener.Adapter());
-        MetaData.Request request = newRequest("GET", new HttpFields());
+        MetaData.Request request = newRequest("GET", HttpFields.EMPTY);
         HeadersFrame requestFrame = new HeadersFrame(request, null, true);
         CountDownLatch latch = new CountDownLatch(1);
         List<Frame> frames = new ArrayList<>();
@@ -301,7 +304,7 @@ public class TrailersTest extends AbstractTest
         start(new EmptyHttpServlet());
 
         Session session = newClient(new Session.Listener.Adapter());
-        MetaData.Request request = newRequest("POST", new HttpFields());
+        MetaData.Request request = newRequest("POST", HttpFields.EMPTY);
         HeadersFrame requestFrame = new HeadersFrame(request, null, false);
         FuturePromise<Stream> promise = new FuturePromise<>();
         session.newStream(requestFrame, promise, new Stream.Listener.Adapter());
@@ -313,7 +316,7 @@ public class TrailersTest extends AbstractTest
         completable.thenRun(() ->
         {
             // Invalid trailer: cannot contain pseudo headers.
-            HttpFields trailerFields = new HttpFields();
+            HttpFields.Mutable trailerFields = HttpFields.build();
             trailerFields.put(HttpHeader.C_METHOD, "GET");
             MetaData trailer = new MetaData(HttpVersion.HTTP_2, trailerFields);
             HeadersFrame trailerFrame = new HeadersFrame(stream.getId(), trailer, null, true);
@@ -352,7 +355,7 @@ public class TrailersTest extends AbstractTest
 
         CountDownLatch clientLatch = new CountDownLatch(1);
         Session session = newClient(new Session.Listener.Adapter());
-        MetaData.Request request = newRequest("POST", new HttpFields());
+        MetaData.Request request = newRequest("POST", HttpFields.EMPTY);
         HeadersFrame requestFrame = new HeadersFrame(request, null, false);
         FuturePromise<Stream> promise = new FuturePromise<>();
         session.newStream(requestFrame, promise, new Stream.Listener.Adapter()
@@ -372,7 +375,7 @@ public class TrailersTest extends AbstractTest
             // Disable checks for invalid headers.
             ((HTTP2Session)session).getGenerator().setValidateHpackEncoding(false);
             // Invalid trailer: cannot contain pseudo headers.
-            HttpFields trailerFields = new HttpFields();
+            HttpFields.Mutable trailerFields = HttpFields.build();
             trailerFields.put(HttpHeader.C_METHOD, "GET");
             MetaData trailer = new MetaData(HttpVersion.HTTP_2, trailerFields);
             HeadersFrame trailerFrame = new HeadersFrame(stream.getId(), trailer, null, true);

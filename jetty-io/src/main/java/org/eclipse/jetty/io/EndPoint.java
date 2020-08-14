@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.io;
@@ -93,6 +93,17 @@ import org.eclipse.jetty.util.thread.Invocable;
  */
 public interface EndPoint extends Closeable
 {
+    /** 
+     * Marks an {@code EndPoint} that wraps another {@code EndPoint}.
+     */
+    public interface Wrapper 
+    {
+        /**
+         * @return The wrapped {@code EndPoint}
+         */
+        EndPoint unwrap();
+    }
+
     /**
      * @return The local Inet address to which this {@code EndPoint} is bound, or {@code null}
      * if this {@code EndPoint} does not represent a network connection.
@@ -151,7 +162,17 @@ public interface EndPoint extends Closeable
      * Close any backing stream associated with the endpoint
      */
     @Override
-    void close();
+    default void close()
+    {
+        close(null);
+    }
+
+    /**
+     * Close any backing stream associated with the endpoint, passing a cause
+     *
+     * @param cause the reason for the close or null
+     */
+    void close(Throwable cause);
 
     /**
      * Fill the passed buffer with data from this endpoint.  The bytes are appended to any
@@ -250,23 +271,17 @@ public interface EndPoint extends Closeable
     /**
      * <p>Callback method invoked when this EndPoint is opened.</p>
      *
-     * @see #onClose()
+     * @see #onClose(Throwable)
      */
     void onOpen();
 
     /**
-     * <p>Callback method invoked when this EndPoint is close.</p>
+     * <p>Callback method invoked when this {@link EndPoint} is closed.</p>
      *
+     * @param cause The reason for the close, or null if a normal close.
      * @see #onOpen()
      */
-    void onClose();
-
-    /**
-     * Is the endpoint optimized for DirectBuffer usage
-     *
-     * @return True if direct buffers can be used optimally.
-     */
-    boolean isOptimizedForDirectBuffers();
+    void onClose(Throwable cause);
 
     /**
      * <p>Upgrades this EndPoint from the current connection to the given new connection.</p>
@@ -282,5 +297,5 @@ public interface EndPoint extends Closeable
      *
      * @param newConnection the connection to upgrade to
      */
-    void upgrade(Connection newConnection);
+    public void upgrade(Connection newConnection);
 }

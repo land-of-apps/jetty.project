@@ -1,4 +1,5 @@
-<?xml version="1.0"?><!DOCTYPE Configure PUBLIC "-//Jetty//Configure//EN" "http://www.eclipse.org/jetty/configure_9_3.dtd">
+<?xml version="1.0"?>
+<!DOCTYPE Configure PUBLIC "-//Jetty//Configure//EN" "https://www.eclipse.org/jetty/configure_10_0.dtd">
 
 <Configure id="Server" class="org.eclipse.jetty.server.Server">
 
@@ -8,7 +9,7 @@
 
   <Call name="removeBean">
     <Arg>
-      <Ref id="sessionDataStoreFactory"/>
+      <Ref refid="sessionDataStoreFactory"/>
     </Arg>
   </Call>
 
@@ -17,8 +18,8 @@
   <Call name="addBean">
    <Arg>
     <New class="org.eclipse.jetty.server.session.CachingSessionDataStoreFactory">
-       <Set name="sessionStoreFactory"><Ref id="sessionDataStoreFactory"/></Set>
-       <Set name="sessionDataMapFactory"><Ref id="sessionDataMapFactory"/></Set>
+       <Set name="sessionStoreFactory"><Ref refid="sessionDataStoreFactory"/></Set>
+       <Set name="sessionDataMapFactory"><Ref refid="sessionDataMapFactory"/></Set>
     </New>
    </Arg> 
   </Call>

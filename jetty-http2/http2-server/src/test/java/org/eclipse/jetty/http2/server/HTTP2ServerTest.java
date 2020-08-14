@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.http2.server;
@@ -34,7 +34,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.UnaryOperator;
-import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -57,15 +56,14 @@ import org.eclipse.jetty.http2.frames.SettingsFrame;
 import org.eclipse.jetty.http2.generator.Generator;
 import org.eclipse.jetty.http2.parser.Parser;
 import org.eclipse.jetty.io.ByteBufferPool;
-import org.eclipse.jetty.io.ChannelEndPoint;
 import org.eclipse.jetty.io.ManagedSelector;
 import org.eclipse.jetty.io.SocketChannelEndPoint;
+import org.eclipse.jetty.logging.StacklessLogging;
 import org.eclipse.jetty.server.HttpChannel;
 import org.eclipse.jetty.server.HttpConfiguration;
 import org.eclipse.jetty.server.ServerConnector;
 import org.eclipse.jetty.util.BufferUtil;
 import org.eclipse.jetty.util.Callback;
-import org.eclipse.jetty.util.log.StacklessLogging;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
@@ -82,7 +80,7 @@ public class HTTP2ServerTest extends AbstractServerTest
         startServer(new HttpServlet() {});
 
         // No preface bytes.
-        MetaData.Request metaData = newRequest("GET", new HttpFields());
+        MetaData.Request metaData = newRequest("GET", HttpFields.EMPTY);
         ByteBufferPool.Lease lease = new ByteBufferPool.Lease(byteBufferPool);
         generator.control(lease, new HeadersFrame(1, metaData, null, true));
 
@@ -118,7 +116,7 @@ public class HTTP2ServerTest extends AbstractServerTest
         startServer(new HttpServlet()
         {
             @Override
-            protected void service(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException
+            protected void service(HttpServletRequest req, HttpServletResponse resp)
             {
                 latch.countDown();
             }
@@ -127,7 +125,7 @@ public class HTTP2ServerTest extends AbstractServerTest
         ByteBufferPool.Lease lease = new ByteBufferPool.Lease(byteBufferPool);
         generator.control(lease, new PrefaceFrame());
         generator.control(lease, new SettingsFrame(new HashMap<>(), false));
-        MetaData.Request metaData = newRequest("GET", new HttpFields());
+        MetaData.Request metaData = newRequest("GET", HttpFields.EMPTY);
         generator.control(lease, new HeadersFrame(1, metaData, null, true));
 
         try (Socket client = new Socket("localhost", connector.getLocalPort()))
@@ -175,7 +173,7 @@ public class HTTP2ServerTest extends AbstractServerTest
         startServer(new HttpServlet()
         {
             @Override
-            protected void service(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException
+            protected void service(HttpServletRequest req, HttpServletResponse resp) throws IOException
             {
                 latch.countDown();
                 resp.getOutputStream().write(content);
@@ -185,7 +183,7 @@ public class HTTP2ServerTest extends AbstractServerTest
         ByteBufferPool.Lease lease = new ByteBufferPool.Lease(byteBufferPool);
         generator.control(lease, new PrefaceFrame());
         generator.control(lease, new SettingsFrame(new HashMap<>(), false));
-        MetaData.Request metaData = newRequest("GET", new HttpFields());
+        MetaData.Request metaData = newRequest("GET", HttpFields.EMPTY);
         generator.control(lease, new HeadersFrame(1, metaData, null, true));
 
         try (Socket client = new Socket("localhost", connector.getLocalPort()))
@@ -321,7 +319,7 @@ public class HTTP2ServerTest extends AbstractServerTest
         startServer(new HttpServlet()
         {
             @Override
-            protected void service(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException
+            protected void service(HttpServletRequest request, HttpServletResponse response) throws IOException
             {
                 try
                 {
@@ -340,7 +338,7 @@ public class HTTP2ServerTest extends AbstractServerTest
         ServerConnector connector2 = new ServerConnector(server, new HTTP2ServerConnectionFactory(new HttpConfiguration()))
         {
             @Override
-            protected ChannelEndPoint newEndPoint(SocketChannel channel, ManagedSelector selectSet, SelectionKey key) throws IOException
+            protected SocketChannelEndPoint newEndPoint(SocketChannel channel, ManagedSelector selectSet, SelectionKey key)
             {
                 return new SocketChannelEndPoint(channel, selectSet, key, getScheduler())
                 {
@@ -361,7 +359,7 @@ public class HTTP2ServerTest extends AbstractServerTest
         ByteBufferPool.Lease lease = new ByteBufferPool.Lease(byteBufferPool);
         generator.control(lease, new PrefaceFrame());
         generator.control(lease, new SettingsFrame(new HashMap<>(), false));
-        MetaData.Request metaData = newRequest("GET", new HttpFields());
+        MetaData.Request metaData = newRequest("GET", HttpFields.EMPTY);
         generator.control(lease, new HeadersFrame(1, metaData, null, true));
         try (Socket client = new Socket("localhost", connector2.getLocalPort()))
         {
@@ -399,7 +397,7 @@ public class HTTP2ServerTest extends AbstractServerTest
             ByteBufferPool.Lease lease = new ByteBufferPool.Lease(byteBufferPool);
             generator.control(lease, new PrefaceFrame());
             generator.control(lease, new SettingsFrame(new HashMap<>(), false));
-            MetaData.Request metaData = newRequest("GET", new HttpFields());
+            MetaData.Request metaData = newRequest("GET", HttpFields.EMPTY);
             generator.control(lease, new HeadersFrame(1, metaData, null, true));
 
             try (Socket client = new Socket("localhost", connector.getLocalPort()))
@@ -428,7 +426,7 @@ public class HTTP2ServerTest extends AbstractServerTest
             ByteBufferPool.Lease lease = new ByteBufferPool.Lease(byteBufferPool);
             generator.control(lease, new PrefaceFrame());
             generator.control(lease, new SettingsFrame(new HashMap<>(), false));
-            MetaData.Request metaData = newRequest("GET", new HttpFields());
+            MetaData.Request metaData = newRequest("GET", HttpFields.EMPTY);
             generator.control(lease, new HeadersFrame(1, metaData, null, true));
             return lease;
         });
@@ -443,7 +441,7 @@ public class HTTP2ServerTest extends AbstractServerTest
             ByteBufferPool.Lease lease = new ByteBufferPool.Lease(byteBufferPool);
             generator.control(lease, new PrefaceFrame());
             generator.control(lease, new SettingsFrame(new HashMap<>(), false));
-            MetaData.Request metaData = newRequest("GET", new HttpFields());
+            MetaData.Request metaData = newRequest("GET", HttpFields.EMPTY);
             generator.control(lease, new HeadersFrame(1, metaData, priority, true));
             return lease;
         });
@@ -457,7 +455,7 @@ public class HTTP2ServerTest extends AbstractServerTest
             ByteBufferPool.Lease lease = new ByteBufferPool.Lease(byteBufferPool);
             generator.control(lease, new PrefaceFrame());
             generator.control(lease, new SettingsFrame(new HashMap<>(), false));
-            MetaData.Request metaData = newRequest("GET", new HttpFields());
+            MetaData.Request metaData = newRequest("GET", HttpFields.EMPTY);
             generator.control(lease, new HeadersFrame(1, metaData, null, true));
             // Take the HeadersFrame header and set the length to zero.
             List<ByteBuffer> buffers = lease.getByteBuffers();
@@ -479,7 +477,7 @@ public class HTTP2ServerTest extends AbstractServerTest
             ByteBufferPool.Lease lease = new ByteBufferPool.Lease(byteBufferPool);
             generator.control(lease, new PrefaceFrame());
             generator.control(lease, new SettingsFrame(new HashMap<>(), false));
-            MetaData.Request metaData = newRequest("GET", new HttpFields());
+            MetaData.Request metaData = newRequest("GET", HttpFields.EMPTY);
             generator.control(lease, new HeadersFrame(1, metaData, priority, true));
             // Take the HeadersFrame header and set the length to just the priority frame.
             List<ByteBuffer> buffers = lease.getByteBuffers();
@@ -500,7 +498,7 @@ public class HTTP2ServerTest extends AbstractServerTest
             ByteBufferPool.Lease lease = new ByteBufferPool.Lease(byteBufferPool);
             generator.control(lease, new PrefaceFrame());
             generator.control(lease, new SettingsFrame(new HashMap<>(), false));
-            MetaData.Request metaData = newRequest("GET", new HttpFields());
+            MetaData.Request metaData = newRequest("GET", HttpFields.EMPTY);
             generator.control(lease, new HeadersFrame(1, metaData, null, true));
             // Take the ContinuationFrame header, duplicate it, and set the length to zero.
             List<ByteBuffer> buffers = lease.getByteBuffers();
@@ -524,7 +522,7 @@ public class HTTP2ServerTest extends AbstractServerTest
             ByteBufferPool.Lease lease = new ByteBufferPool.Lease(byteBufferPool);
             generator.control(lease, new PrefaceFrame());
             generator.control(lease, new SettingsFrame(new HashMap<>(), false));
-            MetaData.Request metaData = newRequest("GET", new HttpFields());
+            MetaData.Request metaData = newRequest("GET", HttpFields.EMPTY);
             generator.control(lease, new HeadersFrame(1, metaData, null, true));
             // Take the last CONTINUATION frame and reset the flag.
             List<ByteBuffer> buffers = lease.getByteBuffers();
@@ -562,7 +560,7 @@ public class HTTP2ServerTest extends AbstractServerTest
 
                 serverLatch.countDown();
 
-                MetaData.Response metaData = new MetaData.Response(HttpVersion.HTTP_2, 200, new HttpFields());
+                MetaData.Response metaData = new MetaData.Response(HttpVersion.HTTP_2, 200, HttpFields.EMPTY);
                 HeadersFrame responseFrame = new HeadersFrame(stream.getId(), metaData, null, true);
                 stream.headers(responseFrame, Callback.NOOP);
                 return null;

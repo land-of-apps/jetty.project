@@ -2,7 +2,7 @@
   <parent>
     <groupId>org.eclipse.jetty.osgi</groupId>
     <artifactId>jetty-osgi-project</artifactId>
-    <version>9.4.31.v20200723</version>
+    <version>10.0.0-SNAPSHOT</version>
   </parent>
   <modelVersion>4.0.0</modelVersion>
   <artifactId>jetty-osgi-boot-jsp</artifactId>
@@ -33,8 +33,8 @@
     </dependency>
     <!-- Servlet Deps -->
     <dependency>
-      <groupId>javax.servlet</groupId>
-      <artifactId>javax.servlet-api</artifactId>
+      <groupId>org.eclipse.jetty.toolchain</groupId>
+      <artifactId>jetty-servlet-api</artifactId>
     </dependency>
     <!-- JSP Deps -->
     <dependency>
@@ -63,12 +63,12 @@
                 com.sun.el.parser;resolution:=optional,
                 com.sun.el.util;resolution:=optional,
                 javax.el;version="[3.0,3.1)",
-                javax.servlet;version="[$(version;===;${javax.servlet.api.version}),$(version;+;${javax.servlet.api.version}))",
-                javax.servlet.resources;version="[$(version;===;${javax.servlet.api.version}),$(version;+;${javax.servlet.api.version}))",
-                javax.servlet.jsp.resources;version="[2.3,4)",
-                javax.servlet.jsp;version="[2.3,2.4)",
-                javax.servlet.jsp.el;version="[2.3,2.4)",
-                javax.servlet.jsp.tagext;version="[2.3,2.4)",
+                javax.servlet;version="[$(version;==;${servlet.api.version}),$(version;+;${servlet.api.version}))",
+                javax.servlet.resources;version="[$(version;==;${servlet.api.version}),$(version;+;${servlet.api.version}))",
+                javax.servlet.jsp.resources;version="[2.3,4.1)",
+                javax.servlet.jsp;version="[2.3,2.4.1)",
+                javax.servlet.jsp.el;version="[2.3,2.4.1)",
+                javax.servlet.jsp.tagext;version="[2.3,2.4.1)",
                 javax.servlet.jsp.jstl.core;version="1.2";resolution:=optional,
                 javax.servlet.jsp.jstl.fmt;version="1.2";resolution:=optional,
                 javax.servlet.jsp.jstl.sql;version="1.2";resolution:=optional,

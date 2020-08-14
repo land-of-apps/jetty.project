@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.http;
@@ -21,19 +21,21 @@ package org.eclipse.jetty.http;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 import org.eclipse.jetty.http.HttpParser.State;
+import org.eclipse.jetty.logging.StacklessLogging;
 import org.eclipse.jetty.toolchain.test.Net;
 import org.eclipse.jetty.util.BufferUtil;
-import org.eclipse.jetty.util.log.StacklessLogging;
 import org.hamcrest.Matchers;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import static org.eclipse.jetty.http.HttpComplianceSection.NO_FIELD_FOLDING;
+import static org.eclipse.jetty.http.HttpCompliance.Violation.CASE_INSENSITIVE_METHOD;
+import static org.eclipse.jetty.http.HttpCompliance.Violation.CASE_SENSITIVE_FIELD_NAME;
+import static org.eclipse.jetty.http.HttpCompliance.Violation.MULTILINE_FIELD_VALUE;
+import static org.eclipse.jetty.http.HttpCompliance.Violation.TRANSFER_ENCODING_WITH_CONTENT_LENGTH;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsString;
@@ -46,15 +48,9 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+// @checkstyle-disable-check : AvoidEscapedUnicodeCharactersCheck
 public class HttpParserTest
 {
-    // @checkstyle-disable-check : AvoidEscapedUnicodeCharactersCheck
-
-    static
-    {
-        HttpCompliance.CUSTOM0.sections().remove(HttpComplianceSection.NO_WS_AFTER_FIELD_NAME);
-    }
-
     /**
      * Parse until {@link State#END} state.
      * If the parser is already in the END state, then it is {@link HttpParser#reset()} and re-parsed.
@@ -83,7 +79,7 @@ public class HttpParserTest
     }
 
     @Test
-    public void httpMethodTest()
+    public void testHttpMethod()
     {
         assertNull(HttpMethod.lookAheadGet(BufferUtil.toBuffer("Wibble ")));
         assertNull(HttpMethod.lookAheadGet(BufferUtil.toBuffer("GET")));
@@ -142,7 +138,7 @@ public class HttpParserTest
         assertEquals("/999", _uriOrStatus);
         assertEquals("HTTP/0.9", _versionOrReason);
         assertEquals(-1, _headers);
-        assertThat(_complianceViolation, contains(HttpComplianceSection.NO_HTTP_0_9));
+        assertThat(_complianceViolation, contains(HttpCompliance.Violation.HTTP_0_9));
     }
 
     @Test
@@ -171,7 +167,7 @@ public class HttpParserTest
         assertEquals("/222", _uriOrStatus);
         assertEquals("HTTP/0.9", _versionOrReason);
         assertEquals(-1, _headers);
-        assertThat(_complianceViolation, contains(HttpComplianceSection.NO_HTTP_0_9));
+        assertThat(_complianceViolation, contains(HttpCompliance.Violation.HTTP_0_9));
     }
 
     @Test
@@ -316,7 +312,7 @@ public class HttpParserTest
         assertEquals("value extra", _val[1]);
         assertEquals("Name2", _hdr[2]);
         assertEquals("value2", _val[2]);
-        assertThat(_complianceViolation, contains(NO_FIELD_FOLDING, NO_FIELD_FOLDING));
+        assertThat(_complianceViolation, contains(MULTILINE_FIELD_VALUE, MULTILINE_FIELD_VALUE));
     }
 
     @Test
@@ -334,7 +330,7 @@ public class HttpParserTest
         parseAll(parser, buffer);
 
         assertThat(_bad, Matchers.notNullValue());
-        assertThat(_bad, containsString("Header Folding"));
+        assertThat(_bad, containsString("Line Folding not supported"));
         assertThat(_complianceViolation, Matchers.empty());
     }
 
@@ -451,74 +447,6 @@ public class HttpParserTest
         assertEquals("Name1", _hdr[2]);
         assertEquals("", _val[2]);
         assertEquals(2, _headers);
-    }
-
-    @Test
-    public void testSpaceinNameCustom0()
-    {
-        ByteBuffer buffer = BufferUtil.toBuffer(
-            "GET / HTTP/1.0\r\n" +
-                "Host: localhost\r\n" +
-                "Name with space: value\r\n" +
-                "Other: value\r\n" +
-                "\r\n");
-
-        HttpParser.RequestHandler handler = new Handler();
-        HttpParser parser = new HttpParser(handler, HttpCompliance.CUSTOM0);
-        parseAll(parser, buffer);
-
-        assertThat(_bad, containsString("Illegal character"));
-        assertThat(_complianceViolation, contains(HttpComplianceSection.NO_WS_AFTER_FIELD_NAME));
-    }
-
-    @Test
-    public void testNoColonCustom0()
-    {
-        ByteBuffer buffer = BufferUtil.toBuffer(
-            "GET / HTTP/1.0\r\n" +
-                "Host: localhost\r\n" +
-                "Name \r\n" +
-                "Other: value\r\n" +
-                "\r\n");
-
-        HttpParser.RequestHandler handler = new Handler();
-        HttpParser parser = new HttpParser(handler, HttpCompliance.CUSTOM0);
-        parseAll(parser, buffer);
-
-        assertThat(_bad, containsString("Illegal character"));
-        assertThat(_complianceViolation, contains(HttpComplianceSection.NO_WS_AFTER_FIELD_NAME));
-    }
-
-    @Test
-    public void testTrailingSpacesInHeaderNameInCustom0Mode()
-    {
-        ByteBuffer buffer = BufferUtil.toBuffer(
-            "HTTP/1.1 204 No Content\r\n" +
-                "Access-Control-Allow-Headers : Origin\r\n" +
-                "Other\t : value\r\n" +
-                "\r\n");
-
-        HttpParser.ResponseHandler handler = new Handler();
-        HttpParser parser = new HttpParser(handler, -1, HttpCompliance.CUSTOM0);
-        parseAll(parser, buffer);
-
-        assertTrue(_headerCompleted);
-        assertTrue(_messageCompleted);
-
-        assertEquals("HTTP/1.1", _methodOrVersion);
-        assertEquals("204", _uriOrStatus);
-        assertEquals("No Content", _versionOrReason);
-        assertNull(_content);
-
-        assertEquals(1, _headers);
-        System.out.println(Arrays.asList(_hdr));
-        System.out.println(Arrays.asList(_val));
-        assertEquals("Access-Control-Allow-Headers", _hdr[0]);
-        assertEquals("Origin", _val[0]);
-        assertEquals("Other", _hdr[1]);
-        assertEquals("value", _val[1]);
-
-        assertThat(_complianceViolation, contains(HttpComplianceSection.NO_WS_AFTER_FIELD_NAME, HttpComplianceSection.NO_WS_AFTER_FIELD_NAME));
     }
 
     @Test
@@ -883,7 +811,7 @@ public class HttpParserTest
         parseAll(parser, buffer);
         assertNull(_bad);
         assertEquals("GET", _methodOrVersion);
-        assertThat(_complianceViolation, contains(HttpComplianceSection.METHOD_CASE_SENSITIVE));
+        assertThat(_complianceViolation, contains(CASE_INSENSITIVE_METHOD));
     }
 
     @Test
@@ -935,6 +863,7 @@ public class HttpParserTest
                 "\r\n");
         HttpParser.RequestHandler handler = new Handler();
         HttpParser parser = new HttpParser(handler, -1, HttpCompliance.LEGACY);
+        parser.setHeaderCacheCaseSensitive(true);
         parseAll(parser, buffer);
         assertNull(_bad);
         assertEquals("GET", _methodOrVersion);
@@ -945,7 +874,7 @@ public class HttpParserTest
         assertEquals("cOnNeCtIoN", _hdr[1]);
         assertEquals("ClOsE", _val[1]);
         assertEquals(1, _headers);
-        assertThat(_complianceViolation, contains(HttpComplianceSection.FIELD_NAME_CASE_INSENSITIVE, HttpComplianceSection.FIELD_NAME_CASE_INSENSITIVE, HttpComplianceSection.CASE_INSENSITIVE_FIELD_VALUE_CACHE));
+        assertThat(_complianceViolation, contains(CASE_SENSITIVE_FIELD_NAME, CASE_SENSITIVE_FIELD_NAME));
     }
 
     @Test
@@ -1935,7 +1864,7 @@ public class HttpParserTest
         assertTrue(_headerCompleted);
         assertTrue(_messageCompleted);
 
-        assertThat(_complianceViolation, contains(HttpComplianceSection.TRANSFER_ENCODING_WITH_CONTENT_LENGTH));
+        assertThat(_complianceViolation, contains(TRANSFER_ENCODING_WITH_CONTENT_LENGTH));
     }
 
     @Test
@@ -1964,7 +1893,7 @@ public class HttpParserTest
         assertTrue(_headerCompleted);
         assertTrue(_messageCompleted);
 
-        assertThat(_complianceViolation, contains(HttpComplianceSection.TRANSFER_ENCODING_WITH_CONTENT_LENGTH));
+        assertThat(_complianceViolation, contains(TRANSFER_ENCODING_WITH_CONTENT_LENGTH));
     }
 
     @Test
@@ -2919,9 +2848,9 @@ public class HttpParserTest
     private boolean _headerCompleted;
     private boolean _contentCompleted;
     private boolean _messageCompleted;
-    private final List<HttpComplianceSection> _complianceViolation = new ArrayList<>();
+    private final List<ComplianceViolation> _complianceViolation = new ArrayList<>();
 
-    private class Handler implements HttpParser.RequestHandler, HttpParser.ResponseHandler, HttpParser.ComplianceHandler
+    private class Handler implements HttpParser.RequestHandler, HttpParser.ResponseHandler, ComplianceViolation.Listener
     {
         @Override
         public boolean content(ByteBuffer ref)
@@ -2935,7 +2864,7 @@ public class HttpParserTest
         }
 
         @Override
-        public boolean startRequest(String method, String uri, HttpVersion version)
+        public void startRequest(String method, String uri, HttpVersion version)
         {
             _fields.clear();
             _trailers.clear();
@@ -2948,7 +2877,6 @@ public class HttpParserTest
             _messageCompleted = false;
             _headerCompleted = false;
             _early = false;
-            return false;
         }
 
         @Override
@@ -3002,7 +2930,7 @@ public class HttpParserTest
         }
 
         @Override
-        public boolean startResponse(HttpVersion version, int status, String reason)
+        public void startResponse(HttpVersion version, int status, String reason)
         {
             _fields.clear();
             _trailers.clear();
@@ -3014,7 +2942,6 @@ public class HttpParserTest
             _val = new String[10];
             _messageCompleted = false;
             _headerCompleted = false;
-            return false;
         }
 
         @Override
@@ -3024,13 +2951,7 @@ public class HttpParserTest
         }
 
         @Override
-        public int getHeaderCacheSize()
-        {
-            return 1024;
-        }
-
-        @Override
-        public void onComplianceViolation(HttpCompliance compliance, HttpComplianceSection violation, String reason)
+        public void onComplianceViolation(ComplianceViolation.Mode mode, ComplianceViolation violation, String reason)
         {
             _complianceViolation.add(violation);
         }

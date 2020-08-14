@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.http2.client.http;
@@ -21,34 +21,43 @@ package org.eclipse.jetty.http2.client.http;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayDeque;
-import java.util.Collections;
 import java.util.List;
 import java.util.Queue;
 import java.util.function.BiFunction;
 
 import org.eclipse.jetty.client.HttpChannel;
+import org.eclipse.jetty.client.HttpConversation;
 import org.eclipse.jetty.client.HttpExchange;
 import org.eclipse.jetty.client.HttpReceiver;
 import org.eclipse.jetty.client.HttpRequest;
 import org.eclipse.jetty.client.HttpResponse;
+import org.eclipse.jetty.client.HttpUpgrader;
 import org.eclipse.jetty.client.api.Request;
 import org.eclipse.jetty.client.api.Response;
 import org.eclipse.jetty.http.HttpField;
 import org.eclipse.jetty.http.HttpFields;
+import org.eclipse.jetty.http.HttpMethod;
 import org.eclipse.jetty.http.HttpStatus;
 import org.eclipse.jetty.http.MetaData;
 import org.eclipse.jetty.http2.ErrorCode;
+import org.eclipse.jetty.http2.HTTP2Channel;
 import org.eclipse.jetty.http2.IStream;
 import org.eclipse.jetty.http2.api.Stream;
 import org.eclipse.jetty.http2.frames.DataFrame;
 import org.eclipse.jetty.http2.frames.HeadersFrame;
 import org.eclipse.jetty.http2.frames.PushPromiseFrame;
 import org.eclipse.jetty.http2.frames.ResetFrame;
+import org.eclipse.jetty.io.EndPoint;
 import org.eclipse.jetty.util.BufferUtil;
 import org.eclipse.jetty.util.Callback;
+import org.eclipse.jetty.util.thread.AutoLock;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-public class HttpReceiverOverHTTP2 extends HttpReceiver implements Stream.Listener
+public class HttpReceiverOverHTTP2 extends HttpReceiver implements HTTP2Channel.Client
 {
+    private static final Logger LOG = LoggerFactory.getLogger(HttpReceiverOverHTTP2.class);
+
     private final ContentNotifier contentNotifier = new ContentNotifier(this);
 
     public HttpReceiverOverHTTP2(HttpChannel channel)
@@ -75,8 +84,7 @@ public class HttpReceiverOverHTTP2 extends HttpReceiver implements Stream.Listen
         contentNotifier.reset();
     }
 
-    @Override
-    public void onHeaders(Stream stream, HeadersFrame frame)
+    void onHeaders(Stream stream, HeadersFrame frame)
     {
         HttpExchange exchange = getHttpExchange();
         if (exchange == null)
@@ -96,6 +104,23 @@ public class HttpReceiverOverHTTP2 extends HttpReceiver implements Stream.Listen
                 {
                     if (!responseHeader(exchange, header))
                         return;
+                }
+
+                HttpRequest httpRequest = exchange.getRequest();
+                if (HttpMethod.CONNECT.is(httpRequest.getMethod()) && httpResponse.getStatus() == HttpStatus.OK_200)
+                {
+                    ClientHTTP2StreamEndPoint endPoint = new ClientHTTP2StreamEndPoint((IStream)stream);
+                    long idleTimeout = httpRequest.getIdleTimeout();
+                    if (idleTimeout > 0)
+                        endPoint.setIdleTimeout(idleTimeout);
+                    if (LOG.isDebugEnabled())
+                        LOG.debug("Successful HTTP2 tunnel on {} via {}", stream, endPoint);
+                    ((IStream)stream).setAttachment(endPoint);
+                    HttpConversation conversation = httpRequest.getConversation();
+                    conversation.setAttribute(EndPoint.class.getName(), endPoint);
+                    HttpUpgrader upgrader = (HttpUpgrader)conversation.getAttribute(HttpUpgrader.class.getName());
+                    if (upgrader != null)
+                        upgrade(upgrader, httpResponse, endPoint);
                 }
 
                 if (responseHeaders(exchange))
@@ -127,15 +152,26 @@ public class HttpReceiverOverHTTP2 extends HttpReceiver implements Stream.Listen
         }
     }
 
-    @Override
-    public Stream.Listener onPush(Stream stream, PushPromiseFrame frame)
+    private void upgrade(HttpUpgrader upgrader, HttpResponse response, EndPoint endPoint)
+    {
+        try
+        {
+            upgrader.upgrade(response, endPoint, Callback.from(Callback.NOOP::succeeded, this::responseFailure));
+        }
+        catch (Throwable x)
+        {
+            responseFailure(x);
+        }
+    }
+
+    Stream.Listener onPush(Stream stream, PushPromiseFrame frame)
     {
         HttpExchange exchange = getHttpExchange();
         if (exchange == null)
             return null;
 
         HttpRequest request = exchange.getRequest();
-        MetaData.Request metaData = (MetaData.Request)frame.getMetaData();
+        MetaData.Request metaData = frame.getMetaData();
         HttpRequest pushRequest = (HttpRequest)getHttpDestination().getHttpClient().newRequest(metaData.getURIString());
         // TODO: copy PUSH_PROMISE headers into pushRequest.
 
@@ -146,8 +182,7 @@ public class HttpReceiverOverHTTP2 extends HttpReceiver implements Stream.Listen
             if (listener != null)
             {
                 HttpChannelOverHTTP2 pushChannel = getHttpChannel().getHttpConnection().acquireHttpChannel();
-                List<Response.ResponseListener> listeners = Collections.singletonList(listener);
-                HttpExchange pushExchange = new HttpExchange(getHttpDestination(), pushRequest, listeners);
+                HttpExchange pushExchange = new HttpExchange(getHttpDestination(), pushRequest, List.of(listener));
                 pushChannel.associate(pushExchange);
                 pushChannel.setStream(stream);
                 // TODO: idle timeout ?
@@ -162,7 +197,7 @@ public class HttpReceiverOverHTTP2 extends HttpReceiver implements Stream.Listen
     }
 
     @Override
-    public void onData(Stream stream, DataFrame frame, Callback callback)
+    public void onData(DataFrame frame, Callback callback)
     {
         HttpExchange exchange = getHttpExchange();
         if (exchange == null)
@@ -175,8 +210,7 @@ public class HttpReceiverOverHTTP2 extends HttpReceiver implements Stream.Listen
         }
     }
 
-    @Override
-    public void onReset(Stream stream, ResetFrame frame)
+    void onReset(Stream stream, ResetFrame frame)
     {
         HttpExchange exchange = getHttpExchange();
         if (exchange == null)
@@ -186,23 +220,22 @@ public class HttpReceiverOverHTTP2 extends HttpReceiver implements Stream.Listen
     }
 
     @Override
-    public boolean onIdleTimeout(Stream stream, Throwable x)
+    public boolean onTimeout(Throwable failure)
     {
         HttpExchange exchange = getHttpExchange();
         if (exchange == null)
             return false;
-        return !exchange.abort(x);
+        return !exchange.abort(failure);
     }
 
     @Override
-    public void onFailure(Stream stream, int error, String reason, Throwable failure, Callback callback)
+    public void onFailure(Throwable failure, Callback callback)
     {
         responseFailure(failure);
         callback.succeeded();
     }
 
-    @Override
-    public void onClosed(Stream stream)
+    void onClosed(Stream stream)
     {
         getHttpChannel().onStreamClosed((IStream)stream);
     }
@@ -214,6 +247,7 @@ public class HttpReceiverOverHTTP2 extends HttpReceiver implements Stream.Listen
 
     private class ContentNotifier
     {
+        private final AutoLock lock = new AutoLock();
         private final Queue<DataInfo> queue = new ArrayDeque<>();
         private final HttpReceiverOverHTTP2 receiver;
         private DataInfo dataInfo;
@@ -237,7 +271,7 @@ public class HttpReceiverOverHTTP2 extends HttpReceiver implements Stream.Listen
 
         private void enqueue(DataInfo dataInfo)
         {
-            synchronized (this)
+            try (AutoLock l = lock.lock())
             {
                 queue.offer(dataInfo);
             }
@@ -253,7 +287,7 @@ public class HttpReceiverOverHTTP2 extends HttpReceiver implements Stream.Listen
                 return;
 
             // Process only if there is demand.
-            synchronized (this)
+            try (AutoLock l = lock.lock())
             {
                 if (!resume && demand() <= 0)
                 {
@@ -277,7 +311,7 @@ public class HttpReceiverOverHTTP2 extends HttpReceiver implements Stream.Listen
                     }
                 }
 
-                synchronized (this)
+                try (AutoLock l = lock.lock())
                 {
                     dataInfo = queue.poll();
                     if (LOG.isDebugEnabled())
@@ -315,7 +349,7 @@ public class HttpReceiverOverHTTP2 extends HttpReceiver implements Stream.Listen
 
         private boolean active(boolean resume)
         {
-            synchronized (this)
+            try (AutoLock l = lock.lock())
             {
                 if (active)
                 {
@@ -348,7 +382,7 @@ public class HttpReceiverOverHTTP2 extends HttpReceiver implements Stream.Listen
          */
         private boolean stall()
         {
-            synchronized (this)
+            try (AutoLock l = lock.lock())
             {
                 if (resume)
                 {
@@ -368,7 +402,7 @@ public class HttpReceiverOverHTTP2 extends HttpReceiver implements Stream.Listen
         private void reset()
         {
             dataInfo = null;
-            synchronized (this)
+            try (AutoLock l = lock.lock())
             {
                 queue.clear();
                 active = false;

@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.server;
@@ -31,6 +31,7 @@ import org.eclipse.jetty.http.BadMessageException;
 import org.eclipse.jetty.http.HttpField;
 import org.eclipse.jetty.http.HttpHeader;
 import org.eclipse.jetty.http.HttpScheme;
+import org.eclipse.jetty.http.HttpURI;
 import org.eclipse.jetty.http.PreEncodedHttpField;
 import org.eclipse.jetty.io.EndPoint;
 import org.eclipse.jetty.io.ssl.SslConnection;
@@ -39,11 +40,11 @@ import org.eclipse.jetty.util.Attributes;
 import org.eclipse.jetty.util.StringUtil;
 import org.eclipse.jetty.util.TypeUtil;
 import org.eclipse.jetty.util.annotation.Name;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
 import org.eclipse.jetty.util.ssl.SniX509ExtendedKeyManager;
 import org.eclipse.jetty.util.ssl.SslContextFactory;
 import org.eclipse.jetty.util.ssl.X509;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * <p>Customizer that extracts the attribute from an {@link SSLContext}
@@ -52,7 +53,7 @@ import org.eclipse.jetty.util.ssl.X509;
  */
 public class SecureRequestCustomizer implements HttpConfiguration.Customizer
 {
-    private static final Logger LOG = Log.getLogger(SecureRequestCustomizer.class);
+    private static final Logger LOG = LoggerFactory.getLogger(SecureRequestCustomizer.class);
     public static final String JAVAX_SERVLET_REQUEST_X_509_CERTIFICATE = "javax.servlet.request.X509Certificate";
     public static final String JAVAX_SERVLET_REQUEST_CIPHER_SUITE = "javax.servlet.request.cipher_suite";
     public static final String JAVAX_SERVLET_REQUEST_KEY_SIZE = "javax.servlet.request.key_size";
@@ -209,34 +210,17 @@ public class SecureRequestCustomizer implements HttpConfiguration.Customizer
             SSLEngine sslEngine = sslConnection.getSSLEngine();
             customize(sslEngine, request);
 
-            if (request.getHttpURI().getScheme() == null)
-                request.setScheme(HttpScheme.HTTPS.asString());
+            request.setHttpURI(HttpURI.build(request.getHttpURI()).scheme(HttpScheme.HTTPS));
         }
         else if (endp instanceof ProxyConnectionFactory.ProxyEndPoint)
         {
             ProxyConnectionFactory.ProxyEndPoint proxy = (ProxyConnectionFactory.ProxyEndPoint)endp;
             if (request.getHttpURI().getScheme() == null && proxy.getAttribute(ProxyConnectionFactory.TLS_VERSION) != null)
-                request.setScheme(HttpScheme.HTTPS.asString());
+                request.setHttpURI(HttpURI.build(request.getHttpURI()).scheme(HttpScheme.HTTPS));
         }
 
         if (HttpScheme.HTTPS.is(request.getScheme()))
             customizeSecure(request);
-    }
-
-    /**
-     * Customizes the request attributes for general secure settings.
-     * The default impl calls {@link Request#setSecure(boolean)} with true
-     * and sets a response header if the Strict-Transport-Security options
-     * are set.
-     *
-     * @param request the request being customized
-     */
-    protected void customizeSecure(Request request)
-    {
-        request.setSecure(true);
-
-        if (_stsField != null)
-            request.getResponse().getHttpFields().add(_stsField);
     }
 
     /**
@@ -281,6 +265,22 @@ public class SecureRequestCustomizer implements HttpConfiguration.Customizer
         }
 
         request.setAttributes(new SslAttributes(request, sslSession, request.getAttributes()));
+    }
+    
+    /**
+     * Customizes the request attributes for general secure settings.
+     * The default impl calls {@link Request#setSecure(boolean)} with true
+     * and sets a response header if the Strict-Transport-Security options
+     * are set.
+     *
+     * @param request the request being customized
+     */
+    protected void customizeSecure(Request request)
+    {
+        request.setSecure(true);
+
+        if (_stsField != null)
+            request.getResponse().getHttpFields().add(_stsField);
     }
 
     private X509Certificate[] getCertChain(Connector connector, SSLSession sslSession)

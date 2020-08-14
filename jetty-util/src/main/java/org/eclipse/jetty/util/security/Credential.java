@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.util.security;
@@ -21,11 +21,15 @@ package org.eclipse.jetty.util.security;
 import java.io.Serializable;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.util.List;
 import java.util.ServiceLoader;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.eclipse.jetty.util.TypeUtil;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
+import org.eclipse.jetty.util.thread.AutoLock;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Credentials. The Credential class represents an abstract mechanism for checking authentication credentials. A credential instance either represents a secret,
@@ -41,8 +45,10 @@ import org.eclipse.jetty.util.log.Logger;
 public abstract class Credential implements Serializable
 {
     private static final long serialVersionUID = -7760551052768181572L;
-    private static final Logger LOG = Log.getLogger(Credential.class);
-    private static final ServiceLoader<CredentialProvider> CREDENTIAL_PROVIDER_LOADER = ServiceLoader.load(CredentialProvider.class);
+    private static final Logger LOG = LoggerFactory.getLogger(Credential.class);
+    private static final List<CredentialProvider> CREDENTIAL_PROVIDERS = TypeUtil.serviceProviderStream(ServiceLoader.load(CredentialProvider.class))
+        .flatMap(p -> Stream.of(p.get()))
+        .collect(Collectors.toList());
 
     /**
      * Check a credential
@@ -68,7 +74,7 @@ public abstract class Credential implements Serializable
         if (credential.startsWith(MD5.__TYPE))
             return new MD5(credential);
 
-        for (CredentialProvider cp : CREDENTIAL_PROVIDER_LOADER)
+        for (CredentialProvider cp : CREDENTIAL_PROVIDERS)
         {
             if (credential.startsWith(cp.getPrefix()))
             {
@@ -180,7 +186,7 @@ public abstract class Credential implements Serializable
     {
         private static final long serialVersionUID = 5533846540822684240L;
         private static final String __TYPE = "MD5:";
-        private static final Object __md5Lock = new Object();
+        private static final AutoLock __md5Lock = new AutoLock();
         private static MessageDigest __md;
 
         private final byte[] _digest;
@@ -206,7 +212,7 @@ public abstract class Credential implements Serializable
                 if (credentials instanceof Password || credentials instanceof String)
                 {
                     byte[] digest;
-                    synchronized (__md5Lock)
+                    try (AutoLock l = __md5Lock.lock())
                     {
                         if (__md == null)
                             __md = MessageDigest.getInstance("MD5");
@@ -234,7 +240,7 @@ public abstract class Credential implements Serializable
             }
             catch (Exception e)
             {
-                LOG.warn(e);
+                LOG.warn("Failed message digest", e);
                 return false;
             }
         }
@@ -252,7 +258,7 @@ public abstract class Credential implements Serializable
             try
             {
                 byte[] digest;
-                synchronized (__md5Lock)
+                try (AutoLock l = __md5Lock.lock())
                 {
                     if (__md == null)
                     {
@@ -262,7 +268,7 @@ public abstract class Credential implements Serializable
                         }
                         catch (Exception e)
                         {
-                            LOG.warn(e);
+                            LOG.warn("Unable to access MD5 message digest", e);
                             return null;
                         }
                     }
@@ -276,7 +282,7 @@ public abstract class Credential implements Serializable
             }
             catch (Exception e)
             {
-                LOG.warn(e);
+                LOG.warn("Message Digest failure", e);
                 return null;
             }
         }

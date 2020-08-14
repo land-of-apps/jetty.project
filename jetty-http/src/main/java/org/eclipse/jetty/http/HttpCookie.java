@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.http;
@@ -21,18 +21,18 @@ package org.eclipse.jetty.http;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
-import javax.servlet.ServletContext;
 
+import org.eclipse.jetty.util.Attributes;
 import org.eclipse.jetty.util.QuotedStringTokenizer;
 import org.eclipse.jetty.util.StringUtil;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 // TODO consider replacing this with java.net.HttpCookie (once it supports RFC6265)
 public class HttpCookie
 {
-    private static final Logger LOG = Log.getLogger(HttpCookie.class);
-
+    private static final Logger LOG = LoggerFactory.getLogger(HttpCookie.class);
+    
     private static final String __COOKIE_DELIM = "\",;\\ \t";
     private static final String __01Jan1970_COOKIE = DateGenerator.formatCookieDate(0).trim();
 
@@ -285,15 +285,11 @@ public class HttpCookie
 
     public String getSetCookie(CookieCompliance compliance)
     {
-        switch (compliance)
-        {
-            case RFC2965:
-                return getRFC2965SetCookie();
-            case RFC6265:
-                return getRFC6265SetCookie();
-            default:
-                throw new IllegalStateException();
-        }
+        if (compliance == CookieCompliance.RFC6265)
+            return getRFC6265SetCookie();
+        if (compliance == CookieCompliance.RFC2965)
+            return getRFC2965SetCookie();
+        throw new IllegalStateException();
     }
 
     public String getRFC2965SetCookie()
@@ -462,16 +458,16 @@ public class HttpCookie
     /**
      * Get the default value for SameSite cookie attribute, if one
      * has been set for the given context.
-     *
-     * @param context the context to check for default SameSite value
+     * 
+     * @param contextAttributes the context to check for default SameSite value
      * @return the default SameSite value or null if one does not exist
      * @throws IllegalStateException if the default value is not a permitted value
      */
-    public static SameSite getSameSiteDefault(ServletContext context)
+    public static SameSite getSameSiteDefault(Attributes contextAttributes)
     {
-        if (context == null)
+        if (contextAttributes == null)
             return null;
-        Object o = context.getAttribute(SAME_SITE_DEFAULT_ATTRIBUTE);
+        Object o = contextAttributes.getAttribute(SAME_SITE_DEFAULT_ATTRIBUTE);
         if (o == null)
         {
             if (LOG.isDebugEnabled())
@@ -485,7 +481,7 @@ public class HttpCookie
         try
         {
             SameSite samesite = Enum.valueOf(SameSite.class, o.toString().trim().toUpperCase(Locale.ENGLISH));
-            context.setAttribute(SAME_SITE_DEFAULT_ATTRIBUTE, samesite);
+            contextAttributes.setAttribute(SAME_SITE_DEFAULT_ATTRIBUTE, samesite);
             return samesite;
         }
         catch (Exception e)

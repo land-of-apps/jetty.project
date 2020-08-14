@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.server;
@@ -28,16 +28,17 @@ import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
-import org.eclipse.jetty.http.HttpTester;
+import org.eclipse.jetty.http.tools.HttpTester;
 import org.eclipse.jetty.server.LocalConnector.LocalEndPoint;
 import org.eclipse.jetty.server.handler.AbstractHandler;
 import org.eclipse.jetty.util.BufferUtil;
-import org.eclipse.jetty.util.log.Log;
 import org.hamcrest.Matcher;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
@@ -45,6 +46,7 @@ import static org.junit.jupiter.api.Assertions.fail;
 
 public class NotAcceptingTest
 {
+    private static final Logger LOG = LoggerFactory.getLogger(NotAcceptingTest.class);
     private final long idleTimeout = 2000;
     Server server;
     LocalConnector localConnector;
@@ -367,7 +369,7 @@ public class NotAcceptingTest
 
         server.start();
 
-        Log.getLogger(ConnectionLimit.class).debug("CONNECT:");
+        LOG.debug("CONNECT:");
         try (
             LocalEndPoint local0 = localConnector.connect();
             LocalEndPoint local1 = localConnector.connect();
@@ -382,7 +384,7 @@ public class NotAcceptingTest
         {
             String expectedContent = "Hello" + System.lineSeparator();
 
-            Log.getLogger(ConnectionLimit.class).debug("LOCAL:");
+            LOG.debug("LOCAL:");
             for (LocalEndPoint client : new LocalEndPoint[]{local0, local1, local2})
             {
                 client.addInputAndExecute(BufferUtil.toBuffer("GET /test HTTP/1.1\r\nHost:localhost\r\n\r\n"));
@@ -391,7 +393,7 @@ public class NotAcceptingTest
                 assertThat(response.getContent(), is(expectedContent));
             }
 
-            Log.getLogger(ConnectionLimit.class).debug("NETWORK:");
+            LOG.debug("NETWORK:");
             for (Socket client : new Socket[]{blocking0, blocking1, blocking2, async0, async1, async2})
             {
                 HttpTester.Input in = HttpTester.from(client.getInputStream());

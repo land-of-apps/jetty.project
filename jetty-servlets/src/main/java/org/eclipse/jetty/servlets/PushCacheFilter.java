@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.servlets;
@@ -23,6 +23,7 @@ import java.util.ArrayDeque;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
@@ -38,22 +39,19 @@ import javax.servlet.ServletException;
 import javax.servlet.ServletRequest;
 import javax.servlet.ServletResponse;
 import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.PushBuilder;
 
-import org.eclipse.jetty.http.HttpField;
-import org.eclipse.jetty.http.HttpFields;
 import org.eclipse.jetty.http.HttpHeader;
 import org.eclipse.jetty.http.HttpMethod;
 import org.eclipse.jetty.http.HttpScheme;
 import org.eclipse.jetty.http.HttpURI;
 import org.eclipse.jetty.http.HttpVersion;
-import org.eclipse.jetty.server.PushBuilder;
-import org.eclipse.jetty.server.Request;
 import org.eclipse.jetty.util.StringUtil;
 import org.eclipse.jetty.util.annotation.ManagedAttribute;
 import org.eclipse.jetty.util.annotation.ManagedObject;
 import org.eclipse.jetty.util.annotation.ManagedOperation;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * <p>A filter that builds a cache of secondary resources associated
@@ -77,7 +75,7 @@ import org.eclipse.jetty.util.log.Logger;
 @ManagedObject("Push cache based on the HTTP 'Referer' header")
 public class PushCacheFilter implements Filter
 {
-    private static final Logger LOG = Log.getLogger(PushCacheFilter.class);
+    private static final Logger LOG = LoggerFactory.getLogger(PushCacheFilter.class);
 
     private final Set<Integer> _ports = new HashSet<>();
     private final Set<String> _hosts = new HashSet<>();
@@ -122,11 +120,11 @@ public class PushCacheFilter implements Filter
     public void doFilter(ServletRequest req, ServletResponse resp, FilterChain chain) throws IOException, ServletException
     {
         HttpServletRequest request = (HttpServletRequest)req;
-        Request jettyRequest = Request.getBaseRequest(request);
 
+        PushBuilder pushBuilder = request.newPushBuilder();
         if (HttpVersion.fromString(request.getProtocol()).getVersion() < 20 ||
             !HttpMethod.GET.is(request.getMethod()) ||
-            !jettyRequest.isPushSupported())
+            pushBuilder == null)
         {
             chain.doFilter(req, resp);
             return;
@@ -134,33 +132,22 @@ public class PushCacheFilter implements Filter
 
         long now = System.nanoTime();
 
-        // Iterating over fields is more efficient than multiple gets
-        HttpFields fields = jettyRequest.getHttpFields();
         boolean conditional = false;
         String referrer = null;
-        loop:
-        for (int i = 0; i < fields.size(); i++)
+        List<String> headerNames = Collections.list(request.getHeaderNames());
+        for (String headerName : headerNames)
         {
-            HttpField field = fields.getField(i);
-            HttpHeader header = field.getHeader();
-            if (header == null)
-                continue;
-
-            switch (header)
+            if (HttpHeader.IF_MATCH.is(headerName) ||
+                HttpHeader.IF_MODIFIED_SINCE.is(headerName) ||
+                HttpHeader.IF_NONE_MATCH.is(headerName) ||
+                HttpHeader.IF_UNMODIFIED_SINCE.is(headerName))
             {
-                case IF_MATCH:
-                case IF_MODIFIED_SINCE:
-                case IF_NONE_MATCH:
-                case IF_UNMODIFIED_SINCE:
-                    conditional = true;
-                    break loop;
-
-                case REFERER:
-                    referrer = field.getValue();
-                    break;
-
-                default:
-                    break;
+                conditional = true;
+                break;
+            }
+            else if (HttpHeader.REFERER.is(headerName))
+            {
+                referrer = request.getHeader(headerName);
             }
         }
 
@@ -173,7 +160,7 @@ public class PushCacheFilter implements Filter
             path += "?" + query;
         if (referrer != null)
         {
-            HttpURI referrerURI = new HttpURI(referrer);
+            HttpURI referrerURI = HttpURI.from(referrer);
             String host = referrerURI.getHost();
             int port = referrerURI.getPort();
             if (port <= 0)
@@ -275,8 +262,6 @@ public class PushCacheFilter implements Filter
         // Push associated resources.
         if (!conditional && !primaryResource._associated.isEmpty())
         {
-            PushBuilder pushBuilder = jettyRequest.getPushBuilder();
-
             // Breadth-first push of associated resources.
             Queue<PrimaryResource> queue = new ArrayDeque<>();
             queue.offer(primaryResource);

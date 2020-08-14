@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.http2;
@@ -29,25 +29,28 @@ import org.eclipse.jetty.http2.frames.DataFrame;
 import org.eclipse.jetty.http2.parser.Parser;
 import org.eclipse.jetty.io.AbstractConnection;
 import org.eclipse.jetty.io.ByteBufferPool;
+import org.eclipse.jetty.io.Connection;
 import org.eclipse.jetty.io.EndPoint;
 import org.eclipse.jetty.io.RetainableByteBuffer;
 import org.eclipse.jetty.io.WriteFlusher;
 import org.eclipse.jetty.util.BufferUtil;
 import org.eclipse.jetty.util.Callback;
 import org.eclipse.jetty.util.component.LifeCycle;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
+import org.eclipse.jetty.util.thread.AutoLock;
 import org.eclipse.jetty.util.thread.ExecutionStrategy;
 import org.eclipse.jetty.util.thread.TryExecutor;
 import org.eclipse.jetty.util.thread.strategy.EatWhatYouKill;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-public class HTTP2Connection extends AbstractConnection implements WriteFlusher.Listener
+public class HTTP2Connection extends AbstractConnection implements WriteFlusher.Listener, Connection.UpgradeTo
 {
-    protected static final Logger LOG = Log.getLogger(HTTP2Connection.class);
+    protected static final Logger LOG = LoggerFactory.getLogger(HTTP2Connection.class);
 
     // TODO remove this once we are sure EWYK is OK for http2
     private static final boolean PEC_MODE = Boolean.getBoolean("org.eclipse.jetty.http2.PEC_MODE");
 
+    private final AutoLock lock = new AutoLock();
     private final Queue<Runnable> tasks = new ArrayDeque<>();
     private final HTTP2Producer producer = new HTTP2Producer();
     private final AtomicLong bytesIn = new AtomicLong();
@@ -56,6 +59,8 @@ public class HTTP2Connection extends AbstractConnection implements WriteFlusher.
     private final ISession session;
     private final int bufferSize;
     private final ExecutionStrategy strategy;
+    private boolean useInputDirectByteBuffers;
+    private boolean useOutputDirectByteBuffers;
 
     public HTTP2Connection(ByteBufferPool byteBufferPool, Executor executor, EndPoint endPoint, Parser parser, ISession session, int bufferSize)
     {
@@ -93,9 +98,32 @@ public class HTTP2Connection extends AbstractConnection implements WriteFlusher.
         return parser;
     }
 
-    protected void setInputBuffer(ByteBuffer buffer)
+    @Override
+    public void onUpgradeTo(ByteBuffer buffer)
     {
+        if (LOG.isDebugEnabled())
+            LOG.debug("HTTP2 onUpgradeTo {} {}", this, BufferUtil.toDetailString(buffer));
         producer.setInputBuffer(buffer);
+    }
+
+    public boolean isUseInputDirectByteBuffers()
+    {
+        return useInputDirectByteBuffers;
+    }
+
+    public void setUseInputDirectByteBuffers(boolean useInputDirectByteBuffers)
+    {
+        this.useInputDirectByteBuffers = useInputDirectByteBuffers;
+    }
+
+    public boolean isUseOutputDirectByteBuffers()
+    {
+        return useOutputDirectByteBuffers;
+    }
+
+    public void setUseOutputDirectByteBuffers(boolean useOutputDirectByteBuffers)
+    {
+        this.useOutputDirectByteBuffers = useOutputDirectByteBuffers;
     }
 
     @Override
@@ -107,11 +135,11 @@ public class HTTP2Connection extends AbstractConnection implements WriteFlusher.
     }
 
     @Override
-    public void onClose()
+    public void onClose(Throwable cause)
     {
         if (LOG.isDebugEnabled())
             LOG.debug("HTTP2 Close {} ", this);
-        super.onClose();
+        super.onClose(cause);
 
         LifeCycle.stop(strategy);
     }
@@ -162,6 +190,14 @@ public class HTTP2Connection extends AbstractConnection implements WriteFlusher.
             produce();
     }
 
+    private void offerTask(Runnable task)
+    {
+        try (AutoLock l = lock.lock())
+        {
+            tasks.offer(task);
+        }
+    }
+
     protected void produce()
     {
         if (LOG.isDebugEnabled())
@@ -184,17 +220,9 @@ public class HTTP2Connection extends AbstractConnection implements WriteFlusher.
         session.close(ErrorCode.NO_ERROR.code, "close", Callback.NOOP);
     }
 
-    private void offerTask(Runnable task)
-    {
-        synchronized (this)
-        {
-            tasks.offer(task);
-        }
-    }
-
     private Runnable pollTask()
     {
-        synchronized (this)
+        try (AutoLock l = lock.lock())
         {
             return tasks.poll();
         }
@@ -388,7 +416,7 @@ public class HTTP2Connection extends AbstractConnection implements WriteFlusher.
     {
         private NetworkBuffer()
         {
-            super(byteBufferPool, bufferSize, false);
+            super(byteBufferPool, bufferSize, isUseInputDirectByteBuffers());
         }
 
         private void put(ByteBuffer source)

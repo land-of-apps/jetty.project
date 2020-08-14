@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.servlet;
@@ -28,7 +28,9 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import javax.servlet.DispatcherType;
 import javax.servlet.Filter;
 import javax.servlet.FilterRegistration;
@@ -60,6 +62,7 @@ import org.eclipse.jetty.server.Handler;
 import org.eclipse.jetty.server.HandlerContainer;
 import org.eclipse.jetty.server.handler.ContextHandler;
 import org.eclipse.jetty.server.handler.ErrorHandler;
+import org.eclipse.jetty.server.handler.HandlerCollection;
 import org.eclipse.jetty.server.handler.HandlerWrapper;
 import org.eclipse.jetty.server.handler.gzip.GzipHandler;
 import org.eclipse.jetty.server.session.SessionHandler;
@@ -69,8 +72,8 @@ import org.eclipse.jetty.util.StringUtil;
 import org.eclipse.jetty.util.annotation.ManagedAttribute;
 import org.eclipse.jetty.util.annotation.ManagedObject;
 import org.eclipse.jetty.util.component.LifeCycle;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Servlet Context.
@@ -88,13 +91,34 @@ import org.eclipse.jetty.util.log.Logger;
 @ManagedObject("Servlet Context Handler")
 public class ServletContextHandler extends ContextHandler
 {
-    private static final Logger LOG = Log.getLogger(ServletContextHandler.class);
+    private static final Logger LOG = LoggerFactory.getLogger(ServletContextHandler.class);
 
     public static final int SESSIONS = 1;
     public static final int SECURITY = 2;
-    public static final int GZIP = 4;
     public static final int NO_SESSIONS = 0;
     public static final int NO_SECURITY = 0;
+
+    public static ServletContextHandler getServletContextHandler(ServletContext servletContext, String purpose)
+    {
+        ContextHandler contextHandler = ContextHandler.getContextHandler(servletContext);
+        if (contextHandler == null)
+            throw new IllegalStateException("No Jetty ContextHandler, " + purpose + " unavailable");
+
+        if (!(contextHandler instanceof ServletContextHandler))
+            throw new IllegalStateException("No Jetty ServletContextHandler, " + purpose + " unavailable");
+
+        return (ServletContextHandler)contextHandler;
+    }
+
+    public static ServletContextHandler getServletContextHandler(ServletContext context)
+    {
+        ContextHandler handler = getContextHandler(context);
+        if (handler == null)
+            return null;
+        if (handler instanceof ServletContextHandler)
+            return (ServletContextHandler)handler;
+        return null;
+    }
 
     public interface ServletContainerInitializerCaller extends LifeCycle {}
 
@@ -103,7 +127,6 @@ public class ServletContextHandler extends ContextHandler
     protected SessionHandler _sessionHandler;
     protected SecurityHandler _securityHandler;
     protected ServletHandler _servletHandler;
-    protected GzipHandler _gzipHandler;
     protected int _options;
     protected JspConfigDescriptor _jspConfig;
 
@@ -146,7 +169,7 @@ public class ServletContextHandler extends ContextHandler
 
     public ServletContextHandler(HandlerContainer parent, String contextPath, SessionHandler sessionHandler, SecurityHandler securityHandler, ServletHandler servletHandler, ErrorHandler errorHandler, int options)
     {
-        super(parent, contextPath);
+        super(null, parent, contextPath);
         _options = options;
         _scontext = new Context();
         _sessionHandler = sessionHandler;
@@ -163,26 +186,43 @@ public class ServletContextHandler extends ContextHandler
             setErrorHandler(errorHandler);
     }
 
+    protected void setParent(HandlerContainer parent)
+    {
+        if (parent instanceof HandlerWrapper)
+            ((HandlerWrapper)parent).setHandler(this);
+        else if (parent instanceof HandlerCollection)
+            ((HandlerCollection)parent).addHandler(this);
+    }
+
     /**
      * Add EventListener
-     * Adds an EventListener to the list. @see org.eclipse.jetty.server.handler.ContextHandler#addEventListener().
-     * Also adds any listeners that are session related to the SessionHandler.
      *
      * @param listener the listener to add
+     * @return true if the listener was added
+     * @see HttpSessionAttributeListener
+     * @see HttpSessionActivationListener
+     * @see HttpSessionBindingListener
+     * @see HttpSessionListener
+     * @see HttpSessionIdListener
+     * @see ContextHandler#addEventListener(EventListener)
      */
     @Override
-    public void addEventListener(EventListener listener)
+    public boolean addEventListener(EventListener listener)
     {
-        super.addEventListener(listener);
-        if ((listener instanceof HttpSessionActivationListener) ||
-            (listener instanceof HttpSessionAttributeListener) ||
-            (listener instanceof HttpSessionBindingListener) ||
-            (listener instanceof HttpSessionListener) ||
-            (listener instanceof HttpSessionIdListener))
+        if (super.addEventListener(listener))
         {
-            if (_sessionHandler != null)
-                _sessionHandler.addEventListener(listener);
+            if ((listener instanceof HttpSessionActivationListener) ||
+                (listener instanceof HttpSessionAttributeListener) ||
+                (listener instanceof HttpSessionBindingListener) ||
+                (listener instanceof HttpSessionListener) ||
+                (listener instanceof HttpSessionIdListener))
+            {
+                if (_sessionHandler != null)
+                    _sessionHandler.addEventListener(listener);
+            }
+            return true;
         }
+        return false;
     }
 
     @Override
@@ -208,10 +248,8 @@ public class ServletContextHandler extends ContextHandler
         // link session handler
         if (getSessionHandler() != null)
         {
-
             while (!(handler.getHandler() instanceof SessionHandler) &&
                 !(handler.getHandler() instanceof SecurityHandler) &&
-                !(handler.getHandler() instanceof GzipHandler) &&
                 !(handler.getHandler() instanceof ServletHandler) &&
                 handler.getHandler() instanceof HandlerWrapper)
             {
@@ -227,7 +265,6 @@ public class ServletContextHandler extends ContextHandler
         if (getSecurityHandler() != null)
         {
             while (!(handler.getHandler() instanceof SecurityHandler) &&
-                !(handler.getHandler() instanceof GzipHandler) &&
                 !(handler.getHandler() instanceof ServletHandler) &&
                 handler.getHandler() instanceof HandlerWrapper)
             {
@@ -237,21 +274,6 @@ public class ServletContextHandler extends ContextHandler
             if (handler.getHandler() != _securityHandler)
                 doSetHandler(handler, _securityHandler);
             handler = _securityHandler;
-        }
-
-        // link gzip handler
-        if (getGzipHandler() != null)
-        {
-            while (!(handler.getHandler() instanceof GzipHandler) &&
-                !(handler.getHandler() instanceof ServletHandler) &&
-                handler.getHandler() instanceof HandlerWrapper)
-            {
-                handler = (HandlerWrapper)handler.getHandler();
-            }
-
-            if (handler.getHandler() != _gzipHandler)
-                doSetHandler(handler, _gzipHandler);
-            handler = _gzipHandler;
         }
 
         // link servlet handler
@@ -275,9 +297,6 @@ public class ServletContextHandler extends ContextHandler
         super.doStart();
     }
 
-    /**
-     * @see org.eclipse.jetty.server.handler.ContextHandler#doStop()
-     */
     @Override
     protected void doStop() throws Exception
     {
@@ -330,8 +349,6 @@ public class ServletContextHandler extends ContextHandler
 
     /**
      * Finish constructing handlers and link them together.
-     *
-     * @see org.eclipse.jetty.server.handler.ContextHandler#startContext()
      */
     @Override
     protected void startContext() throws Exception
@@ -399,17 +416,6 @@ public class ServletContextHandler extends ContextHandler
         if (_sessionHandler == null && (_options & SESSIONS) != 0 && !isStarted())
             _sessionHandler = newSessionHandler();
         return _sessionHandler;
-    }
-
-    /**
-     * @return Returns the gzipHandler.
-     */
-    @ManagedAttribute(value = "context gzip handler", readonly = true)
-    public GzipHandler getGzipHandler()
-    {
-        if (_gzipHandler == null && (_options & GZIP) != 0 && !isStarted())
-            _gzipHandler = new GzipHandler();
-        return _gzipHandler;
     }
 
     /**
@@ -614,16 +620,6 @@ public class ServletContextHandler extends ContextHandler
     }
 
     /**
-     * @param gzipHandler The {@link GzipHandler} to set on this context.
-     */
-    public void setGzipHandler(GzipHandler gzipHandler)
-    {
-        replaceHandler(_gzipHandler, gzipHandler);
-        _gzipHandler = gzipHandler;
-        relinkHandlers();
-    }
-
-    /**
      * @param servletHandler The servletHandler to set.
      */
     public void setServletHandler(ServletHandler servletHandler)
@@ -634,7 +630,18 @@ public class ServletContextHandler extends ContextHandler
     }
 
     /**
-     * Insert a HandlerWrapper before the first Session,Security or ServletHandler
+     * @param gzipHandler the GzipHandler for this ServletContextHandler
+     * @deprecated use {@link #insertHandler(HandlerWrapper)} instead
+     */
+    @Deprecated
+    public void setGzipHandler(GzipHandler gzipHandler)
+    {
+        insertHandler(gzipHandler);
+        LOG.warn("ServletContextHandler.setGzipHandler(GzipHandler) is deprecated, use insertHandler(HandlerWrapper) instead.");
+    }
+
+    /**
+     * Insert a HandlerWrapper before the first Session, Security or ServletHandler
      * but after any other HandlerWrappers.
      */
     @Override
@@ -644,8 +651,6 @@ public class ServletContextHandler extends ContextHandler
             setSessionHandler((SessionHandler)handler);
         else if (handler instanceof SecurityHandler)
             setSecurityHandler((SecurityHandler)handler);
-        else if (handler instanceof GzipHandler)
-            setGzipHandler((GzipHandler)handler);
         else if (handler instanceof ServletHandler)
             setServletHandler((ServletHandler)handler);
         else
@@ -687,41 +692,6 @@ public class ServletContextHandler extends ContextHandler
         return _objFactory;
     }
 
-    /**
-     * @return The decorator list used to resource inject new Filters, Servlets and EventListeners
-     * @deprecated use the {@link DecoratedObjectFactory} from getAttribute("org.eclipse.jetty.util.DecoratedObjectFactory") or {@link #getObjectFactory()} instead
-     */
-    @Deprecated
-    public List<Decorator> getDecorators()
-    {
-        List<Decorator> ret = new ArrayList<>();
-        for (org.eclipse.jetty.util.Decorator decorator : _objFactory)
-        {
-            ret.add(new LegacyDecorator(decorator));
-        }
-        return Collections.unmodifiableList(ret);
-    }
-
-    /**
-     * @param decorators The list of {@link Decorator}s
-     * @deprecated use the {@link DecoratedObjectFactory} from getAttribute("org.eclipse.jetty.util.DecoratedObjectFactory") or {@link #getObjectFactory()} instead
-     */
-    @Deprecated
-    public void setDecorators(List<Decorator> decorators)
-    {
-        _objFactory.setDecorators(decorators);
-    }
-
-    /**
-     * @param decorator The decorator to add
-     * @deprecated use the {@link DecoratedObjectFactory} from getAttribute("org.eclipse.jetty.util.DecoratedObjectFactory") or {@link #getObjectFactory()} instead
-     */
-    @Deprecated
-    public void addDecorator(Decorator decorator)
-    {
-        _objFactory.addDecorator(decorator);
-    }
-
     void destroyServlet(Servlet servlet)
     {
         _objFactory.destroy(servlet);
@@ -735,16 +705,6 @@ public class ServletContextHandler extends ContextHandler
     void destroyListener(EventListener listener)
     {
         _objFactory.destroy(listener);
-    }
-
-    public static ServletContextHandler getServletContextHandler(ServletContext context)
-    {
-        ContextHandler handler = getContextHandler(context);
-        if (handler == null)
-            return null;
-        if (handler instanceof ServletContextHandler)
-            return (ServletContextHandler)handler;
-        return null;
     }
 
     public static class JspPropertyGroup implements JspPropertyGroupDescriptor
@@ -762,9 +722,6 @@ public class ServletContextHandler extends ContextHandler
         private String _buffer;
         private String _errorOnUndeclaredNamespace;
 
-        /**
-         * @see javax.servlet.descriptor.JspPropertyGroupDescriptor#getUrlPatterns()
-         */
         @Override
         public Collection<String> getUrlPatterns()
         {
@@ -777,9 +734,6 @@ public class ServletContextHandler extends ContextHandler
                 _urlPatterns.add(s);
         }
 
-        /**
-         * @see javax.servlet.descriptor.JspPropertyGroupDescriptor#getElIgnored()
-         */
         @Override
         public String getElIgnored()
         {
@@ -791,9 +745,6 @@ public class ServletContextHandler extends ContextHandler
             _elIgnored = s;
         }
 
-        /**
-         * @see javax.servlet.descriptor.JspPropertyGroupDescriptor#getPageEncoding()
-         */
         @Override
         public String getPageEncoding()
         {
@@ -840,27 +791,18 @@ public class ServletContextHandler extends ContextHandler
             _errorOnUndeclaredNamespace = errorOnUndeclaredNamespace;
         }
 
-        /**
-         * @see javax.servlet.descriptor.JspPropertyGroupDescriptor#getScriptingInvalid()
-         */
         @Override
         public String getScriptingInvalid()
         {
             return _scriptingInvalid;
         }
 
-        /**
-         * @see javax.servlet.descriptor.JspPropertyGroupDescriptor#getIsXml()
-         */
         @Override
         public String getIsXml()
         {
             return _isXml;
         }
 
-        /**
-         * @see javax.servlet.descriptor.JspPropertyGroupDescriptor#getIncludePreludes()
-         */
         @Override
         public Collection<String> getIncludePreludes()
         {
@@ -873,9 +815,6 @@ public class ServletContextHandler extends ContextHandler
                 _includePreludes.add(prelude);
         }
 
-        /**
-         * @see javax.servlet.descriptor.JspPropertyGroupDescriptor#getIncludeCodas()
-         */
         @Override
         public Collection<String> getIncludeCodas()
         {
@@ -888,45 +827,30 @@ public class ServletContextHandler extends ContextHandler
                 _includeCodas.add(coda);
         }
 
-        /**
-         * @see javax.servlet.descriptor.JspPropertyGroupDescriptor#getDeferredSyntaxAllowedAsLiteral()
-         */
         @Override
         public String getDeferredSyntaxAllowedAsLiteral()
         {
             return _deferredSyntaxAllowedAsLiteral;
         }
 
-        /**
-         * @see javax.servlet.descriptor.JspPropertyGroupDescriptor#getTrimDirectiveWhitespaces()
-         */
         @Override
         public String getTrimDirectiveWhitespaces()
         {
             return _trimDirectiveWhitespaces;
         }
 
-        /**
-         * @see javax.servlet.descriptor.JspPropertyGroupDescriptor#getDefaultContentType()
-         */
         @Override
         public String getDefaultContentType()
         {
             return _defaultContentType;
         }
 
-        /**
-         * @see javax.servlet.descriptor.JspPropertyGroupDescriptor#getBuffer()
-         */
         @Override
         public String getBuffer()
         {
             return _buffer;
         }
 
-        /**
-         * @see javax.servlet.descriptor.JspPropertyGroupDescriptor#getErrorOnUndeclaredNamespace()
-         */
         @Override
         public String getErrorOnUndeclaredNamespace()
         {
@@ -964,9 +888,6 @@ public class ServletContextHandler extends ContextHandler
         private String _uri;
         private String _location;
 
-        /**
-         * @see javax.servlet.descriptor.TaglibDescriptor#getTaglibURI()
-         */
         @Override
         public String getTaglibURI()
         {
@@ -978,9 +899,6 @@ public class ServletContextHandler extends ContextHandler
             _uri = uri;
         }
 
-        /**
-         * @see javax.servlet.descriptor.TaglibDescriptor#getTaglibLocation()
-         */
         @Override
         public String getTaglibLocation()
         {
@@ -1008,9 +926,6 @@ public class ServletContextHandler extends ContextHandler
         {
         }
 
-        /**
-         * @see javax.servlet.descriptor.JspConfigDescriptor#getTaglibs()
-         */
         @Override
         public Collection<TaglibDescriptor> getTaglibs()
         {
@@ -1022,9 +937,6 @@ public class ServletContextHandler extends ContextHandler
             _taglibs.add(d);
         }
 
-        /**
-         * @see javax.servlet.descriptor.JspConfigDescriptor#getJspPropertyGroups()
-         */
         @Override
         public Collection<JspPropertyGroupDescriptor> getJspPropertyGroups()
         {
@@ -1055,9 +967,6 @@ public class ServletContextHandler extends ContextHandler
 
     public class Context extends ContextHandler.Context
     {
-        /*
-         * @see javax.servlet.ServletContext#getNamedDispatcher(java.lang.String)
-         */
         @Override
         public RequestDispatcher getNamedDispatcher(String name)
         {
@@ -1079,7 +988,7 @@ public class ServletContextHandler extends ContextHandler
                 throw new IllegalStateException();
 
             if (StringUtil.isBlank(name))
-                throw new IllegalStateException("Missing name");
+                throw new IllegalArgumentException("Missing name");
 
             if (!_enabled)
                 throw new UnsupportedOperationException();
@@ -1261,10 +1170,48 @@ public class ServletContextHandler extends ContextHandler
             else
                 return null; //existing completed registration for servlet name
         }
+        
+        @Override
+        public ServletRegistration.Dynamic addJspFile(String servletName, String jspFile)
+        {
+            checkDynamic(servletName);
+            
+            final ServletHandler handler = ServletContextHandler.this.getServletHandler();
+            ServletHolder holder = handler.getServlet(servletName);
+            if (holder == null)
+            {
+                //new servlet
+                holder = handler.newServletHolder(Source.JAVAX_API);
+                holder.setName(servletName);
+                holder.setForcedPath(jspFile);
+                handler.addServlet(holder);
+                return dynamicHolderAdded(holder);
+            }
+            
+            //complete a partial registration
+            if (holder.getClassName() == null && holder.getHeldClass() == null && holder.getForcedPath() == null)
+            {
+                holder.setForcedPath(jspFile);
+                return holder.getRegistration();
+            }
+            else
+                return null; //existing completed registration for servlet name
+        }
+
+        @Override
+        public String getInitParameter(String name)
+        {
+            //since servlet spec 4.0
+            Objects.requireNonNull(name);
+            return super.getInitParameter(name);
+        }
 
         @Override
         public boolean setInitParameter(String name, String value)
         {
+            //since servlet spec 4.0
+            Objects.requireNonNull(name);
+
             if (!isStarting())
                 throw new IllegalStateException();
 
@@ -1275,9 +1222,24 @@ public class ServletContextHandler extends ContextHandler
         }
 
         @Override
-        protected <T> T createInstance(Class<T> clazz) throws ServletException
+        public <T> T createInstance(Class<T> clazz) throws ServletException
         {
             return _objFactory.decorate(super.createInstance(clazz));
+        }
+
+        public <T> T createInstance(BaseHolder<T> holder) throws ServletException
+        {
+            try
+            {
+                //set a thread local
+                DecoratedObjectFactory.associateInfo(holder);
+                return createInstance(holder.getHeldClass());
+            }
+            finally
+            {
+                //unset the thread local
+                DecoratedObjectFactory.disassociateInfo();
+            }
         }
 
         public <T extends Filter> void destroyFilter(T f)
@@ -1293,6 +1255,9 @@ public class ServletContextHandler extends ContextHandler
         @Override
         public Set<SessionTrackingMode> getDefaultSessionTrackingModes()
         {
+            if (!_enabled)
+                throw new UnsupportedOperationException();
+            
             if (_sessionHandler != null)
                 return _sessionHandler.getDefaultSessionTrackingModes();
             return null;
@@ -1301,6 +1266,9 @@ public class ServletContextHandler extends ContextHandler
         @Override
         public Set<SessionTrackingMode> getEffectiveSessionTrackingModes()
         {
+            if (!_enabled)
+                throw new UnsupportedOperationException();
+            
             if (_sessionHandler != null)
                 return _sessionHandler.getEffectiveSessionTrackingModes();
             return null;
@@ -1388,6 +1356,78 @@ public class ServletContextHandler extends ContextHandler
         }
 
         @Override
+        public int getSessionTimeout()
+        {
+            if (!isStarting())
+                throw new IllegalStateException();
+            if (!_enabled)
+                throw new UnsupportedOperationException();
+
+            int timeout = -1;
+            if (_sessionHandler != null)
+            {
+                timeout = _sessionHandler.getMaxInactiveInterval();
+            }
+
+            return (int)TimeUnit.SECONDS.toMinutes(timeout);
+        }
+
+        @Override
+        public void setSessionTimeout(int sessionTimeout)
+        {
+            if (!isStarting())
+                throw new IllegalStateException();
+            if (!_enabled)
+                throw new UnsupportedOperationException();
+
+            if (_sessionHandler != null)
+            {
+                long tmp = TimeUnit.MINUTES.toSeconds(sessionTimeout);
+                if (tmp > Integer.MAX_VALUE)
+                    tmp = Integer.MAX_VALUE;
+                if (tmp < Integer.MIN_VALUE)
+                    tmp = Integer.MIN_VALUE;
+                _sessionHandler.setMaxInactiveInterval((int)tmp);
+            }
+        }
+        
+        @Override
+        public <T extends Servlet> T createServlet(Class<T> clazz) throws ServletException
+        {
+            if (!_enabled)
+                throw new UnsupportedOperationException();
+            return super.createServlet(clazz);
+        }
+
+        @Override
+        public <T extends Filter> T createFilter(Class<T> clazz) throws ServletException
+        {
+            if (!_enabled)
+                throw new UnsupportedOperationException();
+            return super.createFilter(clazz);
+        }
+        
+        @Override
+        public <T extends EventListener> T createListener(Class<T> clazz) throws ServletException
+        {
+            if (!_enabled)
+                throw new UnsupportedOperationException();
+            try
+            {
+                checkListener(clazz);
+            }
+            catch (IllegalArgumentException e)
+            {
+                //Bizarrely, according to the spec, it is NOT an error to create an instance of
+                //a ServletContextListener from inside a ServletContextListener, but it IS an error
+                //to call addListener with one!
+                if (!ServletContextListener.class.isAssignableFrom(clazz))
+                    throw e;
+            }
+            return super.createListener(clazz);
+        }
+
+        @Override
         public void addListener(String className)
         {
             if (!isStarting())
@@ -1455,42 +1495,35 @@ public class ServletContextHandler extends ContextHandler
                 throw new UnsupportedOperationException();
             addRoles(roleNames);
         }
-    }
 
-    /**
-     * Legacy Interface to decorate loaded classes.
-     * <p>
-     * Left for backwards compatibility with Weld / CDI
-     *
-     * @deprecated use new {@link org.eclipse.jetty.util.Decorator}
-     */
-    @Deprecated
-    public interface Decorator extends org.eclipse.jetty.util.Decorator
-    {
-    }
-
-    /**
-     * Implementation of the legacy interface to decorate loaded classes.
-     */
-    private static class LegacyDecorator implements Decorator
-    {
-        private org.eclipse.jetty.util.Decorator decorator;
-
-        public LegacyDecorator(org.eclipse.jetty.util.Decorator decorator)
+        @Override
+        public String getRequestCharacterEncoding()
         {
-            this.decorator = decorator;
+            return getDefaultRequestCharacterEncoding();
         }
 
         @Override
-        public <T> T decorate(T o)
+        public void setRequestCharacterEncoding(String encoding)
         {
-            return decorator.decorate(o);
+            if (!isStarting())
+                throw new IllegalStateException();
+            
+            setDefaultRequestCharacterEncoding(encoding);
         }
 
         @Override
-        public void destroy(Object o)
+        public String getResponseCharacterEncoding()
         {
-            decorator.destroy(o);
+            return getDefaultResponseCharacterEncoding();
+        }
+
+        @Override
+        public void setResponseCharacterEncoding(String encoding)
+        {
+            if (!isStarting())
+                throw new IllegalStateException();
+            
+            setDefaultResponseCharacterEncoding(encoding);
         }
     }
 }

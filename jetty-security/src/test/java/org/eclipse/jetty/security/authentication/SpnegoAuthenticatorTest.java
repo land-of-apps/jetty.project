@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.security.authentication;
@@ -40,20 +40,15 @@ import org.junit.jupiter.api.Test;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/**
- * Test class for {@link SpnegoAuthenticator}.
- */
 public class SpnegoAuthenticatorTest
 {
-    private SpnegoAuthenticator _authenticator;
+    private ConfigurableSpnegoAuthenticator _authenticator;
 
     @BeforeEach
-    public void setup() throws Exception
+    public void setup()
     {
-        _authenticator = new SpnegoAuthenticator();
+        _authenticator = new ConfigurableSpnegoAuthenticator();
     }
 
     @Test
@@ -82,8 +77,7 @@ public class SpnegoAuthenticatorTest
         };
         Request req = channel.getRequest();
         Response res = channel.getResponse();
-        MetaData.Request metadata = new MetaData.Request(new HttpFields());
-        metadata.setURI(new HttpURI("http://localhost"));
+        MetaData.Request metadata = new MetaData.Request(null, HttpURI.build("http://localhost"), null, HttpFields.EMPTY);
         req.setMetaData(metadata);
 
         assertThat(channel.getState().handling(), is(HttpChannelState.Action.DISPATCH));
@@ -118,50 +112,17 @@ public class SpnegoAuthenticatorTest
         };
         Request req = channel.getRequest();
         Response res = channel.getResponse();
-        HttpFields httpFields = new HttpFields();
+
         // Create a bogus Authorization header. We don't care about the actual credentials.
-        httpFields.add(HttpHeader.AUTHORIZATION, "Basic asdf");
-        MetaData.Request metadata = new MetaData.Request(httpFields);
-        metadata.setURI(new HttpURI("http://localhost"));
+
+        MetaData.Request metadata = new MetaData.Request(null, HttpURI.build("http://localhost"), null,
+            HttpFields.build().add(HttpHeader.AUTHORIZATION, "Basic asdf"));
         req.setMetaData(metadata);
 
         assertThat(channel.getState().handling(), is(HttpChannelState.Action.DISPATCH));
         assertEquals(Authentication.SEND_CONTINUE, _authenticator.validateRequest(req, res, true));
         assertEquals(HttpHeader.NEGOTIATE.asString(), res.getHeader(HttpHeader.WWW_AUTHENTICATE.asString()));
         assertEquals(HttpServletResponse.SC_UNAUTHORIZED, res.getStatus());
-    }
-
-    @Test
-    public void testCaseInsensitiveHeaderParsing()
-    {
-        assertFalse(_authenticator.isAuthSchemeNegotiate(null));
-        assertFalse(_authenticator.isAuthSchemeNegotiate(""));
-        assertFalse(_authenticator.isAuthSchemeNegotiate("Basic"));
-        assertFalse(_authenticator.isAuthSchemeNegotiate("basic"));
-        assertFalse(_authenticator.isAuthSchemeNegotiate("Digest"));
-        assertFalse(_authenticator.isAuthSchemeNegotiate("LotsandLotsandLots of nonsense"));
-        assertFalse(_authenticator.isAuthSchemeNegotiate("Negotiat asdfasdf"));
-        assertFalse(_authenticator.isAuthSchemeNegotiate("Negotiated"));
-        assertFalse(_authenticator.isAuthSchemeNegotiate("Negotiate-and-more"));
-
-        assertTrue(_authenticator.isAuthSchemeNegotiate("Negotiate"));
-        assertTrue(_authenticator.isAuthSchemeNegotiate("negotiate"));
-        assertTrue(_authenticator.isAuthSchemeNegotiate("negOtiAte"));
-    }
-
-    @Test
-    public void testExtractAuthScheme()
-    {
-        assertEquals("", _authenticator.getAuthSchemeFromHeader(null));
-        assertEquals("", _authenticator.getAuthSchemeFromHeader(""));
-        assertEquals("", _authenticator.getAuthSchemeFromHeader("   "));
-        assertEquals("Basic", _authenticator.getAuthSchemeFromHeader(" Basic asdfasdf"));
-        assertEquals("Basicasdf", _authenticator.getAuthSchemeFromHeader("Basicasdf asdfasdf"));
-        assertEquals("basic", _authenticator.getAuthSchemeFromHeader(" basic asdfasdf "));
-        assertEquals("Negotiate", _authenticator.getAuthSchemeFromHeader("Negotiate asdfasdf"));
-        assertEquals("negotiate", _authenticator.getAuthSchemeFromHeader("negotiate asdfasdf"));
-        assertEquals("negotiate", _authenticator.getAuthSchemeFromHeader(" negotiate  asdfasdf"));
-        assertEquals("negotiated", _authenticator.getAuthSchemeFromHeader(" negotiated  asdfasdf"));
     }
 
     class MockConnector extends AbstractConnector
@@ -189,3 +150,4 @@ public class SpnegoAuthenticatorTest
         }
     }
 }
+

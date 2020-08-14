@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.util;
@@ -22,6 +22,9 @@ import java.io.IOException;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
+import java.lang.module.Configuration;
+import java.lang.module.ModuleReference;
+import java.lang.module.ResolvedModule;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -36,11 +39,17 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
+import java.util.Optional;
+import java.util.ServiceConfigurationError;
+import java.util.ServiceLoader;
+import java.util.function.Function;
+import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
 
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static java.lang.invoke.MethodType.methodType;
 
@@ -53,7 +62,7 @@ import static java.lang.invoke.MethodType.methodType;
  */
 public class TypeUtil
 {
-    private static final Logger LOG = Log.getLogger(TypeUtil.class);
+    private static final Logger LOG = LoggerFactory.getLogger(TypeUtil.class);
     public static final Class<?>[] NO_ARGS = new Class[]{};
     public static final int CR = '\r';
     public static final int LF = '\n';
@@ -178,7 +187,6 @@ public class TypeUtil
     }
 
     private static final MethodHandle[] LOCATION_METHODS;
-    private static final ModuleLocation MODULE_LOCATION;
 
     static
     {
@@ -190,17 +198,7 @@ public class TypeUtil
         try
         {
             locationMethods.add(lookup.findStatic(TypeUtil.class, "getCodeSourceLocation", type));
-            ModuleLocation moduleLocation = null;
-            try
-            {
-                moduleLocation = new ModuleLocation();
-                locationMethods.add(lookup.findStatic(TypeUtil.class, "getModuleLocation", type));
-            }
-            catch (UnsupportedOperationException e)
-            {
-                LOG.debug("JVM Runtime does not support Modules");
-            }
-            MODULE_LOCATION = moduleLocation;
+            locationMethods.add(lookup.findStatic(TypeUtil.class, "getModuleLocation", type));
             locationMethods.add(lookup.findStatic(TypeUtil.class, "getClassLoaderLocation", type));
             locationMethods.add(lookup.findStatic(TypeUtil.class, "getSystemClassLoaderLocation", type));
             LOCATION_METHODS = locationMethods.toArray(new MethodHandle[0]);
@@ -316,13 +314,13 @@ public class TypeUtil
         }
         catch (NoSuchMethodException | IllegalAccessException | InstantiationException x)
         {
-            LOG.ignore(x);
+            LOG.trace("IGNORED", x);
         }
         catch (InvocationTargetException x)
         {
             if (x.getTargetException() instanceof Error)
                 throw (Error)x.getTargetException();
-            LOG.ignore(x);
+            LOG.trace("IGNORED", x);
         }
         return null;
     }
@@ -571,24 +569,6 @@ public class TypeUtil
         }
     }
 
-    @Deprecated
-    public static Object call(Class<?> oClass, String methodName, Object obj, Object[] arg) throws InvocationTargetException, NoSuchMethodException
-    {
-        throw new UnsupportedOperationException();
-    }
-
-    @Deprecated
-    public static Object construct(Class<?> klass, Object[] arguments) throws InvocationTargetException, NoSuchMethodException
-    {
-        throw new UnsupportedOperationException();
-    }
-
-    @Deprecated
-    public static Object construct(Class<?> klass, Object[] arguments, Map<String, Object> namedArgMap) throws InvocationTargetException, NoSuchMethodException
-    {
-        throw new UnsupportedOperationException();
-    }
-
     /**
      * @param o Object to test for true
      * @return True if passed object is not null and is either a Boolean with value true or evaluates to a string that evaluates to true.
@@ -647,14 +627,14 @@ public class TypeUtil
         return null;
     }
 
-    public static URI getClassLoaderLocation(Class<?> clazz)
-    {
-        return getClassLoaderLocation(clazz, clazz.getClassLoader());
-    }
-
     public static URI getSystemClassLoaderLocation(Class<?> clazz)
     {
         return getClassLoaderLocation(clazz, ClassLoader.getSystemClassLoader());
+    }
+
+    public static URI getClassLoaderLocation(Class<?> clazz)
+    {
+        return getClassLoaderLocation(clazz, clazz.getClassLoader());
     }
 
     public static URI getClassLoaderLocation(Class<?> clazz, ClassLoader loader)
@@ -720,11 +700,109 @@ public class TypeUtil
 
     public static URI getModuleLocation(Class<?> clazz)
     {
-        // In Jetty 10, this method can be implemented directly, without reflection
-        if (MODULE_LOCATION != null)
+        Module module = clazz.getModule();
+        if (module == null)
         {
-            return MODULE_LOCATION.getModuleLocation(clazz);
+            return null;
         }
+
+        ModuleLayer layer = module.getLayer();
+        if (layer == null)
+        {
+            return null;
+        }
+
+        Configuration configuration = layer.configuration();
+        if (configuration == null)
+        {
+            return null;
+        }
+
+        Optional<ResolvedModule> resolvedModule = configuration.findModule(module.getName());
+        if ((resolvedModule == null) || !resolvedModule.isPresent())
+        {
+            return null;
+        }
+
+        ModuleReference moduleReference = resolvedModule.get().reference();
+        if (moduleReference == null)
+        {
+            return null;
+        }
+
+        Optional<URI> location = moduleReference.location();
+        if (location.isPresent())
+        {
+            return location.get();
+        }
+
         return null;
+    }
+
+    public static <T> Iterator<T> concat(Iterator<T> i1, Iterator<T> i2)
+    {
+        return new Iterator<>()
+        {
+            @Override
+            public boolean hasNext()
+            {
+                return i1.hasNext() || i2.hasNext();
+            }
+
+            @Override
+            public T next()
+            {
+                return i1.hasNext() ? i1.next() : i2.next();
+            }
+        };
+    }
+
+    /**
+     * Used on a {@link ServiceLoader#stream()} with {@link Stream#flatMap(Function)},
+     * so that in the case a {@link ServiceConfigurationError} is thrown it warns and
+     * continues iterating through the service loader.
+     * <br>Usage Example:
+     * <p>{@code ServiceLoader.load(Service.class).stream().flatMap(TypeUtil::providerMap).collect(Collectors.toList());}</p>
+     * @param <T> The class of the service type.
+     * @param provider The service provider to instantiate.
+     * @return a stream of the loaded service providers.
+     */
+    private static <T> Stream<T> mapToService(ServiceLoader.Provider<T> provider)
+    {
+        try
+        {
+            return Stream.of(provider.get());
+        }
+        catch (ServiceConfigurationError error)
+        {
+            LOG.warn("Service Provider failed to load", error);
+            return Stream.empty();
+        }
+    }
+
+    /**
+     * Utility method to provide a stream of the service type from a {@link ServiceLoader}.
+     * Log warnings will be given for any {@link ServiceConfigurationError}s which occur when loading or
+     * instantiating the services.
+     * @param serviceLoader the ServiceLoader instance to use.
+     * @param <T> the type of the service to load.
+     * @return a stream of the service type which will not throw {@link ServiceConfigurationError}.
+     */
+    public static <T> Stream<T> serviceStream(ServiceLoader<T> serviceLoader)
+    {
+        return serviceProviderStream(serviceLoader).flatMap(TypeUtil::mapToService);
+    }
+
+    /**
+     * Utility to create a stream which provides the same functionality as {@link ServiceLoader#stream()}.
+     * However this also guards the case in which {@link Iterator#hasNext()} throws. Any exceptions
+     * from the underlying iterator will be cached until the {@link ServiceLoader.Provider#get()} is called.
+     * @param serviceLoader the ServiceLoader instance to use.
+     * @param <T> the type of the service to load.
+     * @return A stream that lazily loads providers for this loader's service
+     */
+    public static <T> Stream<ServiceLoader.Provider<T>> serviceProviderStream(ServiceLoader<T> serviceLoader)
+    {
+        return StreamSupport.stream(new ServiceLoaderSpliterator<>(serviceLoader), false);
     }
 }

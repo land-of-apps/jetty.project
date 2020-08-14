@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.util.ssl;
@@ -27,9 +27,7 @@ import org.eclipse.jetty.util.resource.Resource;
 import org.junit.jupiter.api.Test;
 
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.is;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class X509Test
 {
@@ -131,25 +129,12 @@ public class X509Test
     }
 
     @Test
-    public void testBaseClassWithSni()
-    {
-        SslContextFactory baseSsl = new SslContextFactory();
-        Path keystorePath = MavenTestingUtils.getTestResourcePathFile("keystore_sni.p12");
-        baseSsl.setKeyStoreResource(new PathResource(keystorePath));
-        baseSsl.setKeyStorePassword("OBF:1vny1zlo1x8e1vnw1vn61x8g1zlu1vn4");
-        baseSsl.setKeyManagerPassword("OBF:1u2u1wml1z7s1z7a1wnl1u2g");
-        IllegalStateException ex = assertThrows(IllegalStateException.class, baseSsl::start);
-        assertThat("IllegalStateException.message", ex.getMessage(), containsString("KeyStores with multiple certificates are not supported on the base class"));
-    }
-
-    @Test
     public void testServerClassWithSni() throws Exception
     {
         SslContextFactory serverSsl = new SslContextFactory.Server();
         Path keystorePath = MavenTestingUtils.getTestResourcePathFile("keystore_sni.p12");
         serverSsl.setKeyStoreResource(new PathResource(keystorePath));
-        serverSsl.setKeyStorePassword("OBF:1vny1zlo1x8e1vnw1vn61x8g1zlu1vn4");
-        serverSsl.setKeyManagerPassword("OBF:1u2u1wml1z7s1z7a1wnl1u2g");
+        serverSsl.setKeyStorePassword("storepwd");
         serverSsl.start();
     }
 
@@ -159,30 +144,17 @@ public class X509Test
         SslContextFactory clientSsl = new SslContextFactory.Client();
         Path keystorePath = MavenTestingUtils.getTestResourcePathFile("keystore_sni.p12");
         clientSsl.setKeyStoreResource(new PathResource(keystorePath));
-        clientSsl.setKeyStorePassword("OBF:1vny1zlo1x8e1vnw1vn61x8g1zlu1vn4");
-        clientSsl.setKeyManagerPassword("OBF:1u2u1wml1z7s1z7a1wnl1u2g");
+        clientSsl.setKeyStorePassword("storepwd");
         clientSsl.start();
-    }
-
-    @Test
-    public void testBaseClassWithoutSni() throws Exception
-    {
-        SslContextFactory baseSsl = new SslContextFactory();
-        Resource keystoreResource = Resource.newSystemResource("keystore");
-        baseSsl.setKeyStoreResource(keystoreResource);
-        baseSsl.setKeyStorePassword("storepwd");
-        baseSsl.setKeyManagerPassword("keypwd");
-        baseSsl.start();
     }
 
     @Test
     public void testServerClassWithoutSni() throws Exception
     {
         SslContextFactory serverSsl = new SslContextFactory.Server();
-        Resource keystoreResource = Resource.newSystemResource("keystore");
+        Resource keystoreResource = Resource.newSystemResource("keystore.p12");
         serverSsl.setKeyStoreResource(keystoreResource);
         serverSsl.setKeyStorePassword("storepwd");
-        serverSsl.setKeyManagerPassword("keypwd");
         serverSsl.start();
     }
 
@@ -190,10 +162,9 @@ public class X509Test
     public void testClientClassWithoutSni() throws Exception
     {
         SslContextFactory clientSsl = new SslContextFactory.Client();
-        Resource keystoreResource = Resource.newSystemResource("keystore");
+        Resource keystoreResource = Resource.newSystemResource("keystore.p12");
         clientSsl.setKeyStoreResource(keystoreResource);
         clientSsl.setKeyStorePassword("storepwd");
-        clientSsl.setKeyManagerPassword("keypwd");
         clientSsl.start();
     }
 }

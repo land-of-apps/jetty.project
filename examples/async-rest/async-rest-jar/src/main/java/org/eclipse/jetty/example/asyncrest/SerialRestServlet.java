@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.example.asyncrest;
@@ -28,7 +28,6 @@ import java.util.LinkedList;
 import java.util.Map;
 import java.util.Queue;
 import javax.servlet.ServletException;
-import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
@@ -42,10 +41,10 @@ public class SerialRestServlet extends AbstractRestServlet
     @Override
     protected void doGet(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException
     {
-        long start = System.nanoTime();
+        final long start = System.nanoTime();
 
         String[] keywords = sanitize(request.getParameter(ITEMS_PARAM)).split(",");
-        Queue<Map<String, String>> results = new LinkedList<Map<String, String>>();
+        Queue<Map<String, Object>> results = new LinkedList<>();
 
         // make all requests serially
         for (String itemName : keywords)
@@ -55,19 +54,22 @@ public class SerialRestServlet extends AbstractRestServlet
             HttpURLConnection connection = (HttpURLConnection)url.openConnection();
             connection.setRequestMethod("GET");
 
-            Map query = (Map)JSON.parse(new BufferedReader(new InputStreamReader(connection.getInputStream())));
+            @SuppressWarnings("unchecked")
+            Map<String, Object> query = (Map<String, Object>)new JSON().fromJSON(new BufferedReader(new InputStreamReader(connection.getInputStream())));
             Object[] auctions = (Object[])query.get("Item");
             if (auctions != null)
             {
                 for (Object o : auctions)
                 {
-                    results.add((Map)o);
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> auction = (Map<String, Object>)o;
+                    results.add(auction);
                 }
             }
         }
 
         // Generate the response
-        String thumbs = generateThumbs(results);
+        final String thumbs = generateThumbs(results);
 
         response.setContentType("text/html");
         PrintWriter out = response.getWriter();
@@ -91,10 +93,6 @@ public class SerialRestServlet extends AbstractRestServlet
         out.close();
     }
 
-    /**
-     * @see HttpServlet#doPost(HttpServletRequest request, HttpServletResponse
-     * response)
-     */
     @Override
     protected void doPost(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException
     {

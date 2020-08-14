@@ -1,26 +1,29 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.http;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
+
+import org.eclipse.jetty.util.QuotedStringTokenizer;
 
 /**
  * Implements a quoted comma separated list of values
@@ -32,6 +35,84 @@ import java.util.List;
  */
 public class QuotedCSV extends QuotedCSVParser implements Iterable<String>
 {
+    /**
+     * ABNF from RFC 2616, RFC 822, and RFC 6455 specified characters requiring quoting.
+     */
+    public static final String ABNF_REQUIRED_QUOTING = "\"'\\\n\r\t\f\b%+ ;=,";
+
+    /**
+     * Join a list into Quoted CSV string
+     *
+     * @param values A list of values
+     * @return A Quoted Comma Separated Value list
+     */
+    public static String join(List<String> values)
+    {
+        // no value list
+        if (values == null)
+            return null;
+
+        int size = values.size();
+        // empty value list
+        if (size <= 0)
+            return "";
+
+        // simple return
+        if (size == 1)
+            return values.get(0);
+
+        StringBuilder ret = new StringBuilder();
+        join(ret, values);
+        return ret.toString();
+    }
+
+    /**
+     * Join a list into Quoted CSV string
+     *
+     * @param values A list of values
+     * @return A Quoted Comma Separated Value list
+     */
+    public static String join(String... values)
+    {
+        if (values == null)
+            return null;
+
+        // empty value list
+        if (values.length <= 0)
+            return "";
+
+        // simple return
+        if (values.length == 1)
+            return values[0];
+
+        StringBuilder ret = new StringBuilder();
+        join(ret, Arrays.asList(values));
+        return ret.toString();
+    }
+
+    /**
+     * Join a list into Quoted CSV StringBuilder
+     *
+     * @param builder A builder to join the list into
+     * @param values A list of values
+     */
+    public static void join(StringBuilder builder, List<String> values)
+    {
+        if (values == null || values.isEmpty())
+            return;
+
+        // join it with commas
+        boolean needsDelim = false;
+        for (String value : values)
+        {
+            if (needsDelim)
+                builder.append(", ");
+            else
+                needsDelim = true;
+            QuotedStringTokenizer.quoteIfNeeded(builder, value, ABNF_REQUIRED_QUOTING);
+        }
+    }
+
     protected final List<String> _values = new ArrayList<>();
 
     public QuotedCSV(String... values)

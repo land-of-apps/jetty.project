@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.io;
@@ -38,13 +38,14 @@ import java.util.function.IntUnaryOperator;
 import org.eclipse.jetty.util.ProcessorUtils;
 import org.eclipse.jetty.util.annotation.ManagedAttribute;
 import org.eclipse.jetty.util.annotation.ManagedObject;
+import org.eclipse.jetty.util.component.Container;
 import org.eclipse.jetty.util.component.ContainerLifeCycle;
 import org.eclipse.jetty.util.component.Dumpable;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
 import org.eclipse.jetty.util.thread.Scheduler;
 import org.eclipse.jetty.util.thread.ThreadPool;
 import org.eclipse.jetty.util.thread.ThreadPoolBudget;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * <p>{@link SelectorManager} manages a number of {@link ManagedSelector}s that
@@ -57,7 +58,7 @@ import org.eclipse.jetty.util.thread.ThreadPoolBudget;
 public abstract class SelectorManager extends ContainerLifeCycle implements Dumpable
 {
     public static final int DEFAULT_CONNECT_TIMEOUT = 15000;
-    protected static final Logger LOG = Log.getLogger(SelectorManager.class);
+    protected static final Logger LOG = LoggerFactory.getLogger(SelectorManager.class);
 
     private final Executor executor;
     private final Scheduler scheduler;
@@ -131,26 +132,6 @@ public abstract class SelectorManager extends ContainerLifeCycle implements Dump
     public void setConnectTimeout(long milliseconds)
     {
         _connectTimeout = milliseconds;
-    }
-
-    /**
-     * @return -1
-     * @deprecated
-     */
-    @Deprecated
-    public int getReservedThreads()
-    {
-        return -1;
-    }
-
-    /**
-     * @param threads ignored
-     * @deprecated
-     */
-    @Deprecated
-    public void setReservedThreads(int threads)
-    {
-        throw new UnsupportedOperationException();
     }
 
     /**
@@ -273,6 +254,11 @@ public abstract class SelectorManager extends ContainerLifeCycle implements Dump
         return new ManagedSelector(this, id);
     }
 
+    protected Selector newSelector() throws IOException
+    {
+        return Selector.open();
+    }
+
     @Override
     protected void doStop() throws Exception
     {
@@ -316,8 +302,10 @@ public abstract class SelectorManager extends ContainerLifeCycle implements Dump
      * <p>Callback method invoked when a connection is opened.</p>
      *
      * @param connection the connection just opened
+     * @param context the attachment associated with the creation of the connection
+     * @see #newConnection(SelectableChannel, EndPoint, Object)
      */
-    public void connectionOpened(Connection connection)
+    public void connectionOpened(Connection connection, Object context)
     {
         try
         {
@@ -337,12 +325,13 @@ public abstract class SelectorManager extends ContainerLifeCycle implements Dump
      * <p>Callback method invoked when a connection is closed.</p>
      *
      * @param connection the connection just closed
+     * @param cause the cause of the close or null for normal close
      */
-    public void connectionClosed(Connection connection)
+    public void connectionClosed(Connection connection, Throwable cause)
     {
         try
         {
-            connection.onClose();
+            connection.onClose(cause);
         }
         catch (Throwable x)
         {
@@ -378,11 +367,6 @@ public abstract class SelectorManager extends ContainerLifeCycle implements Dump
         LOG.warn(String.format("%s - %s", channel, attachment), ex);
     }
 
-    protected Selector newSelector() throws IOException
-    {
-        return Selector.open();
-    }
-
     /**
      * <p>Factory method to create {@link EndPoint}.</p>
      * <p>This method is invoked as a result of the registration of a channel via {@link #connect(SelectableChannel, Object)}
@@ -408,31 +392,37 @@ public abstract class SelectorManager extends ContainerLifeCycle implements Dump
      */
     public abstract Connection newConnection(SelectableChannel channel, EndPoint endpoint, Object attachment) throws IOException;
 
-    public void addEventListener(EventListener listener)
+    /**
+     * @param listener An EventListener
+     * @see AcceptListener
+     * @see Container#addEventListener(EventListener)
+     */
+    @Override
+    public boolean addEventListener(EventListener listener)
     {
         if (isRunning())
             throw new IllegalStateException(this.toString());
-        if (listener instanceof AcceptListener)
-            addAcceptListener((AcceptListener)listener);
+        if (super.addEventListener(listener))
+        {
+            if (listener instanceof AcceptListener)
+                _acceptListeners.add((AcceptListener)listener);
+            return true;
+        }
+        return false;
     }
 
-    public void removeEventListener(EventListener listener)
+    @Override
+    public boolean removeEventListener(EventListener listener)
     {
         if (isRunning())
             throw new IllegalStateException(this.toString());
-        if (listener instanceof AcceptListener)
-            removeAcceptListener((AcceptListener)listener);
-    }
-
-    public void addAcceptListener(AcceptListener listener)
-    {
-        if (!_acceptListeners.contains(listener))
-            _acceptListeners.add(listener);
-    }
-
-    public void removeAcceptListener(AcceptListener listener)
-    {
-        _acceptListeners.remove(listener);
+        if (super.removeEventListener(listener))
+        {
+            if (listener instanceof AcceptListener)
+                _acceptListeners.remove(listener);
+            return true;
+        }
+        return false;
     }
 
     protected void onAccepting(SelectableChannel channel)
@@ -445,7 +435,7 @@ public abstract class SelectorManager extends ContainerLifeCycle implements Dump
             }
             catch (Throwable x)
             {
-                LOG.warn(x);
+                LOG.warn("Failed to notify onAccepting on listener {}", l, x);
             }
         }
     }
@@ -460,7 +450,7 @@ public abstract class SelectorManager extends ContainerLifeCycle implements Dump
             }
             catch (Throwable x)
             {
-                LOG.warn(x);
+                LOG.warn("Failed to notify onAcceptFailed on listener {}", l, x);
             }
         }
     }
@@ -475,9 +465,13 @@ public abstract class SelectorManager extends ContainerLifeCycle implements Dump
             }
             catch (Throwable x)
             {
-                LOG.warn(x);
+                LOG.warn("Failed to notify onAccepted on listener {}", l, x);
             }
         }
+    }
+
+    public interface SelectorManagerListener extends EventListener
+    {
     }
 
     /**
@@ -485,7 +479,7 @@ public abstract class SelectorManager extends ContainerLifeCycle implements Dump
      * <p>This listener is called from either the selector or acceptor thread
      * and implementations must be non blocking and fast.</p>
      */
-    public interface AcceptListener extends EventListener
+    public interface AcceptListener extends SelectorManagerListener
     {
         /**
          * Called immediately after a new SelectableChannel is accepted, but

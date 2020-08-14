@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.util.resource;
@@ -34,12 +34,14 @@ import java.util.jar.Manifest;
 import org.eclipse.jetty.util.IO;
 import org.eclipse.jetty.util.StringUtil;
 import org.eclipse.jetty.util.URIUtil;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
+import org.eclipse.jetty.util.thread.AutoLock;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class JarResource extends URLResource
 {
-    private static final Logger LOG = Log.getLogger(JarResource.class);
+    private static final Logger LOG = LoggerFactory.getLogger(JarResource.class);
+
     protected JarURLConnection _jarConnection;
 
     protected JarResource(URL url)
@@ -53,28 +55,34 @@ public class JarResource extends URLResource
     }
 
     @Override
-    public synchronized void close()
+    public void close()
     {
-        _jarConnection = null;
-        super.close();
+        try (AutoLock l = _lock.lock())
+        {
+            _jarConnection = null;
+            super.close();
+        }
     }
 
     @Override
-    protected synchronized boolean checkConnection()
+    protected boolean checkConnection()
     {
-        super.checkConnection();
-        try
+        try (AutoLock l = _lock.lock())
         {
-            if (_jarConnection != _connection)
-                newConnection();
-        }
-        catch (IOException e)
-        {
-            LOG.ignore(e);
-            _jarConnection = null;
-        }
+            super.checkConnection();
+            try
+            {
+                if (_jarConnection != _connection)
+                    newConnection();
+            }
+            catch (IOException e)
+            {
+                LOG.trace("IGNORED", e);
+                _jarConnection = null;
+            }
 
-        return _jarConnection != null;
+            return _jarConnection != null;
+        }
     }
 
     /**
@@ -134,7 +142,7 @@ public class JarResource extends URLResource
         if (LOG.isDebugEnabled())
             LOG.debug("Extract " + this + " to " + directory);
 
-        String urlString = this.getURL().toExternalForm().trim();
+        String urlString = this.getURI().toASCIIString().trim();
         int endOfJarUrl = urlString.indexOf("!/");
         int startOfJarUrl = (endOfJarUrl >= 0 ? 4 : 0);
 
@@ -143,7 +151,7 @@ public class JarResource extends URLResource
 
         URL jarFileURL = new URL(urlString.substring(startOfJarUrl, endOfJarUrl));
         String subEntryName = (endOfJarUrl + 2 < urlString.length() ? urlString.substring(endOfJarUrl + 2) : null);
-        boolean subEntryIsDir = (subEntryName != null && subEntryName.endsWith("/"));
+        boolean subEntryIsDir = (subEntryName != null && subEntryName.endsWith("/") ? true : false);
 
         if (LOG.isDebugEnabled())
             LOG.debug("Extracting entry = " + subEntryName + " from jar " + jarFileURL);
@@ -172,14 +180,28 @@ public class JarResource extends URLResource
                         //directory. Remove the name of the subdirectory so
                         //that we don't wind up creating it too.
                         entryName = entryName.substring(subEntryName.length());
-                        //the entry is
-                        shouldExtract = !entryName.equals("");
+                        if (!entryName.equals(""))
+                        {
+                            //the entry is
+                            shouldExtract = true;
+                        }
+                        else
+                            shouldExtract = false;
                     }
                     else
                         shouldExtract = true;
                 }
+                else if ((subEntryName != null) && (!entryName.startsWith(subEntryName)))
+                {
+                    //there is a particular entry we are looking for, and this one
+                    //isn't it
+                    shouldExtract = false;
+                }
                 else
-                    shouldExtract = (subEntryName == null) || (entryName.startsWith(subEntryName));
+                {
+                    //we are extracting everything
+                    shouldExtract = true;
+                }
 
                 if (!shouldExtract)
                 {

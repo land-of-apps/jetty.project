@@ -7,15 +7,14 @@ Enables the core Jetty server on the classpath.
 jvm
 ext
 resources
-logging
 
 [depend]
 threadpool
 bytebufferpool
+logging
 
 [lib]
-lib/servlet-api-3.1.jar
-lib/jetty-schemas-3.1.jar
+lib/jetty-servlet-api-4.0.*.jar
 lib/jetty-http-${jetty.version}.jar
 lib/jetty-server-${jetty.version}.jar
 lib/jetty-xml-${jetty.version}.jar
@@ -24,9 +23,6 @@ lib/jetty-io-${jetty.version}.jar
 
 [xml]
 etc/jetty.xml
-
-[jpms]
-patch-module: servlet.api=lib/jetty-schemas-3.1.jar
 
 [ini-template]
 ### Common HTTP configuration
@@ -63,14 +59,14 @@ patch-module: servlet.api=lib/jetty-schemas-3.1.jar
 ## Maximum number of error dispatches to prevent looping
 # jetty.httpConfig.maxErrorDispatches=10
 
+## HTTP Compliance: RFC7230, RFC7230_LEGACY, RFC2616, RFC2616_LEGACY, LEGACY
+# jetty.httpConfig.compliance=RFC7230
+
 ## Cookie compliance mode for parsing request Cookie headers: RFC2965, RFC6265
 # jetty.httpConfig.requestCookieCompliance=RFC6265
 
 ## Cookie compliance mode for generating response Set-Cookie: RFC2965, RFC6265
 # jetty.httpConfig.responseCookieCompliance=RFC6265
-
-## multipart/form-data compliance mode of: LEGACY(slow), RFC7578(fast)
-# jetty.httpConfig.multiPartFormDataCompliance=LEGACY
 
 ## Relative Redirect Locations allowed
 # jetty.httpConfig.relativeRedirectAllowed=false

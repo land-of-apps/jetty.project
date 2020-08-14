@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.util;
@@ -61,7 +61,7 @@ public class ArrayTrie<V> extends AbstractTrie<V>
      * The index lookup table, this maps a character as a byte
      * (ISO-8859-1 or UTF8) to an index within a Trie row
      */
-    private static final int[] __lookup =
+    private static final int[] LOOKUP =
         {
             // 0   1   2   3   4   5   6   7   8   9   A   B   C   D   E   F
             /*0*/-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
@@ -153,7 +153,7 @@ public class ArrayTrie<V> extends AbstractTrie<V>
         {
             char c = s.charAt(k);
 
-            int index = __lookup[c & 0x7f];
+            int index = LOOKUP[c & 0x7f];
             if (index >= 0)
             {
                 int idx = t * ROW_SIZE + index;
@@ -204,7 +204,7 @@ public class ArrayTrie<V> extends AbstractTrie<V>
         for (int i = 0; i < len; i++)
         {
             char c = s.charAt(offset + i);
-            int index = __lookup[c & 0x7f];
+            int index = LOOKUP[c & 0x7f];
             if (index >= 0)
             {
                 int idx = t * ROW_SIZE + index;
@@ -232,7 +232,7 @@ public class ArrayTrie<V> extends AbstractTrie<V>
         for (int i = 0; i < len; i++)
         {
             byte c = b.get(offset + i);
-            int index = __lookup[c & 0x7f];
+            int index = LOOKUP[c & 0x7f];
             if (index >= 0)
             {
                 int idx = t * ROW_SIZE + index;
@@ -250,7 +250,7 @@ public class ArrayTrie<V> extends AbstractTrie<V>
                     return null;
             }
         }
-        return _value[t];
+        return (V)_value[t];
     }
 
     @Override
@@ -279,7 +279,7 @@ public class ArrayTrie<V> extends AbstractTrie<V>
         for (int i = 0; i < len; i++)
         {
             char c = s.charAt(pos++);
-            int index = __lookup[c & 0x7f];
+            int index = LOOKUP[c & 0x7f];
             if (index >= 0)
             {
                 int idx = t * ROW_SIZE + index;
@@ -306,10 +306,10 @@ public class ArrayTrie<V> extends AbstractTrie<V>
                 V best = getBest(t, s, offset + i + 1, len - i - 1);
                 if (best != null)
                     return best;
-                return _value[t];
+                return (V)_value[t];
             }
         }
-        return _value[t];
+        return (V)_value[t];
     }
 
     private V getBest(int t, byte[] b, int offset, int len)
@@ -317,7 +317,7 @@ public class ArrayTrie<V> extends AbstractTrie<V>
         for (int i = 0; i < len; i++)
         {
             byte c = b[offset + i];
-            int index = __lookup[c & 0x7f];
+            int index = LOOKUP[c & 0x7f];
             if (index >= 0)
             {
                 int idx = t * ROW_SIZE + index;
@@ -347,7 +347,7 @@ public class ArrayTrie<V> extends AbstractTrie<V>
                 break;
             }
         }
-        return _value[t];
+        return (V)_value[t];
     }
 
     private V getBest(int t, ByteBuffer b, int offset, int len)
@@ -356,7 +356,7 @@ public class ArrayTrie<V> extends AbstractTrie<V>
         for (int i = 0; i < len; i++)
         {
             byte c = b.get(pos++);
-            int index = __lookup[c & 0x7f];
+            int index = LOOKUP[c & 0x7f];
             if (index >= 0)
             {
                 int idx = t * ROW_SIZE + index;
@@ -386,7 +386,7 @@ public class ArrayTrie<V> extends AbstractTrie<V>
                 break;
             }
         }
-        return _value[t];
+        return (V)_value[t];
     }
 
     @Override
