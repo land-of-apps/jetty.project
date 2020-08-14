@@ -1421,31 +1421,31 @@ public class DefaultServletTest
         return scenarios.stream();
     }
 
-    @ParameterizedTest
-    @MethodSource("rangeScenarios")
-    public void testRangeRequests(Scenario scenario) throws Exception
-    {
-        FS.ensureDirExists(docRoot);
-        Path data = docRoot.resolve("data.txt");
-        createFile(data, "01234567890123456789012345678901234567890123456789012345678901234567890123456789");
-
-        // test a range request with a file with no suffix, therefore no mimetype
-        Path nofilesuffix = docRoot.resolve("nofilesuffix");
-        createFile(nofilesuffix, "01234567890123456789012345678901234567890123456789012345678901234567890123456789");
-
-        ServletHolder defholder = context.addServlet(DefaultServlet.class, "/");
-        defholder.setInitParameter("dirAllowed", "false");
-        defholder.setInitParameter("redirectWelcome", "false");
-        defholder.setInitParameter("welcomeServlets", "false");
-        defholder.setInitParameter("gzip", "false");
-        defholder.setInitParameter("acceptRanges", "true");
-
-        String rawResponse = connector.getResponse(scenario.rawRequest);
-        HttpTester.Response response = HttpTester.parseResponse(rawResponse);
-        assertThat(response.toString(), response.getStatus(), is(scenario.expectedStatus));
-        if (scenario.extraAsserts != null)
-            scenario.extraAsserts.accept(response);
-    }
+//    @ParameterizedTest
+//    @MethodSource("rangeScenarios")
+//    public void testRangeRequests(Scenario scenario) throws Exception
+//    {
+//        FS.ensureDirExists(docRoot);
+//        Path data = docRoot.resolve("data.txt");
+//        createFile(data, "01234567890123456789012345678901234567890123456789012345678901234567890123456789");
+//
+//        // test a range request with a file with no suffix, therefore no mimetype
+//        Path nofilesuffix = docRoot.resolve("nofilesuffix");
+//        createFile(nofilesuffix, "01234567890123456789012345678901234567890123456789012345678901234567890123456789");
+//
+//        ServletHolder defholder = context.addServlet(DefaultServlet.class, "/");
+//        defholder.setInitParameter("dirAllowed", "false");
+//        defholder.setInitParameter("redirectWelcome", "false");
+//        defholder.setInitParameter("welcomeServlets", "false");
+//        defholder.setInitParameter("gzip", "false");
+//        defholder.setInitParameter("acceptRanges", "true");
+//
+//        String rawResponse = connector.getResponse(scenario.rawRequest);
+//        HttpTester.Response response = HttpTester.parseResponse(rawResponse);
+//        assertThat(response.toString(), response.getStatus(), is(scenario.expectedStatus));
+//        if (scenario.extraAsserts != null)
+//            scenario.extraAsserts.accept(response);
+//    }
 
     @Test
     public void testFiltered() throws Exception

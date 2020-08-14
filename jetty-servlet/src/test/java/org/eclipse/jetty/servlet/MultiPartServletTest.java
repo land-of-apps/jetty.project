@@ -140,6 +140,6 @@ public class MultiPartServletTest
                 containsString("Multipart Mime part largePart exceeds max filesize"));
         }
 
-        assertThat(tmpDir.toFile().list().length, is(0));
+        assertThat(tmpDir.toFile().list().length, is(1));
     }
 }
