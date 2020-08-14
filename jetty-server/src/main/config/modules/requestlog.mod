@@ -1,10 +1,11 @@
-DO NOT EDIT - See: https://www.eclipse.org/jetty/documentation/current/startup-modules.html
+# DO NOT EDIT - See: https://www.eclipse.org/jetty/documentation/current/startup-modules.html
 
 [description]
-Enables a NCSA style request log.
+Log requests using CustomRequestLog and AsyncRequestLogWriter
 
 [tags]
 requestlog
+logging
 
 [depend]
 server
@@ -16,6 +17,9 @@ etc/jetty-requestlog.xml
 logs/
 
 [ini-template]
+## Format string
+# jetty.requestlog.formatString=%a - %u %{dd/MMM/yyyy:HH:mm:ss ZZZ|GMT}t "%r" %s %B "%{Referer}i" "%{User-Agent}i" "%C"
+
 ## Logging directory (relative to $jetty.base)
 # jetty.requestlog.dir=logs
 
@@ -31,14 +35,5 @@ logs/
 ## Whether to append to existing file
 # jetty.requestlog.append=false
 
-## Whether to use the extended log output
-# jetty.requestlog.extended=true
-
-## Whether to log http cookie information
-# jetty.requestlog.cookies=true
-
-## Timezone of the log entries
+## Timezone of the log file rollover
 # jetty.requestlog.timezone=GMT
-
-## Whether to log LogLatency
-# jetty.requestlog.loglatency=false

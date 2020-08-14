@@ -1,4 +1,4 @@
-DO NOT EDIT - See: https://www.eclipse.org/jetty/documentation/current/startup-modules.html
+# DO NOT EDIT - See: https://www.eclipse.org/jetty/documentation/current/startup-modules.html
 
 [description]
 Memcache cache for SessionData
@@ -8,7 +8,7 @@ session
 
 [depends]
 session-store
-slf4j-api
+logging/slf4j
 
 [files]
 maven://com.googlecode.xmemcached/xmemcached/2.4.5|lib/xmemcached/xmemcached-2.4.5.jar

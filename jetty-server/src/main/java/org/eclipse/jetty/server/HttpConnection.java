@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.server;
@@ -31,9 +31,9 @@ import org.eclipse.jetty.http.HttpField;
 import org.eclipse.jetty.http.HttpGenerator;
 import org.eclipse.jetty.http.HttpHeader;
 import org.eclipse.jetty.http.HttpHeaderValue;
+import org.eclipse.jetty.http.HttpMethod;
 import org.eclipse.jetty.http.HttpParser;
 import org.eclipse.jetty.http.HttpParser.RequestHandler;
-import org.eclipse.jetty.http.HttpStatus;
 import org.eclipse.jetty.http.MetaData;
 import org.eclipse.jetty.http.PreEncodedHttpField;
 import org.eclipse.jetty.io.AbstractConnection;
@@ -45,8 +45,8 @@ import org.eclipse.jetty.io.WriteFlusher;
 import org.eclipse.jetty.util.BufferUtil;
 import org.eclipse.jetty.util.Callback;
 import org.eclipse.jetty.util.IteratingCallback;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static org.eclipse.jetty.http.HttpStatus.INTERNAL_SERVER_ERROR_500;
 
@@ -55,12 +55,8 @@ import static org.eclipse.jetty.http.HttpStatus.INTERNAL_SERVER_ERROR_500;
  */
 public class HttpConnection extends AbstractConnection implements Runnable, HttpTransport, WriteFlusher.Listener, Connection.UpgradeFrom, Connection.UpgradeTo
 {
-    private static final Logger LOG = Log.getLogger(HttpConnection.class);
+    private static final Logger LOG = LoggerFactory.getLogger(HttpConnection.class);
     public static final HttpField CONNECTION_CLOSE = new PreEncodedHttpField(HttpHeader.CONNECTION, HttpHeaderValue.CLOSE.asString());
-    public static final String UPGRADE_CONNECTION_ATTRIBUTE = "org.eclipse.jetty.server.HttpConnection.UPGRADE";
-    private static final boolean REQUEST_BUFFER_DIRECT = false;
-    private static final boolean HEADER_BUFFER_DIRECT = false;
-    private static final boolean CHUNK_BUFFER_DIRECT = false;
     private static final ThreadLocal<HttpConnection> __currentConnection = new ThreadLocal<>();
 
     private final HttpConfiguration _config;
@@ -72,13 +68,14 @@ public class HttpConnection extends AbstractConnection implements Runnable, Http
     private final HttpParser _parser;
     private final AtomicInteger _contentBufferReferences = new AtomicInteger();
     private volatile ByteBuffer _requestBuffer = null;
-    private volatile ByteBuffer _chunk = null;
     private final BlockingReadCallback _blockingReadCallback = new BlockingReadCallback();
     private final AsyncReadCallback _asyncReadCallback = new AsyncReadCallback();
     private final SendCallback _sendCallback = new SendCallback();
     private final boolean _recordHttpComplianceViolations;
     private final LongAdder bytesIn = new LongAdder();
     private final LongAdder bytesOut = new LongAdder();
+    private boolean _useInputDirectByteBuffers;
+    private boolean _useOutputDirectByteBuffers;
 
     /**
      * Get the current connection that this thread is dispatched to.
@@ -100,7 +97,7 @@ public class HttpConnection extends AbstractConnection implements Runnable, Http
         return last;
     }
 
-    public HttpConnection(HttpConfiguration config, Connector connector, EndPoint endPoint, HttpCompliance compliance, boolean recordComplianceViolations)
+    public HttpConnection(HttpConfiguration config, Connector connector, EndPoint endPoint, boolean recordComplianceViolations)
     {
         super(endPoint, connector.getExecutor());
         _config = config;
@@ -109,7 +106,7 @@ public class HttpConnection extends AbstractConnection implements Runnable, Http
         _generator = newHttpGenerator();
         _channel = newHttpChannel();
         _input = _channel.getRequest().getHttpInput();
-        _parser = newHttpParser(compliance);
+        _parser = newHttpParser(config.getHttpCompliance());
         _recordHttpComplianceViolations = recordComplianceViolations;
         if (LOG.isDebugEnabled())
             LOG.debug("New HTTP Connection {}", this);
@@ -137,7 +134,10 @@ public class HttpConnection extends AbstractConnection implements Runnable, Http
 
     protected HttpParser newHttpParser(HttpCompliance compliance)
     {
-        return new HttpParser(newRequestHandler(), getHttpConfiguration().getRequestHeaderSize(), compliance);
+        HttpParser parser = new HttpParser(newRequestHandler(), getHttpConfiguration().getRequestHeaderSize(), compliance);
+        parser.setHeaderCacheSize(getHttpConfiguration().getHeaderCacheSize());
+        parser.setHeaderCacheCaseSensitive(getHttpConfiguration().isHeaderCacheCaseSensitive());
+        return parser;
     }
 
     protected HttpParser.RequestHandler newRequestHandler()
@@ -171,12 +171,6 @@ public class HttpConnection extends AbstractConnection implements Runnable, Http
     }
 
     @Override
-    public boolean isOptimizedForDirectBuffers()
-    {
-        return getEndPoint().isOptimizedForDirectBuffers();
-    }
-
-    @Override
     public long getMessagesIn()
     {
         return getHttpChannel().getRequests();
@@ -188,14 +182,36 @@ public class HttpConnection extends AbstractConnection implements Runnable, Http
         return getHttpChannel().getRequests();
     }
 
+    public boolean isUseInputDirectByteBuffers()
+    {
+        return _useInputDirectByteBuffers;
+    }
+
+    public void setUseInputDirectByteBuffers(boolean useInputDirectByteBuffers)
+    {
+        _useInputDirectByteBuffers = useInputDirectByteBuffers;
+    }
+
+    public boolean isUseOutputDirectByteBuffers()
+    {
+        return _useOutputDirectByteBuffers;
+    }
+
+    public void setUseOutputDirectByteBuffers(boolean useOutputDirectByteBuffers)
+    {
+        _useOutputDirectByteBuffers = useOutputDirectByteBuffers;
+    }
+
     @Override
     public ByteBuffer onUpgradeFrom()
     {
         if (BufferUtil.hasContent(_requestBuffer))
         {
-            ByteBuffer buffer = _requestBuffer;
-            _requestBuffer = null;
-            return buffer;
+            ByteBuffer unconsumed = ByteBuffer.allocateDirect(_requestBuffer.remaining());
+            unconsumed.put(_requestBuffer);
+            unconsumed.flip();
+            releaseRequestBuffer();
+            return unconsumed;
         }
         return null;
     }
@@ -203,8 +219,7 @@ public class HttpConnection extends AbstractConnection implements Runnable, Http
     @Override
     public void onUpgradeTo(ByteBuffer buffer)
     {
-        if (BufferUtil.hasContent(buffer))
-            BufferUtil.append(getRequestBuffer(), buffer);
+        BufferUtil.append(getRequestBuffer(), buffer);
     }
 
     @Override
@@ -230,7 +245,10 @@ public class HttpConnection extends AbstractConnection implements Runnable, Http
     public ByteBuffer getRequestBuffer()
     {
         if (_requestBuffer == null)
-            _requestBuffer = _bufferPool.acquire(getInputBufferSize(), REQUEST_BUFFER_DIRECT);
+        {
+            boolean useDirectByteBuffers = isUseInputDirectByteBuffers();
+            _requestBuffer = _bufferPool.acquire(getInputBufferSize(), useDirectByteBuffers);
+        }
         return _requestBuffer;
     }
 
@@ -348,7 +366,7 @@ public class HttpConnection extends AbstractConnection implements Runnable, Http
             }
             catch (IOException e)
             {
-                LOG.debug(e);
+                LOG.debug("Unable to fill from endpoint {}", getEndPoint(), e);
                 _parser.atEOF();
                 return -1;
             }
@@ -359,7 +377,7 @@ public class HttpConnection extends AbstractConnection implements Runnable, Http
     private boolean parseRequestBuffer()
     {
         if (LOG.isDebugEnabled())
-            LOG.debug("{} parse {} {}", this, BufferUtil.toDetailString(_requestBuffer));
+            LOG.debug("{} parse {}", this, BufferUtil.toDetailString(_requestBuffer));
 
         boolean handle = _parser.parseNext(_requestBuffer == null ? BufferUtil.EMPTY_BUFFER : _requestBuffer);
 
@@ -373,33 +391,38 @@ public class HttpConnection extends AbstractConnection implements Runnable, Http
         return handle;
     }
 
+    private boolean upgrade()
+    {
+        Connection connection = (Connection)_channel.getRequest().getAttribute(UPGRADE_CONNECTION_ATTRIBUTE);
+        if (connection == null)
+            return false;
+
+        if (LOG.isDebugEnabled())
+            LOG.debug("Upgrade from {} to {}", this, connection);
+        _channel.getState().upgrade();
+        getEndPoint().upgrade(connection);
+        _channel.recycle();
+        _parser.reset();
+        _generator.reset();
+        if (_contentBufferReferences.get() == 0)
+        {
+            releaseRequestBuffer();
+        }
+        else
+        {
+            LOG.warn("{} lingering content references?!?!", this);
+            _requestBuffer = null; // Not returned to pool!
+            _contentBufferReferences.set(0);
+        }
+        return true;
+    }
+
     @Override
     public void onCompleted()
     {
-        // Handle connection upgrades
-        if (_channel.getResponse().getStatus() == HttpStatus.SWITCHING_PROTOCOLS_101)
-        {
-            Connection connection = (Connection)_channel.getRequest().getAttribute(UPGRADE_CONNECTION_ATTRIBUTE);
-            if (connection != null)
-            {
-                if (LOG.isDebugEnabled())
-                    LOG.debug("Upgrade from {} to {}", this, connection);
-                _channel.getState().upgrade();
-                getEndPoint().upgrade(connection);
-                _channel.recycle();
-                _parser.reset();
-                _generator.reset();
-                if (_contentBufferReferences.get() == 0)
-                    releaseRequestBuffer();
-                else
-                {
-                    LOG.warn("{} lingering content references?!?!", this);
-                    _requestBuffer = null; // Not returned to pool!
-                    _contentBufferReferences.set(0);
-                }
-                return;
-            }
-        }
+        // Handle connection upgrades.
+        if (upgrade())
+            return;
 
         // Finish consuming the request
         // If we are still expecting
@@ -442,11 +465,6 @@ public class HttpConnection extends AbstractConnection implements Runnable, Http
                 _parser.close();
         }
 
-        // Not in a race here with onFillable, because it has given up control before calling handle.
-        // in a slight race with #completed, but not sure what to do with that anyway.
-        if (_chunk != null)
-            _bufferPool.release(_chunk);
-        _chunk = null;
         _generator.reset();
 
         // if we are not called from the onfillable thread, schedule completion
@@ -472,9 +490,9 @@ public class HttpConnection extends AbstractConnection implements Runnable, Http
                     catch (RejectedExecutionException e)
                     {
                         if (getConnector().isRunning())
-                            LOG.warn(e);
+                            LOG.warn("Failed dispatch of {}", this, e);
                         else
-                            LOG.ignore(e);
+                            LOG.trace("IGNORED", e);
                         getEndPoint().close();
                     }
                 }
@@ -513,10 +531,13 @@ public class HttpConnection extends AbstractConnection implements Runnable, Http
     }
 
     @Override
-    public void onClose()
+    public void onClose(Throwable cause)
     {
-        _sendCallback.close();
-        super.onClose();
+        if (cause == null)
+            _sendCallback.close();
+        else
+            _sendCallback.failed(cause);
+        super.onClose(cause);
     }
 
     @Override
@@ -526,9 +547,9 @@ public class HttpConnection extends AbstractConnection implements Runnable, Http
     }
 
     @Override
-    public void send(MetaData.Response info, boolean head, ByteBuffer content, boolean lastContent, Callback callback)
+    public void send(MetaData.Request request, MetaData.Response response, ByteBuffer content, boolean lastContent, Callback callback)
     {
-        if (info == null)
+        if (response == null)
         {
             if (!lastContent && BufferUtil.isEmpty(content))
             {
@@ -544,7 +565,7 @@ public class HttpConnection extends AbstractConnection implements Runnable, Http
                 _generator.setPersistent(false);
         }
 
-        if (_sendCallback.reset(info, head, content, lastContent, callback))
+        if (_sendCallback.reset(request, response, content, lastContent, callback))
         {
             _sendCallback.iterate();
         }
@@ -693,6 +714,7 @@ public class HttpConnection extends AbstractConnection implements Runnable, Http
         private boolean _lastContent;
         private Callback _callback;
         private ByteBuffer _header;
+        private ByteBuffer _chunk;
         private boolean _shutdownOut;
 
         private SendCallback()
@@ -706,12 +728,12 @@ public class HttpConnection extends AbstractConnection implements Runnable, Http
             return _callback.getInvocationType();
         }
 
-        private boolean reset(MetaData.Response info, boolean head, ByteBuffer content, boolean last, Callback callback)
+        private boolean reset(MetaData.Request request, MetaData.Response info, ByteBuffer content, boolean last, Callback callback)
         {
             if (reset())
             {
                 _info = info;
-                _head = head;
+                _head = request != null && HttpMethod.HEAD.is(request.getMethod());
                 _content = content;
                 _lastContent = last;
                 _callback = callback;
@@ -737,10 +759,10 @@ public class HttpConnection extends AbstractConnection implements Runnable, Http
             if (_callback == null)
                 throw new IllegalStateException();
 
-            ByteBuffer chunk = _chunk;
+            boolean useDirectByteBuffers = isUseOutputDirectByteBuffers();
             while (true)
             {
-                HttpGenerator.Result result = _generator.generateResponse(_info, _head, _header, chunk, _content, _lastContent);
+                HttpGenerator.Result result = _generator.generateResponse(_info, _head, _header, _chunk, _content, _lastContent);
                 if (LOG.isDebugEnabled())
                     LOG.debug("generate: {} for {} ({},{},{})@{}",
                         result,
@@ -757,29 +779,26 @@ public class HttpConnection extends AbstractConnection implements Runnable, Http
 
                     case NEED_HEADER:
                     {
-                        _header = _bufferPool.acquire(Math.min(_config.getResponseHeaderSize(), _config.getOutputBufferSize()), HEADER_BUFFER_DIRECT);
+                        _header = _bufferPool.acquire(Math.min(_config.getResponseHeaderSize(), _config.getOutputBufferSize()), useDirectByteBuffers);
                         continue;
                     }
-
                     case HEADER_OVERFLOW:
                     {
-                        int capacity = _header.capacity();
-                        _bufferPool.release(_header);
-                        if (capacity >= _config.getResponseHeaderSize())
+                        if (_header.capacity() >= _config.getResponseHeaderSize())
                             throw new BadMessageException(INTERNAL_SERVER_ERROR_500, "Response header too large");
-                        _header = _bufferPool.acquire(_config.getResponseHeaderSize(), HEADER_BUFFER_DIRECT);
+                        releaseHeader();
+                        _header = _bufferPool.acquire(_config.getResponseHeaderSize(), useDirectByteBuffers);
                         continue;
                     }
                     case NEED_CHUNK:
                     {
-                        chunk = _chunk = _bufferPool.acquire(HttpGenerator.CHUNK_SIZE, CHUNK_BUFFER_DIRECT);
+                        _chunk = _bufferPool.acquire(HttpGenerator.CHUNK_SIZE, useDirectByteBuffers);
                         continue;
                     }
                     case NEED_CHUNK_TRAILER:
                     {
-                        if (_chunk != null)
-                            _bufferPool.release(_chunk);
-                        chunk = _chunk = _bufferPool.acquire(_config.getResponseHeaderSize(), CHUNK_BUFFER_DIRECT);
+                        releaseChunk();
+                        _chunk = _bufferPool.acquire(_config.getResponseHeaderSize(), useDirectByteBuffers);
                         continue;
                     }
                     case FLUSH:
@@ -787,7 +806,7 @@ public class HttpConnection extends AbstractConnection implements Runnable, Http
                         // Don't write the chunk or the content if this is a HEAD response, or any other type of response that should have no content
                         if (_head || _generator.isNoContent())
                         {
-                            BufferUtil.clear(chunk);
+                            BufferUtil.clear(_chunk);
                             BufferUtil.clear(_content);
                         }
 
@@ -798,10 +817,10 @@ public class HttpConnection extends AbstractConnection implements Runnable, Http
                             gatherWrite += 4;
                             bytes += _header.remaining();
                         }
-                        if (BufferUtil.hasContent(chunk))
+                        if (BufferUtil.hasContent(_chunk))
                         {
                             gatherWrite += 2;
-                            bytes += chunk.remaining();
+                            bytes += _chunk.remaining();
                         }
                         if (BufferUtil.hasContent(_content))
                         {
@@ -812,10 +831,10 @@ public class HttpConnection extends AbstractConnection implements Runnable, Http
                         switch (gatherWrite)
                         {
                             case 7:
-                                getEndPoint().write(this, _header, chunk, _content);
+                                getEndPoint().write(this, _header, _chunk, _content);
                                 break;
                             case 6:
-                                getEndPoint().write(this, _header, chunk);
+                                getEndPoint().write(this, _header, _chunk);
                                 break;
                             case 5:
                                 getEndPoint().write(this, _header, _content);
@@ -824,10 +843,10 @@ public class HttpConnection extends AbstractConnection implements Runnable, Http
                                 getEndPoint().write(this, _header);
                                 break;
                             case 3:
-                                getEndPoint().write(this, chunk, _content);
+                                getEndPoint().write(this, _chunk, _content);
                                 break;
                             case 2:
-                                getEndPoint().write(this, chunk);
+                                getEndPoint().write(this, _chunk);
                                 break;
                             case 1:
                                 getEndPoint().write(this, _content);
@@ -871,10 +890,23 @@ public class HttpConnection extends AbstractConnection implements Runnable, Http
             _callback = null;
             _info = null;
             _content = null;
+            releaseHeader();
+            releaseChunk();
+            return complete;
+        }
+
+        private void releaseHeader()
+        {
             if (_header != null)
                 _bufferPool.release(_header);
             _header = null;
-            return complete;
+        }
+
+        private void releaseChunk()
+        {
+            if (_chunk != null)
+                _bufferPool.release(_chunk);
+            _chunk = null;
         }
 
         @Override

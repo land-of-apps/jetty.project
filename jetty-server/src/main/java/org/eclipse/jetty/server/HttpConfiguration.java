@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.server;
@@ -24,6 +24,7 @@ import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import org.eclipse.jetty.http.CookieCompliance;
+import org.eclipse.jetty.http.HttpCompliance;
 import org.eclipse.jetty.http.HttpMethod;
 import org.eclipse.jetty.http.HttpScheme;
 import org.eclipse.jetty.util.Jetty;
@@ -33,8 +34,6 @@ import org.eclipse.jetty.util.annotation.ManagedAttribute;
 import org.eclipse.jetty.util.annotation.ManagedObject;
 import org.eclipse.jetty.util.component.Dumpable;
 import org.eclipse.jetty.util.component.DumpableCollection;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
 
 /**
  * HTTP Configuration.
@@ -50,8 +49,6 @@ import org.eclipse.jetty.util.log.Logger;
 @ManagedObject("HTTP Configuration")
 public class HttpConfiguration implements Dumpable
 {
-    private static final Logger LOG = Log.getLogger(HttpConfiguration.class);
-
     public static final String SERVER_VERSION = "Jetty(" + Jetty.VERSION + ")";
     private final List<Customizer> _customizers = new CopyOnWriteArrayList<>();
     private final Trie<Boolean> _formEncodedMethods = new TreeTrie<>();
@@ -60,9 +57,9 @@ public class HttpConfiguration implements Dumpable
     private int _requestHeaderSize = 8 * 1024;
     private int _responseHeaderSize = 8 * 1024;
     private int _headerCacheSize = 1024;
+    private boolean _headerCacheCaseSensitive = false;
     private int _securePort;
     private long _idleTimeout = -1;
-    private long _blockingTimeout = -1;
     private String _secureScheme = HttpScheme.HTTPS.asString();
     private boolean _sendServerVersion = true;
     private boolean _sendXPoweredBy = false;
@@ -70,12 +67,15 @@ public class HttpConfiguration implements Dumpable
     private boolean _delayDispatchUntilContent = true;
     private boolean _persistentConnectionsEnabled = true;
     private int _maxErrorDispatches = 10;
+    private boolean _useInputDirectByteBuffers = true;
+    private boolean _useOutputDirectByteBuffers = true;
     private long _minRequestDataRate;
     private long _minResponseDataRate;
+    private HttpCompliance _httpCompliance = HttpCompliance.RFC7230;
     private CookieCompliance _requestCookieCompliance = CookieCompliance.RFC6265;
     private CookieCompliance _responseCookieCompliance = CookieCompliance.RFC6265;
-    private MultiPartFormDataCompliance _multiPartCompliance = MultiPartFormDataCompliance.LEGACY; // TODO change default in jetty-10
     private boolean _notifyRemoteAsyncErrors = true;
+    private boolean _relativeRedirectAllowed;
 
     /**
      * <p>An interface that allows a request object to be customized
@@ -95,7 +95,7 @@ public class HttpConfiguration implements Dumpable
      */
     public interface Customizer
     {
-        void customize(Connector connector, HttpConfiguration channelConfig, Request request);
+        public void customize(Connector connector, HttpConfiguration channelConfig, Request request);
     }
 
     public interface ConnectionFactory
@@ -126,22 +126,25 @@ public class HttpConfiguration implements Dumpable
         _requestHeaderSize = config._requestHeaderSize;
         _responseHeaderSize = config._responseHeaderSize;
         _headerCacheSize = config._headerCacheSize;
+        _headerCacheCaseSensitive = config._headerCacheCaseSensitive;
         _secureScheme = config._secureScheme;
         _securePort = config._securePort;
         _idleTimeout = config._idleTimeout;
-        _blockingTimeout = config._blockingTimeout;
         _sendDateHeader = config._sendDateHeader;
         _sendServerVersion = config._sendServerVersion;
         _sendXPoweredBy = config._sendXPoweredBy;
         _delayDispatchUntilContent = config._delayDispatchUntilContent;
         _persistentConnectionsEnabled = config._persistentConnectionsEnabled;
         _maxErrorDispatches = config._maxErrorDispatches;
+        _useInputDirectByteBuffers = config._useInputDirectByteBuffers;
+        _useOutputDirectByteBuffers = config._useOutputDirectByteBuffers;
         _minRequestDataRate = config._minRequestDataRate;
         _minResponseDataRate = config._minResponseDataRate;
+        _httpCompliance = config._httpCompliance;
         _requestCookieCompliance = config._requestCookieCompliance;
         _responseCookieCompliance = config._responseCookieCompliance;
-        _multiPartCompliance = config._multiPartCompliance;
         _notifyRemoteAsyncErrors = config._notifyRemoteAsyncErrors;
+        _relativeRedirectAllowed = config._relativeRedirectAllowed;
     }
 
     /**
@@ -202,6 +205,12 @@ public class HttpConfiguration implements Dumpable
         return _headerCacheSize;
     }
 
+    @ManagedAttribute("True if the header field cache is case sensitive")
+    public boolean isHeaderCacheCaseSensitive()
+    {
+        return _headerCacheCaseSensitive;
+    }
+
     @ManagedAttribute("The port to which Integral or Confidential security constraints are redirected")
     public int getSecurePort()
     {
@@ -243,41 +252,6 @@ public class HttpConfiguration implements Dumpable
     public void setIdleTimeout(long timeoutMs)
     {
         _idleTimeout = timeoutMs;
-    }
-
-    /**
-     * <p>This timeout is in addition to the {@link Connector#getIdleTimeout()}, and applies
-     * to the total operation (as opposed to the idle timeout that applies to the time no
-     * data is being sent). This applies only to blocking operations and does not affect
-     * asynchronous read and write.</p>
-     *
-     * @return -1, for no blocking timeout (default), 0 for a blocking timeout equal to the
-     * idle timeout; &gt;0 for a timeout in ms applied to the total blocking operation.
-     * @deprecated Replaced by {@link #getMinResponseDataRate()} and {@link #getMinRequestDataRate()}
-     */
-    @ManagedAttribute(value = "Total timeout in ms for blocking I/O operations. DEPRECATED!", readonly = true)
-    @Deprecated
-    public long getBlockingTimeout()
-    {
-        return _blockingTimeout;
-    }
-
-    /**
-     * <p>This timeout is in addition to the {@link Connector#getIdleTimeout()}, and applies
-     * to the total operation (as opposed to the idle timeout that applies to the time no
-     * data is being sent).This applies only to blocking operations and does not affect
-     * asynchronous read and write.</p>
-     *
-     * @param blockingTimeout -1, for no blocking timeout (default), 0 for a blocking timeout equal to the
-     * idle timeout; &gt;0 for a timeout in ms applied to the total blocking operation.
-     * @deprecated Replaced by {@link #setMinResponseDataRate(long)} and {@link #setMinRequestDataRate(long)}
-     */
-    @Deprecated
-    public void setBlockingTimeout(long blockingTimeout)
-    {
-        if (blockingTimeout > 0)
-            LOG.warn("HttpConfiguration.setBlockingTimeout is deprecated!");
-        _blockingTimeout = blockingTimeout;
     }
 
     public void setPersistentConnectionsEnabled(boolean persistentConnectionsEnabled)
@@ -357,6 +331,34 @@ public class HttpConfiguration implements Dumpable
     }
 
     /**
+     * @param useInputDirectByteBuffers whether to use direct ByteBuffers for reading
+     */
+    public void setUseInputDirectByteBuffers(boolean useInputDirectByteBuffers)
+    {
+        _useInputDirectByteBuffers = useInputDirectByteBuffers;
+    }
+
+    @ManagedAttribute("Whether to use direct ByteBuffers for reading")
+    public boolean isUseInputDirectByteBuffers()
+    {
+        return _useInputDirectByteBuffers;
+    }
+
+    /**
+     * @param useOutputDirectByteBuffers whether to use direct ByteBuffers for writing
+     */
+    public void setUseOutputDirectByteBuffers(boolean useOutputDirectByteBuffers)
+    {
+        _useOutputDirectByteBuffers = useOutputDirectByteBuffers;
+    }
+
+    @ManagedAttribute("Whether to use direct ByteBuffers for writing")
+    public boolean isUseOutputDirectByteBuffers()
+    {
+        return _useOutputDirectByteBuffers;
+    }
+
+    /**
      * <p>Sets the {@link Customizer}s that are invoked for every
      * request received.</p>
      * <p>Customizers are often used to interpret optional headers (eg {@link ForwardedRequestCustomizer}) or
@@ -426,6 +428,11 @@ public class HttpConfiguration implements Dumpable
     public void setHeaderCacheSize(int headerCacheSize)
     {
         _headerCacheSize = headerCacheSize;
+    }
+
+    public void setHeaderCacheCaseSensitive(boolean headerCacheCaseSensitive)
+    {
+        this._headerCacheCaseSensitive = headerCacheCaseSensitive;
     }
 
     /**
@@ -555,8 +562,18 @@ public class HttpConfiguration implements Dumpable
         _minResponseDataRate = bytesPerSecond;
     }
 
+    public HttpCompliance getHttpCompliance()
+    {
+        return _httpCompliance;
+    }
+
+    public void setHttpCompliance(HttpCompliance httpCompliance)
+    {
+        _httpCompliance = httpCompliance;
+    }
+
     /**
-     * @return The CookieCompliance used for parsing request <code>Cookie</code> headers.
+     * @return The CookieCompliance used for parsing request {@code Cookie} headers.
      * @see #getResponseCookieCompliance()
      */
     public CookieCompliance getRequestCookieCompliance()
@@ -565,7 +582,7 @@ public class HttpConfiguration implements Dumpable
     }
 
     /**
-     * @return The CookieCompliance used for generating response <code>Set-Cookie</code> headers
+     * @return The CookieCompliance used for generating response {@code Set-Cookie} headers
      * @see #getRequestCookieCompliance()
      */
     public CookieCompliance getResponseCookieCompliance()
@@ -574,8 +591,7 @@ public class HttpConfiguration implements Dumpable
     }
 
     /**
-     * @param cookieCompliance The CookieCompliance to use for parsing request <code>Cookie</code> headers.
-     * @see #setRequestCookieCompliance(CookieCompliance)
+     * @param cookieCompliance The CookieCompliance to use for parsing request {@code Cookie} headers.
      */
     public void setRequestCookieCompliance(CookieCompliance cookieCompliance)
     {
@@ -583,46 +599,11 @@ public class HttpConfiguration implements Dumpable
     }
 
     /**
-     * @param cookieCompliance The CookieCompliance to use for generating response <code>Set-Cookie</code> headers
-     * @see #setResponseCookieCompliance(CookieCompliance)
+     * @param cookieCompliance The CookieCompliance to use for generating response {@code Set-Cookie} headers
      */
     public void setResponseCookieCompliance(CookieCompliance cookieCompliance)
     {
         _responseCookieCompliance = cookieCompliance == null ? CookieCompliance.RFC6265 : cookieCompliance;
-    }
-
-    @Deprecated
-    public void setCookieCompliance(CookieCompliance compliance)
-    {
-        setRequestCookieCompliance(compliance);
-    }
-
-    @Deprecated
-    public CookieCompliance getCookieCompliance()
-    {
-        return getRequestCookieCompliance();
-    }
-
-    @Deprecated
-    public boolean isCookieCompliance(CookieCompliance compliance)
-    {
-        return _requestCookieCompliance.equals(compliance);
-    }
-
-    /**
-     * Sets the compliance level for multipart/form-data handling.
-     *
-     * @param multiPartCompliance The multipart/form-data compliance level.
-     */
-    public void setMultiPartFormDataCompliance(MultiPartFormDataCompliance multiPartCompliance)
-    {
-        // TODO change default in jetty-10 
-        _multiPartCompliance = multiPartCompliance == null ? MultiPartFormDataCompliance.LEGACY : multiPartCompliance;
-    }
-
-    public MultiPartFormDataCompliance getMultipartFormDataCompliance()
-    {
-        return _multiPartCompliance;
     }
 
     /**
@@ -640,6 +621,23 @@ public class HttpConfiguration implements Dumpable
     public boolean isNotifyRemoteAsyncErrors()
     {
         return _notifyRemoteAsyncErrors;
+    }
+
+    /**
+     * @param allowed True if relative redirection locations are allowed
+     */
+    public void setRelativeRedirectAllowed(boolean allowed)
+    {
+        _relativeRedirectAllowed = allowed;
+    }
+
+    /**
+     * @return True if relative redirection locations are allowed
+     */
+    @ManagedAttribute("Whether relative redirection locations are allowed")
+    public boolean isRelativeRedirectAllowed()
+    {
+        return _relativeRedirectAllowed;
     }
 
     @Override
@@ -662,7 +660,6 @@ public class HttpConfiguration implements Dumpable
             "secureScheme=" + _secureScheme,
             "securePort=" + _securePort,
             "idleTimeout=" + _idleTimeout,
-            "blockingTimeout=" + _blockingTimeout,
             "sendDateHeader=" + _sendDateHeader,
             "sendServerVersion=" + _sendServerVersion,
             "sendXPoweredBy=" + _sendXPoweredBy,
@@ -671,9 +668,10 @@ public class HttpConfiguration implements Dumpable
             "maxErrorDispatches=" + _maxErrorDispatches,
             "minRequestDataRate=" + _minRequestDataRate,
             "minResponseDataRate=" + _minResponseDataRate,
-            "cookieCompliance=" + _requestCookieCompliance,
-            "setRequestCookieCompliance=" + _responseCookieCompliance,
-            "notifyRemoteAsyncErrors=" + _notifyRemoteAsyncErrors
+            "requestCookieCompliance=" + _requestCookieCompliance,
+            "responseCookieCompliance=" + _responseCookieCompliance,
+            "notifyRemoteAsyncErrors=" + _notifyRemoteAsyncErrors,
+            "relativeRedirectAllowed=" + _relativeRedirectAllowed
         );
     }
 

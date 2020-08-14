@@ -4,7 +4,7 @@
   <parent>
     <groupId>org.eclipse.jetty.tests</groupId>
     <artifactId>test-sessions-parent</artifactId>
-    <version>9.4.29.v20200521</version>
+    <version>10.0.0-SNAPSHOT</version>
   </parent>
   <artifactId>test-infinispan-sessions</artifactId>
   <name>Jetty Tests :: Sessions :: Infinispan</name>
@@ -68,32 +68,38 @@
       <groupId>org.eclipse.jetty</groupId>
       <artifactId>jetty-server</artifactId>
       <version>${project.version}</version>
+      <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.eclipse.jetty</groupId>
       <artifactId>jetty-webapp</artifactId>
       <version>${project.version}</version>
+      <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.eclipse.jetty</groupId>
       <artifactId>jetty-client</artifactId>
       <version>${project.version}</version>
+      <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.eclipse.jetty.tests</groupId>
       <artifactId>test-sessions-common</artifactId>
       <version>${project.version}</version>
+      <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.eclipse.jetty</groupId>
       <artifactId>infinispan-remote-query</artifactId>
       <version>${project.version}</version>
+      <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.eclipse.jetty</groupId>
       <artifactId>jetty-jmx</artifactId>
       <version>${project.version}</version>
       <optional>true</optional>
+      <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.eclipse.jetty.toolchain</groupId>
@@ -132,6 +138,16 @@
     </dependency>
     <dependency>
       <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-api</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>jul-to-slf4j</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.slf4j</groupId>
       <artifactId>slf4j-simple</artifactId>
       <scope>test</scope>
     </dependency>
@@ -157,13 +173,13 @@
             <groupId>org.apache.maven.plugins</groupId>
             <artifactId>maven-surefire-plugin</artifactId>
             <configuration>
-              <includes>
-                <include>**/*.java</include>
-              </includes>
               <systemPropertyVariables>
                 <infinispan.docker.image.version>${infinispan.docker.image.version}</infinispan.docker.image.version>
                 <infinispan.docker.image.name>${infinispan.docker.image.name}</infinispan.docker.image.name>
               </systemPropertyVariables>
+              <includes>
+                <include>**/*.java</include>
+              </includes>
             </configuration>
           </plugin>
         </plugins>

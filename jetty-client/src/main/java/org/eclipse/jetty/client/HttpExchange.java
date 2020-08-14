@@ -1,34 +1,37 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.client;
 
 import java.util.List;
 
+import org.eclipse.jetty.client.api.Request;
 import org.eclipse.jetty.client.api.Response;
 import org.eclipse.jetty.client.api.Result;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
+import org.eclipse.jetty.util.thread.AutoLock;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class HttpExchange
 {
-    private static final Logger LOG = Log.getLogger(HttpExchange.class);
+    private static final Logger LOG = LoggerFactory.getLogger(HttpExchange.class);
 
+    private final AutoLock lock = new AutoLock();
     private final HttpDestination destination;
     private final HttpRequest request;
     private final List<Response.ResponseListener> listeners;
@@ -50,6 +53,11 @@ public class HttpExchange
         conversation.updateResponseListeners(null);
     }
 
+    public HttpDestination getHttpDestination()
+    {
+        return destination;
+    }
+
     public HttpConversation getConversation()
     {
         return request.getConversation();
@@ -62,7 +70,7 @@ public class HttpExchange
 
     public Throwable getRequestFailure()
     {
-        synchronized (this)
+        try (AutoLock l = lock.lock())
         {
             return requestFailure;
         }
@@ -80,7 +88,7 @@ public class HttpExchange
 
     public Throwable getResponseFailure()
     {
-        synchronized (this)
+        try (AutoLock l = lock.lock())
         {
             return responseFailure;
         }
@@ -97,7 +105,7 @@ public class HttpExchange
     {
         boolean result = false;
         boolean abort = false;
-        synchronized (this)
+        try (AutoLock l = lock.lock())
         {
             // Only associate if the exchange state is initial,
             // as the exchange could be already failed.
@@ -121,7 +129,7 @@ public class HttpExchange
     void disassociate(HttpChannel channel)
     {
         boolean abort = false;
-        synchronized (this)
+        try (AutoLock l = lock.lock())
         {
             if (_channel != channel || requestState != State.TERMINATED || responseState != State.TERMINATED)
                 abort = true;
@@ -134,7 +142,7 @@ public class HttpExchange
 
     private HttpChannel getHttpChannel()
     {
-        synchronized (this)
+        try (AutoLock l = lock.lock())
         {
             return _channel;
         }
@@ -142,7 +150,7 @@ public class HttpExchange
 
     public boolean requestComplete(Throwable failure)
     {
-        synchronized (this)
+        try (AutoLock l = lock.lock())
         {
             return completeRequest(failure);
         }
@@ -161,7 +169,7 @@ public class HttpExchange
 
     public boolean responseComplete(Throwable failure)
     {
-        synchronized (this)
+        try (AutoLock l = lock.lock())
         {
             return completeResponse(failure);
         }
@@ -181,7 +189,7 @@ public class HttpExchange
     public Result terminateRequest()
     {
         Result result = null;
-        synchronized (this)
+        try (AutoLock l = lock.lock())
         {
             if (requestState == State.COMPLETED)
                 requestState = State.TERMINATED;
@@ -198,7 +206,7 @@ public class HttpExchange
     public Result terminateResponse()
     {
         Result result = null;
-        synchronized (this)
+        try (AutoLock l = lock.lock())
         {
             if (responseState == State.COMPLETED)
                 responseState = State.TERMINATED;
@@ -218,7 +226,7 @@ public class HttpExchange
         // This will avoid that this exchange can be associated to a channel.
         boolean abortRequest;
         boolean abortResponse;
-        synchronized (this)
+        try (AutoLock l = lock.lock())
         {
             abortRequest = completeRequest(failure);
             abortResponse = completeResponse(failure);
@@ -231,6 +239,12 @@ public class HttpExchange
             return false;
 
         // We failed this exchange, deal with it.
+
+        // Applications could be blocked providing
+        // request content, notify them of the failure.
+        Request.Content body = request.getBody();
+        if (abortRequest && body != null)
+            body.fail(failure);
 
         // Case #1: exchange was in the destination queue.
         if (destination.remove(this))
@@ -271,7 +285,7 @@ public class HttpExchange
 
     public void resetResponse()
     {
-        synchronized (this)
+        try (AutoLock l = lock.lock())
         {
             responseState = State.PENDING;
             responseFailure = null;
@@ -288,7 +302,7 @@ public class HttpExchange
     @Override
     public String toString()
     {
-        synchronized (this)
+        try (AutoLock l = lock.lock())
         {
             return String.format("%s@%x req=%s/%s@%h res=%s/%s@%h",
                 HttpExchange.class.getSimpleName(),

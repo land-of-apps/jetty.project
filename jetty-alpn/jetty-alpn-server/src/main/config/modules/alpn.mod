@@ -1,11 +1,11 @@
-DO NOT EDIT - See: https://www.eclipse.org/jetty/documentation/current/startup-modules.html
+# DO NOT EDIT - See: https://www.eclipse.org/jetty/documentation/current/startup-modules.html
 
 [description]
 Enables the ALPN (Application Layer Protocol Negotiation) TLS extension.
 
 [depend]
 ssl
-alpn-impl
+alpn-impl/alpn-${java.version.platform}
 
 [lib]
 lib/jetty-alpn-client-${jetty.version}.jar

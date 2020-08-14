@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.annotations;
@@ -32,28 +32,25 @@ import javax.naming.NamingException;
 import org.eclipse.jetty.annotations.AnnotationIntrospector.AbstractIntrospectableAnnotationHandler;
 import org.eclipse.jetty.plus.annotation.Injection;
 import org.eclipse.jetty.plus.annotation.InjectionCollection;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
 import org.eclipse.jetty.webapp.MetaData;
 import org.eclipse.jetty.webapp.WebAppContext;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class ResourceAnnotationHandler extends AbstractIntrospectableAnnotationHandler
 {
-    private static final Logger LOG = Log.getLogger(ResourceAnnotationHandler.class);
+    private static final Logger LOG = LoggerFactory.getLogger(ResourceAnnotationHandler.class);
 
     protected static final List<Class<?>> ENV_ENTRY_TYPES =
         Arrays.asList(new Class[]
-        {
-            String.class, Character.class, Integer.class, Boolean.class, Double.class, Byte.class, Short.class, Long.class,
-            Float.class
-        });
-
-    protected WebAppContext _context;
+            {
+                String.class, Character.class, Integer.class, Boolean.class, Double.class, Byte.class, Short.class, Long.class,
+                Float.class
+            });
 
     public ResourceAnnotationHandler(WebAppContext wac)
     {
-        super(true);
-        _context = wac;
+        super(true, wac);
     }
 
     /**
@@ -84,7 +81,7 @@ public class ResourceAnnotationHandler extends AbstractIntrospectableAnnotationH
 
     public void handleClass(Class<?> clazz)
     {
-        Resource resource = clazz.getAnnotation(Resource.class);
+        Resource resource = (Resource)clazz.getAnnotation(Resource.class);
         if (resource != null)
         {
             String name = resource.name();
@@ -101,14 +98,14 @@ public class ResourceAnnotationHandler extends AbstractIntrospectableAnnotationH
             }
             catch (NamingException e)
             {
-                LOG.warn(e);
+                LOG.warn("Unable to bind name {} to {} from class {}", name, mappedName, clazz, e);
             }
         }
     }
 
     public void handleField(Class<?> clazz, Field field)
     {
-        Resource resource = field.getAnnotation(Resource.class);
+        Resource resource = (Resource)field.getAnnotation(Resource.class);
         if (resource != null)
         {
             //JavaEE Spec 5.2.3: Field cannot be static
@@ -223,7 +220,7 @@ public class ResourceAnnotationHandler extends AbstractIntrospectableAnnotationH
     public void handleMethod(Class<?> clazz, Method method)
     {
 
-        Resource resource = method.getAnnotation(Resource.class);
+        Resource resource = (Resource)method.getAnnotation(Resource.class);
         if (resource != null)
         {
             /*
@@ -371,7 +368,7 @@ public class ResourceAnnotationHandler extends AbstractIntrospectableAnnotationH
      */
     public boolean supportsResourceInjection(Class<?> c)
     {
-        return javax.servlet.Servlet.class.isAssignableFrom(c) ||
+        if (javax.servlet.Servlet.class.isAssignableFrom(c) ||
             javax.servlet.Filter.class.isAssignableFrom(c) ||
             javax.servlet.ServletContextListener.class.isAssignableFrom(c) ||
             javax.servlet.ServletContextAttributeListener.class.isAssignableFrom(c) ||
@@ -381,7 +378,10 @@ public class ResourceAnnotationHandler extends AbstractIntrospectableAnnotationH
             javax.servlet.http.HttpSessionAttributeListener.class.isAssignableFrom(c) ||
             javax.servlet.http.HttpSessionIdListener.class.isAssignableFrom(c) ||
             javax.servlet.AsyncListener.class.isAssignableFrom(c) ||
-            javax.servlet.http.HttpUpgradeHandler.class.isAssignableFrom(c);
+            javax.servlet.http.HttpUpgradeHandler.class.isAssignableFrom(c))
+            return true;
+
+        return false;
     }
 
     /**

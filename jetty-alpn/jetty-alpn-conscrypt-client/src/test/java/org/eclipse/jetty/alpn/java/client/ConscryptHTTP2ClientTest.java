@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.alpn.java.client;
@@ -41,6 +41,7 @@ import org.eclipse.jetty.util.Jetty;
 import org.eclipse.jetty.util.Promise;
 import org.eclipse.jetty.util.ssl.SslContextFactory;
 import org.junit.jupiter.api.Assumptions;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
@@ -50,6 +51,7 @@ public class ConscryptHTTP2ClientTest
 {
     @Tag("external")
     @Test
+    @Disabled("issue google/conscrypt#667")
     public void testConscryptHTTP2Client() throws Exception
     {
         String host = "webtide.com";
@@ -72,9 +74,8 @@ public class ConscryptHTTP2ClientTest
             client.connect(sslContextFactory, new InetSocketAddress(host, port), new Session.Listener.Adapter(), sessionPromise);
             Session session = sessionPromise.get(15, TimeUnit.SECONDS);
 
-            HttpFields requestFields = new HttpFields();
-            requestFields.put("User-Agent", client.getClass().getName() + "/" + Jetty.VERSION);
-            MetaData.Request metaData = new MetaData.Request("GET", new HttpURI("https://" + host + ":" + port + "/"), HttpVersion.HTTP_2, requestFields);
+            HttpFields requestFields = HttpFields.build().put("User-Agent", client.getClass().getName() + "/" + Jetty.VERSION);
+            MetaData.Request metaData = new MetaData.Request("GET", HttpURI.from("https://" + host + ":" + port + "/"), HttpVersion.HTTP_2, requestFields);
             HeadersFrame headersFrame = new HeadersFrame(metaData, null, true);
             CountDownLatch latch = new CountDownLatch(1);
             session.newStream(headersFrame, new Promise.Adapter<>(), new Stream.Listener.Adapter()

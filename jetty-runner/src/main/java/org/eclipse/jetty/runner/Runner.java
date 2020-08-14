@@ -1,28 +1,31 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.runner;
 
 import java.io.IOException;
 import java.io.PrintStream;
+import java.net.MalformedURLException;
+import java.net.URI;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
@@ -34,8 +37,8 @@ import org.eclipse.jetty.security.HashLoginService;
 import org.eclipse.jetty.security.authentication.BasicAuthenticator;
 import org.eclipse.jetty.server.AbstractConnector;
 import org.eclipse.jetty.server.Connector;
+import org.eclipse.jetty.server.CustomRequestLog;
 import org.eclipse.jetty.server.Handler;
-import org.eclipse.jetty.server.NCSARequestLog;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
 import org.eclipse.jetty.server.ShutdownMonitor;
@@ -43,6 +46,7 @@ import org.eclipse.jetty.server.handler.ContextHandler;
 import org.eclipse.jetty.server.handler.ContextHandlerCollection;
 import org.eclipse.jetty.server.handler.DefaultHandler;
 import org.eclipse.jetty.server.handler.HandlerCollection;
+import org.eclipse.jetty.server.handler.HandlerList;
 import org.eclipse.jetty.server.handler.StatisticsHandler;
 import org.eclipse.jetty.server.session.SessionHandler;
 import org.eclipse.jetty.servlet.ServletContextHandler;
@@ -50,13 +54,13 @@ import org.eclipse.jetty.servlet.ServletHolder;
 import org.eclipse.jetty.servlet.StatisticsServlet;
 import org.eclipse.jetty.util.RolloverFileOutputStream;
 import org.eclipse.jetty.util.StringUtil;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
 import org.eclipse.jetty.util.resource.Resource;
 import org.eclipse.jetty.util.security.Constraint;
+import org.eclipse.jetty.webapp.MetaInfConfiguration;
 import org.eclipse.jetty.webapp.WebAppContext;
-import org.eclipse.jetty.webapp.WebInfConfiguration;
 import org.eclipse.jetty.xml.XmlConfiguration;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Runner
@@ -68,21 +72,22 @@ import org.eclipse.jetty.xml.XmlConfiguration;
 @Deprecated
 public class Runner
 {
-    private static final Logger LOG = Log.getLogger(Runner.class);
+    private static final Logger LOG = LoggerFactory.getLogger(Runner.class);
 
-    public static final String[] __plusConfigurationClasses = new String[]{
-        org.eclipse.jetty.webapp.WebInfConfiguration.class.getCanonicalName(),
-        org.eclipse.jetty.webapp.WebXmlConfiguration.class.getCanonicalName(),
-        org.eclipse.jetty.webapp.MetaInfConfiguration.class.getCanonicalName(),
-        org.eclipse.jetty.webapp.FragmentConfiguration.class.getCanonicalName(),
-        org.eclipse.jetty.plus.webapp.EnvConfiguration.class.getCanonicalName(),
-        org.eclipse.jetty.plus.webapp.PlusConfiguration.class.getCanonicalName(),
-        org.eclipse.jetty.annotations.AnnotationConfiguration.class.getCanonicalName(),
-        org.eclipse.jetty.webapp.JettyWebXmlConfiguration.class.getCanonicalName()
-    };
-    public static final String __containerIncludeJarPattern = ".*/jetty-runner-[^/]*\\.jar$";
-    public static final String __defaultContextPath = "/";
-    public static final int __defaultPort = 8080;
+    public static final String[] PLUS_CONFIGURATION_CLASSES =
+        {
+            org.eclipse.jetty.webapp.WebInfConfiguration.class.getCanonicalName(),
+            org.eclipse.jetty.webapp.WebXmlConfiguration.class.getCanonicalName(),
+            org.eclipse.jetty.webapp.MetaInfConfiguration.class.getCanonicalName(),
+            org.eclipse.jetty.webapp.FragmentConfiguration.class.getCanonicalName(),
+            org.eclipse.jetty.plus.webapp.EnvConfiguration.class.getCanonicalName(),
+            org.eclipse.jetty.plus.webapp.PlusConfiguration.class.getCanonicalName(),
+            org.eclipse.jetty.annotations.AnnotationConfiguration.class.getCanonicalName(),
+            org.eclipse.jetty.webapp.JettyWebXmlConfiguration.class.getCanonicalName()
+        };
+    public static final String CONTAINER_INCLUDE_JAR_PATTERN = ".*/jetty-runner-[^/]*\\.jar$";
+    public static final String DEFAULT_CONTEXT_PATH = "/";
+    public static final int DEFAULT_PORT = 8080;
 
     protected Server _server;
     protected URLClassLoader _classLoader;
@@ -98,7 +103,7 @@ public class Runner
      */
     public class Classpath
     {
-        private List<URL> _classpath = new ArrayList<>();
+        private List<URI> _classpath = new ArrayList<>();
 
         public void addJars(Resource lib) throws IOException
         {
@@ -124,8 +129,7 @@ public class Runner
                         if (lowerCasePath.endsWith(".jar") ||
                             lowerCasePath.endsWith(".zip"))
                         {
-                            URL url = item.getURL();
-                            _classpath.add(url);
+                            _classpath.add(item.getURI());
                         }
                     }
                 }
@@ -136,12 +140,12 @@ public class Runner
         {
             if (path == null || !path.exists())
                 throw new IllegalStateException("No such path: " + path);
-            _classpath.add(path.getURL());
+            _classpath.add(path.getURI());
         }
 
-        public URL[] asArray()
+        public URI[] asArray()
         {
-            return _classpath.toArray(new URL[_classpath.size()]);
+            return _classpath.toArray(new URI[0]);
         }
     }
 
@@ -233,9 +237,9 @@ public class Runner
         LOG.info("Runner");
         LOG.debug("Runner classpath {}", _classpath);
 
-        String contextPath = __defaultContextPath;
+        String contextPath = DEFAULT_CONTEXT_PATH;
         boolean contextPathSet = false;
-        int port = __defaultPort;
+        int port = DEFAULT_PORT;
         String host = null;
         int stopPort = Integer.getInteger("STOP.PORT", 0);
         String stopKey = System.getProperty("STOP.KEY", null);
@@ -306,7 +310,7 @@ public class Runner
                         }
                         else if ("STOP.PORT".equals(sysProps[0]))
                         {
-                            stopPort = Integer.valueOf(sysProps[1]);
+                            stopPort = Integer.parseInt(sysProps[1]);
                             break;
                         }
                     }
@@ -328,22 +332,22 @@ public class Runner
                             {
                                 try (Resource resource = Resource.newResource(cfg))
                                 {
-                                    XmlConfiguration xmlConfiguration = new XmlConfiguration(resource.getURL());
+                                    XmlConfiguration xmlConfiguration = new XmlConfiguration(resource);
                                     xmlConfiguration.configure(_server);
                                 }
                             }
                         }
 
                         //check that everything got configured, and if not, make the handlers
-                        HandlerCollection handlers = _server.getChildHandlerByClass(HandlerCollection.class);
+                        HandlerCollection handlers = (HandlerCollection)_server.getChildHandlerByClass(HandlerCollection.class);
                         if (handlers == null)
                         {
-                            handlers = new HandlerCollection();
+                            handlers = new HandlerList();
                             _server.setHandler(handlers);
                         }
 
                         //check if contexts already configured
-                        _contexts = handlers.getChildHandlerByClass(ContextHandlerCollection.class);
+                        _contexts = (ContextHandlerCollection)handlers.getChildHandlerByClass(ContextHandlerCollection.class);
                         if (_contexts == null)
                         {
                             _contexts = new ContextHandlerCollection();
@@ -366,7 +370,7 @@ public class Runner
                                 statsContext.setSessionHandler(new SessionHandler());
                                 if (_statsPropFile != null)
                                 {
-                                    HashLoginService loginService = new HashLoginService("StatsRealm", _statsPropFile);
+                                    final HashLoginService loginService = new HashLoginService("StatsRealm", _statsPropFile);
                                     Constraint constraint = new Constraint();
                                     constraint.setName("Admin Only");
                                     constraint.setRoles(new String[]{"admin"});
@@ -409,7 +413,7 @@ public class Runner
                             {
                                 for (Connector connector : connectors)
                                 {
-                                    connector.addBean(new ConnectionStatistics());
+                                    ((AbstractConnector)connector).addBean(new ConnectionStatistics());
                                 }
                             }
                         }
@@ -430,45 +434,45 @@ public class Runner
                         if (!ctx.isDirectory() && ctx.toString().toLowerCase(Locale.ENGLISH).endsWith(".xml"))
                         {
                             // It is a context config file
-                            XmlConfiguration xmlConfiguration = new XmlConfiguration(ctx.getURL());
+                            XmlConfiguration xmlConfiguration = new XmlConfiguration(ctx);
                             xmlConfiguration.getIdMap().put("Server", _server);
                             ContextHandler handler = (ContextHandler)xmlConfiguration.configure();
                             if (contextPathSet)
                                 handler.setContextPath(contextPath);
                             _contexts.addHandler(handler);
-                            String containerIncludeJarPattern = (String)handler.getAttribute(WebInfConfiguration.CONTAINER_JAR_PATTERN);
+                            String containerIncludeJarPattern = (String)handler.getAttribute(MetaInfConfiguration.CONTAINER_JAR_PATTERN);
                             if (containerIncludeJarPattern == null)
-                                containerIncludeJarPattern = __containerIncludeJarPattern;
+                                containerIncludeJarPattern = CONTAINER_INCLUDE_JAR_PATTERN;
                             else
                             {
-                                if (!containerIncludeJarPattern.contains(__containerIncludeJarPattern))
+                                if (!containerIncludeJarPattern.contains(CONTAINER_INCLUDE_JAR_PATTERN))
                                 {
-                                    containerIncludeJarPattern = containerIncludeJarPattern + (StringUtil.isBlank(containerIncludeJarPattern) ? "" : "|") + __containerIncludeJarPattern;
+                                    containerIncludeJarPattern = containerIncludeJarPattern + (StringUtil.isBlank(containerIncludeJarPattern) ? "" : "|") + CONTAINER_INCLUDE_JAR_PATTERN;
                                 }
                             }
 
-                            handler.setAttribute(WebInfConfiguration.CONTAINER_JAR_PATTERN, containerIncludeJarPattern);
+                            handler.setAttribute(MetaInfConfiguration.CONTAINER_JAR_PATTERN, containerIncludeJarPattern);
 
                             //check the configurations, if not explicitly set up, then configure all of them
                             if (handler instanceof WebAppContext)
                             {
                                 WebAppContext wac = (WebAppContext)handler;
                                 if (wac.getConfigurationClasses() == null || wac.getConfigurationClasses().length == 0)
-                                    wac.setConfigurationClasses(__plusConfigurationClasses);
+                                    wac.setConfigurationClasses(PLUS_CONFIGURATION_CLASSES);
                             }
                         }
                         else
                         {
                             // assume it is a WAR file
                             WebAppContext webapp = new WebAppContext(_contexts, ctx.toString(), contextPath);
-                            webapp.setConfigurationClasses(__plusConfigurationClasses);
-                            webapp.setAttribute(WebInfConfiguration.CONTAINER_JAR_PATTERN,
-                                __containerIncludeJarPattern);
+                            webapp.setConfigurationClasses(PLUS_CONFIGURATION_CLASSES);
+                            webapp.setAttribute(MetaInfConfiguration.CONTAINER_JAR_PATTERN,
+                                CONTAINER_INCLUDE_JAR_PATTERN);
                         }
                     }
                     //reset
                     contextPathSet = false;
-                    contextPath = __defaultContextPath;
+                    contextPath = DEFAULT_CONTEXT_PATH;
                     break;
             }
         }
@@ -493,12 +497,14 @@ public class Runner
                 monitor.setKey(stopKey);
                 monitor.setExitVm(true);
                 break;
+
+            default:
+                break;
         }
 
         if (_logFile != null)
         {
-            NCSARequestLog requestLog = new NCSARequestLog(_logFile);
-            requestLog.setExtended(false);
+            CustomRequestLog requestLog = new CustomRequestLog(_logFile);
             _server.setRequestLog(requestLog);
         }
     }
@@ -521,21 +527,37 @@ public class Runner
         _server.join();
     }
 
+    private URL toURL(URI uri)
+    {
+        try
+        {
+            return uri.toURL();
+        }
+        catch (MalformedURLException e)
+        {
+            throw new RuntimeException(e);
+        }
+    }
+
     /**
      * Establish a classloader with custom paths (if any)
      */
     protected void initClassLoader()
     {
-        URL[] paths = _classpath.asArray();
+        URL[] paths = Arrays.stream(_classpath.asArray()).map(this::toURL).toArray(URL[]::new);
 
-        if (_classLoader == null && paths != null && paths.length > 0)
+        if (_classLoader == null && paths.length > 0)
         {
             ClassLoader context = Thread.currentThread().getContextClassLoader();
 
             if (context == null)
+            {
                 _classLoader = new URLClassLoader(paths);
+            }
             else
+            {
                 _classLoader = new URLClassLoader(paths, context);
+            }
 
             Thread.currentThread().setContextClassLoader(_classLoader);
         }

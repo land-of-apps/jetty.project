@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.io;
@@ -46,7 +46,7 @@ public interface ByteBufferPool
      * @return the requested buffer
      * @see #release(ByteBuffer)
      */
-    ByteBuffer acquire(int size, boolean direct);
+    public ByteBuffer acquire(int size, boolean direct);
 
     /**
      * <p>Returns a {@link ByteBuffer}, usually obtained with {@link #acquire(int, boolean)}
@@ -55,7 +55,19 @@ public interface ByteBufferPool
      * @param buffer the buffer to return
      * @see #acquire(int, boolean)
      */
-    void release(ByteBuffer buffer);
+    public void release(ByteBuffer buffer);
+
+    /**
+     * <p>Removes a {@link ByteBuffer} that was previously obtained with {@link #acquire(int, boolean)}.</p>
+     * <p>The buffer will not be available for further reuse.</p>
+     *
+     * @param buffer the buffer to remove
+     * @see #acquire(int, boolean)
+     * @see #release(ByteBuffer)
+     */
+    default void remove(ByteBuffer buffer)
+    {
+    }
 
     /**
      * <p>Creates a new ByteBuffer of the given capacity and the given directness.</p>
@@ -69,7 +81,7 @@ public interface ByteBufferPool
         return direct ? BufferUtil.allocateDirect(capacity) : BufferUtil.allocate(capacity);
     }
 
-    class Lease
+    public static class Lease
     {
         private final ByteBufferPool byteBufferPool;
         private final List<ByteBuffer> buffers;
@@ -139,18 +151,16 @@ public interface ByteBufferPool
         }
     }
 
-    class Bucket
+    public static class Bucket
     {
         private final Deque<ByteBuffer> _queue = new ConcurrentLinkedDeque<>();
-        private final ByteBufferPool _pool;
         private final int _capacity;
         private final int _maxSize;
         private final AtomicInteger _size;
         private long _lastUpdate = System.nanoTime();
 
-        public Bucket(ByteBufferPool pool, int capacity, int maxSize)
+        public Bucket(int capacity, int maxSize)
         {
-            _pool = pool;
             _capacity = capacity;
             _maxSize = maxSize;
             _size = maxSize > 0 ? new AtomicInteger() : null;
@@ -161,22 +171,6 @@ public interface ByteBufferPool
             ByteBuffer buffer = queuePoll();
             if (buffer == null)
                 return null;
-            if (_size != null)
-                _size.decrementAndGet();
-            return buffer;
-        }
-
-        /**
-         * @param direct whether to create a direct buffer when none is available
-         * @return a ByteBuffer
-         * @deprecated use {@link #acquire()} instead
-         */
-        @Deprecated
-        public ByteBuffer acquire(boolean direct)
-        {
-            ByteBuffer buffer = queuePoll();
-            if (buffer == null)
-                return _pool.newByteBuffer(_capacity, direct);
             if (_size != null)
                 _size.decrementAndGet();
             return buffer;

@@ -1,31 +1,37 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.servlet;
 
+import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.List;
 import javax.servlet.DispatcherType;
+import javax.servlet.http.HttpSessionEvent;
+import javax.servlet.http.HttpSessionListener;
 
 import org.eclipse.jetty.http.pathmap.MappedResource;
+import org.eclipse.jetty.util.component.Container;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -79,17 +85,17 @@ public class ServletHandlerTest
         fm5.setFilterHolder(fh5);
 
         sh1.setName("s1");
-        sm1.setDefault(false);
+        sm1.setFromDefaultDescriptor(false);
         sm1.setPathSpec("/foo/*");
         sm1.setServletName("s1");
 
         sh2.setName("s2");
-        sm2.setDefault(false);
+        sm2.setFromDefaultDescriptor(false);
         sm2.setPathSpec("/foo/*");
         sm2.setServletName("s2");
 
         sh3.setName("s3");
-        sm3.setDefault(true);
+        sm3.setFromDefaultDescriptor(true);
         sm3.setPathSpec("/foo/*");
         sm3.setServletName("s3");
     }
@@ -251,9 +257,9 @@ public class ServletHandlerTest
 
         handler.updateMappings();
 
-        MappedResource<ServletHolder> entry = handler.getMappedServlet("/foo/*");
+        ServletHandler.MappedServlet entry = handler.getMappedServlet("/foo/*");
         assertNotNull(entry);
-        assertEquals("s1", entry.getResource().getName());
+        assertEquals("s1", entry.getServletHolder().getName());
     }
 
     @Test
@@ -292,9 +298,9 @@ public class ServletHandlerTest
         handler.addServletMapping(sm2);
         handler.updateMappings();
 
-        MappedResource<ServletHolder> entry = handler.getMappedServlet("/foo/*");
+        ServletHandler.MappedServlet entry = handler.getMappedServlet("/foo/*");
         assertNotNull(entry);
-        assertEquals("s2", entry.getResource().getName());
+        assertEquals("s2", entry.getServletHolder().getName());
     }
 
     @Test
@@ -315,6 +321,7 @@ public class ServletHandlerTest
 
         //add another ordinary mapping
         FilterHolder of1 = new FilterHolder(new Source(Source.Origin.DESCRIPTOR, "foo.xml"));
+        of1.setName("foo");
         FilterMapping ofm1 = new FilterMapping();
         ofm1.setFilterHolder(of1);
         ofm1.setPathSpec("/*");
@@ -448,6 +455,16 @@ public class ServletHandlerTest
         mappings = handler.getFilterMappings();
         assertEquals(4, mappings.length);
         assertTrue(fm5 == mappings[mappings.length - 1]);
+    }
+
+    @Test
+    public void testFilterMappingNoFilter() throws Exception
+    {
+        FilterMapping mapping = new FilterMapping();
+        mapping.setPathSpec("/*");
+        mapping.setFilterName("foo");
+        //default dispatch is REQUEST, and there is no holder to check for async supported
+        assertFalse(mapping.appliesTo(DispatcherType.ASYNC));
     }
 
     @Test
@@ -644,5 +661,72 @@ public class ServletHandlerTest
         assertTrue(f == mappings[4].getFilterHolder());  //ordinary
         assertTrue(fh3 == mappings[5].getFilterHolder()); //isMatchAfter = true;
         assertTrue(pf == mappings[6].getFilterHolder()); //isMatchAfter = true;
+    }
+    
+    @Test
+    public void testFiltersServletsListenersAsBeans() throws Exception
+    {
+        ServletContextHandler context = new ServletContextHandler();
+        
+        ServletHandler handler = context.getServletHandler();
+        
+        //test that filters, servlets and listeners are added as beans
+        //and thus reported in a Container.Listener
+        List<Object> addResults = new ArrayList<>();
+        List<Object> removeResults = new ArrayList<>();
+        handler.addEventListener(new Container.Listener()
+        {
+            @Override
+            public void beanAdded(Container parent, Object child)
+            {
+                addResults.add(child);
+            }
+
+            @Override
+            public void beanRemoved(Container parent, Object child)
+            {
+                removeResults.add(child);
+            }
+        });
+
+        handler.addFilter(fh1);
+        handler.addServlet(sh1);
+        ListenerHolder lh1 = new ListenerHolder(new Source(Source.Origin.DESCRIPTOR, "foo.xml"));
+        lh1.setInstance(new HttpSessionListener()
+        {  
+            @Override
+            public void sessionDestroyed(HttpSessionEvent se)
+            {
+            }
+            
+            @Override
+            public void sessionCreated(HttpSessionEvent se)
+            {   
+            }
+        });
+        handler.addListener(lh1);
+        
+        assertTrue(addResults.contains(fh1));
+        assertTrue(addResults.contains(sh1));
+        assertTrue(addResults.contains(lh1));
+        
+        //test that servlets, filters and listeners are dumped, but
+        //not as beans
+        String dump = handler.dump();
+
+        assertTrue(dump.contains("+> listeners"));
+        assertTrue(dump.contains("+> filters"));
+        assertTrue(dump.contains("+> servlets"));
+        assertTrue(dump.contains("+> filterMappings"));
+        assertTrue(dump.contains("+> servletMappings"));
+
+        handler.setFilters(null);
+        handler.setServlets(null);
+        handler.setListeners(null);
+
+        //check they're removed as beans
+        assertTrue(removeResults.contains(fh1));
+        assertTrue(removeResults.contains(sh1));
+        assertTrue(removeResults.contains(lh1));
     }
 }

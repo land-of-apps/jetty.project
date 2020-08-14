@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.start;
@@ -210,7 +210,7 @@ public class Main
         String[] argArray = cmd.getArgs().toArray(new String[0]);
         StartLog.debug("Command Line Args: %s", cmd.toString());
 
-        Class<?>[] methodParamTypes = new Class[]{argArray.getClass()};
+        Class<?>[] methodParamTypes = {argArray.getClass()};
 
         Method main = invokedClass.getDeclaredMethod("main", methodParamTypes);
         Object[] methodParams = new Object[]{argArray};
@@ -243,7 +243,7 @@ public class Main
 
     public void listModules(StartArgs args)
     {
-        List<String> tags = args.getListModules();
+        final List<String> tags = args.getListModules();
 
         StartLog.endStartLog();
         System.out.println();
@@ -275,7 +275,6 @@ public class Main
     public StartArgs processCommandLine(String[] cmdLine) throws Exception
     {
         // Processing Order is important!
-        // ------------------------------------------------------------
         // 1) Configuration Locations
         CommandLineConfigSource cmdLineSource = new CommandLineConfigSource(cmdLine);
         baseHome = new BaseHome(cmdLineSource);
@@ -283,7 +282,6 @@ public class Main
         StartLog.debug("jetty.home=%s", baseHome.getHome());
         StartLog.debug("jetty.base=%s", baseHome.getBase());
 
-        // ------------------------------------------------------------
         // 2) Parse everything provided.
         // This would be the directory information +
         // the various start inis
@@ -306,15 +304,13 @@ public class Main
             normalizeURI(baseHome.getBasePath().toUri().toString()),
             base.source);
 
-        // ------------------------------------------------------------
         // 3) Module Registration
         Modules modules = new Modules(baseHome, args);
         StartLog.debug("Registering all modules");
         modules.registerAll();
 
-        // ------------------------------------------------------------
         // 4) Active Module Resolution
-        for (String enabledModule : args.getEnabledModules())
+        for (String enabledModule : modules.getSortedNames(args.getEnabledModules()))
         {
             for (String source : args.getSources(enabledModule))
             {
@@ -343,21 +339,17 @@ public class Main
             module.setSkipFilesValidation(true);
         }
 
-        // ------------------------------------------------------------
         // 5) Lib & XML Expansion / Resolution
         args.expandSystemProperties();
         args.expandLibs();
         args.expandModules(activeModules);
 
-        // ------------------------------------------------------------
         // 6) Resolve Extra XMLs
         args.resolveExtraXmls();
 
-        // ------------------------------------------------------------
         // 7) JPMS Expansion
         args.expandJPMS(activeModules);
 
-        // ------------------------------------------------------------
         // 8) Resolve Property Files
         args.resolvePropertyFiles();
 
@@ -497,12 +489,18 @@ public class Main
         }
     }
 
+    /* implement Apache commons daemon (jsvc) lifecycle methods (init, start, stop, destroy) */
+    public void start() throws Exception
+    {
+        start(jsvcStartArgs);
+    }
+
     private void doStop(StartArgs args)
     {
-        Prop stopHostProp = args.getProperties().getProp("STOP.HOST", true);
-        Prop stopPortProp = args.getProperties().getProp("STOP.PORT", true);
-        Prop stopKeyProp = args.getProperties().getProp("STOP.KEY", true);
-        Prop stopWaitProp = args.getProperties().getProp("STOP.WAIT", true);
+        final Prop stopHostProp = args.getProperties().getProp("STOP.HOST", true);
+        final Prop stopPortProp = args.getProperties().getProp("STOP.PORT", true);
+        final Prop stopKeyProp = args.getProperties().getProp("STOP.KEY", true);
+        final Prop stopWaitProp = args.getProperties().getProp("STOP.WAIT", true);
 
         String stopHost = "127.0.0.1";
         int stopPort = -1;
@@ -611,6 +609,12 @@ public class Main
         }
     }
 
+    /* implement Apache commons daemon (jsvc) lifecycle methods (init, start, stop, destroy) */
+    public void stop() throws Exception
+    {
+        doStop(jsvcStartArgs);
+    }
+
     public void usage(boolean exit)
     {
         StartLog.endStartLog();
@@ -655,8 +659,7 @@ public class Main
         return resourcePrinted;
     }
 
-    // ------------------------------------------------------------
-    // implement Apache commons daemon (jsvc) lifecycle methods (init, start, stop, destroy)
+    /* implement Apache commons daemon (jsvc) lifecycle methods (init, start, stop, destroy) */
     public void init(String[] args) throws Exception
     {
         try
@@ -674,22 +677,7 @@ public class Main
         }
     }
 
-    // ------------------------------------------------------------
-    // implement Apache commons daemon (jsvc) lifecycle methods (init, start, stop, destroy)
-    public void start() throws Exception
-    {
-        start(jsvcStartArgs);
-    }
-
-    // ------------------------------------------------------------
-    // implement Apache commons daemon (jsvc) lifecycle methods (init, start, stop, destroy)
-    public void stop() throws Exception
-    {
-        doStop(jsvcStartArgs);
-    }
-
-    // ------------------------------------------------------------
-    // implement Apache commons daemon (jsvc) lifecycle methods (init, start, stop, destroy)
+    /* implement Apache commons daemon (jsvc) lifecycle methods (init, start, stop, destroy) */
     public void destroy()
     {
     }

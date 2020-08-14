@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.tests.distribution;
@@ -23,12 +23,10 @@ import java.nio.file.Paths;
 import java.util.concurrent.TimeUnit;
 
 import org.eclipse.jetty.client.api.ContentResponse;
-import org.eclipse.jetty.client.util.FormContentProvider;
+import org.eclipse.jetty.client.util.FormRequestContent;
 import org.eclipse.jetty.http.HttpStatus;
 import org.eclipse.jetty.util.Fields;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.DisabledOnJre;
-import org.junit.jupiter.api.condition.JRE;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
@@ -61,7 +59,7 @@ public class DemoBaseTests extends AbstractDistributionTest
 
         try (DistributionTester.Run run1 = distribution.start(args))
         {
-            assertTrue(run1.awaitConsoleLogsFor("Started @", 20, TimeUnit.SECONDS));
+            assertTrue(run1.awaitConsoleLogsFor("Started Server@", 20, TimeUnit.SECONDS));
 
             startHttpClient();
             ContentResponse response = client.GET("http://localhost:" + httpPort + "/test/jsp/dump.jsp");
@@ -93,7 +91,7 @@ public class DemoBaseTests extends AbstractDistributionTest
 
         try (DistributionTester.Run run1 = distribution.start(args))
         {
-            assertTrue(run1.awaitConsoleLogsFor("Started @", 20, TimeUnit.SECONDS));
+            assertTrue(run1.awaitConsoleLogsFor("Started Server@", 20, TimeUnit.SECONDS));
 
             startHttpClient();
             ContentResponse response;
@@ -138,18 +136,28 @@ public class DemoBaseTests extends AbstractDistributionTest
 
         try (DistributionTester.Run run1 = distribution.start(args))
         {
-            assertTrue(run1.awaitConsoleLogsFor("Started @", 20, TimeUnit.SECONDS));
+            assertTrue(run1.awaitConsoleLogsFor("Started Server@", 20, TimeUnit.SECONDS));
 
             startHttpClient();
+
+            //test the async listener
             ContentResponse response = client.POST("http://localhost:" + httpPort + "/test-spec/asy/xx").send();
             assertEquals(HttpStatus.OK_200, response.getStatus());
             assertThat(response.getContentAsString(), containsString("<span class=\"pass\">PASS</span>"));
             assertThat(response.getContentAsString(), not(containsString("<span class=\"fail\">FAIL</span>")));
+
+            //test the servlet 3.1/4 features
+            response = client.POST("http://localhost:" + httpPort + "/test-spec/test/xx").send();
+            assertThat(response.getContentAsString(), containsString("<span class=\"pass\">PASS</span>"));
+            assertThat(response.getContentAsString(), not(containsString("<span class=\"fail\">FAIL</span>")));
+
+            //test dynamic jsp
+            response = client.POST("http://localhost:" + httpPort + "/test-spec/dynamicjsp/xx").send();
+            assertThat(response.getContentAsString(), containsString("Programmatically Added Jsp File"));
         }
     }
 
     @Test
-    @DisabledOnJre(JRE.JAVA_8)
     public void testJPMS() throws Exception
     {
         String jettyVersion = System.getProperty("jettyVersion");
@@ -169,7 +177,7 @@ public class DemoBaseTests extends AbstractDistributionTest
         };
         try (DistributionTester.Run run = distribution.start(args))
         {
-            assertTrue(run.awaitConsoleLogsFor("Started @", 10, TimeUnit.SECONDS));
+            assertTrue(run.awaitConsoleLogsFor("Started Server@", 10, TimeUnit.SECONDS));
 
             startHttpClient();
             ContentResponse response = client.GET("http://localhost:" + httpPort + "/test/hello");
@@ -196,7 +204,7 @@ public class DemoBaseTests extends AbstractDistributionTest
         };
         try (DistributionTester.Run run = distribution.start(args))
         {
-            assertTrue(run.awaitConsoleLogsFor("Started @", 10, TimeUnit.SECONDS));
+            assertTrue(run.awaitConsoleLogsFor("Started ", 10, TimeUnit.SECONDS));
 
             startHttpClient();
             client.setFollowRedirects(true);
@@ -207,7 +215,7 @@ public class DemoBaseTests extends AbstractDistributionTest
             Fields form = new Fields();
             form.add("Action", "New Session");
             response = client.POST("http://localhost:" + httpPort + "/test/session/")
-                .content(new FormContentProvider(form))
+                .body(new FormRequestContent(form))
                 .send();
             assertEquals(HttpStatus.OK_200, response.getStatus());
             String content = response.getContentAsString();
@@ -223,7 +231,7 @@ public class DemoBaseTests extends AbstractDistributionTest
             form.add("Name", "Zed");
             form.add("Value", "[alpha]");
             response = client.POST(location)
-                .content(new FormContentProvider(form))
+                .body(new FormRequestContent(form))
                 .send();
             assertEquals(HttpStatus.OK_200, response.getStatus());
             content = response.getContentAsString();

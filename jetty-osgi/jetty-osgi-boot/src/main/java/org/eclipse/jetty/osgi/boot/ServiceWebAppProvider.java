@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.osgi.boot;
@@ -29,8 +29,6 @@ import org.eclipse.jetty.deploy.DeploymentManager;
 import org.eclipse.jetty.osgi.boot.internal.serverfactory.ServerInstanceWrapper;
 import org.eclipse.jetty.osgi.boot.utils.Util;
 import org.eclipse.jetty.server.handler.ContextHandler;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
 import org.eclipse.jetty.webapp.WebAppContext;
 import org.osgi.framework.Bundle;
 import org.osgi.framework.BundleContext;
@@ -39,6 +37,8 @@ import org.osgi.framework.FrameworkUtil;
 import org.osgi.framework.ServiceReference;
 import org.osgi.framework.ServiceRegistration;
 import org.osgi.util.tracker.ServiceTracker;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * ServiceWebAppProvider
@@ -47,7 +47,7 @@ import org.osgi.util.tracker.ServiceTracker;
  */
 public class ServiceWebAppProvider extends AbstractWebAppProvider implements ServiceProvider
 {
-    private static final Logger LOG = Log.getLogger(AbstractWebAppProvider.class);
+    private static final Logger LOG = LoggerFactory.getLogger(AbstractWebAppProvider.class);
 
     /**
      * Map of ServiceRef to App. Used when it is an osgi service that is a WebAppContext.
@@ -72,9 +72,6 @@ public class ServiceWebAppProvider extends AbstractWebAppProvider implements Ser
             super(bundleContext, filter, null);
         }
 
-        /**
-         * @see org.osgi.util.tracker.ServiceTracker#addingService(org.osgi.framework.ServiceReference)
-         */
         @Override
         public Object addingService(ServiceReference reference)
         {
@@ -83,9 +80,6 @@ public class ServiceWebAppProvider extends AbstractWebAppProvider implements Ser
             return wac;
         }
 
-        /**
-         * @see org.osgi.util.tracker.ServiceTracker#modifiedService(org.osgi.framework.ServiceReference, java.lang.Object)
-         */
         @Override
         public void modifiedService(ServiceReference reference, Object service)
         {
@@ -93,9 +87,6 @@ public class ServiceWebAppProvider extends AbstractWebAppProvider implements Ser
             addingService(reference);
         }
 
-        /**
-         * @see org.osgi.util.tracker.ServiceTracker#removedService(org.osgi.framework.ServiceReference, java.lang.Object)
-         */
         @Override
         public void removedService(ServiceReference reference, Object service)
         {
@@ -159,40 +150,26 @@ public class ServiceWebAppProvider extends AbstractWebAppProvider implements Ser
 
         String contextPath = (String)serviceRef.getProperty(OSGiWebappConstants.RFC66_WEB_CONTEXTPATH);
         if (contextPath == null)
-            contextPath = (String)serviceRef.getProperty(OSGiWebappConstants.SERVICE_PROP_CONTEXT_PATH);
-        if (contextPath == null)
             return false; //No context path
 
-        String base = (String)serviceRef.getProperty(OSGiWebappConstants.JETTY_WAR_FOLDER_PATH);
-        if (base == null)
-            base = (String)serviceRef.getProperty(OSGiWebappConstants.JETTY_WAR_RESOURCE_PATH);
-        if (base == null)
-            base = (String)serviceRef.getProperty(OSGiWebappConstants.SERVICE_PROP_WAR);
+        String base = (String)serviceRef.getProperty(OSGiWebappConstants.JETTY_WAR_RESOURCE_PATH);
 
         if (base == null)
             return false; //No webapp base
 
         String webdefaultXml = (String)serviceRef.getProperty(OSGiWebappConstants.JETTY_DEFAULT_WEB_XML_PATH);
-        if (webdefaultXml == null)
-            webdefaultXml = (String)serviceRef.getProperty(OSGiWebappConstants.SERVICE_PROP_DEFAULT_WEB_XML_PATH);
         if (webdefaultXml != null)
             properties.put(OSGiWebappConstants.JETTY_DEFAULT_WEB_XML_PATH, webdefaultXml);
 
         String webXml = (String)serviceRef.getProperty(OSGiWebappConstants.JETTY_WEB_XML_PATH);
-        if (webXml == null)
-            webXml = (String)serviceRef.getProperty(OSGiWebappConstants.SERVICE_PROP_WEB_XML_PATH);
         if (webXml != null)
             properties.put(OSGiWebappConstants.JETTY_WEB_XML_PATH, webXml);
 
         String extraClassPath = (String)serviceRef.getProperty(OSGiWebappConstants.JETTY_EXTRA_CLASSPATH);
-        if (extraClassPath == null)
-            extraClassPath = (String)serviceRef.getProperty(OSGiWebappConstants.SERVICE_PROP_EXTRA_CLASSPATH);
         if (extraClassPath != null)
             properties.put(OSGiWebappConstants.JETTY_EXTRA_CLASSPATH, extraClassPath);
 
         String bundleInstallOverride = (String)serviceRef.getProperty(OSGiWebappConstants.JETTY_BUNDLE_INSTALL_LOCATION_OVERRIDE);
-        if (bundleInstallOverride == null)
-            bundleInstallOverride = (String)serviceRef.getProperty(OSGiWebappConstants.SERVICE_PROP_BUNDLE_INSTALL_LOCATION_OVERRIDE);
         if (bundleInstallOverride != null)
             properties.put(OSGiWebappConstants.JETTY_BUNDLE_INSTALL_LOCATION_OVERRIDE, bundleInstallOverride);
 
@@ -243,9 +220,6 @@ public class ServiceWebAppProvider extends AbstractWebAppProvider implements Ser
         return false;
     }
 
-    /**
-     * @see org.eclipse.jetty.util.component.AbstractLifeCycle#doStart()
-     */
     @Override
     protected void doStart() throws Exception
     {
@@ -265,9 +239,6 @@ public class ServiceWebAppProvider extends AbstractWebAppProvider implements Ser
         super.doStart();
     }
 
-    /**
-     * @see org.eclipse.jetty.util.component.AbstractLifeCycle#doStop()
-     */
     @Override
     protected void doStop() throws Exception
     {
@@ -282,7 +253,7 @@ public class ServiceWebAppProvider extends AbstractWebAppProvider implements Ser
             }
             catch (Exception e)
             {
-                LOG.warn(e);
+                LOG.warn("Unable to unregister {}", _serviceRegForServices, e);
             }
         }
         super.doStop();

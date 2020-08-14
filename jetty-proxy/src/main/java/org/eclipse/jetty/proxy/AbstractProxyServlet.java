@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.proxy;
@@ -21,7 +21,6 @@ package org.eclipse.jetty.proxy;
 import java.net.InetAddress;
 import java.net.URI;
 import java.net.UnknownHostException;
-import java.util.Collections;
 import java.util.Enumeration;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -43,17 +42,19 @@ import org.eclipse.jetty.client.HttpClient;
 import org.eclipse.jetty.client.ProtocolHandlers;
 import org.eclipse.jetty.client.api.Request;
 import org.eclipse.jetty.client.api.Response;
-import org.eclipse.jetty.client.http.HttpClientTransportOverHTTP;
+import org.eclipse.jetty.client.dynamic.HttpClientTransportDynamic;
 import org.eclipse.jetty.http.HttpField;
+import org.eclipse.jetty.http.HttpFields;
 import org.eclipse.jetty.http.HttpHeader;
 import org.eclipse.jetty.http.HttpHeaderValue;
+import org.eclipse.jetty.http.HttpScheme;
 import org.eclipse.jetty.http.HttpStatus;
+import org.eclipse.jetty.io.ClientConnector;
 import org.eclipse.jetty.util.HttpCookieStore;
-import org.eclipse.jetty.util.ProcessorUtils;
 import org.eclipse.jetty.util.StringUtil;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
 import org.eclipse.jetty.util.thread.QueuedThreadPool;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * <p>Abstract base class for proxy servlets.</p>
@@ -84,22 +85,17 @@ import org.eclipse.jetty.util.thread.QueuedThreadPool;
 public abstract class AbstractProxyServlet extends HttpServlet
 {
     protected static final String CLIENT_REQUEST_ATTRIBUTE = "org.eclipse.jetty.proxy.clientRequest";
-    protected static final Set<String> HOP_HEADERS;
-
-    static
-    {
-        Set<String> hopHeaders = new HashSet<>();
-        hopHeaders.add("connection");
-        hopHeaders.add("keep-alive");
-        hopHeaders.add("proxy-authorization");
-        hopHeaders.add("proxy-authenticate");
-        hopHeaders.add("proxy-connection");
-        hopHeaders.add("transfer-encoding");
-        hopHeaders.add("te");
-        hopHeaders.add("trailer");
-        hopHeaders.add("upgrade");
-        HOP_HEADERS = Collections.unmodifiableSet(hopHeaders);
-    }
+    protected static final Set<String> HOP_HEADERS = Set.of(
+        "connection",
+        "keep-alive",
+        "proxy-authorization",
+        "proxy-authenticate",
+        "proxy-connection",
+        "transfer-encoding",
+        "te",
+        "trailer",
+        "upgrade"
+    );
 
     private final Set<String> _whiteList = new HashSet<>();
     private final Set<String> _blackList = new HashSet<>();
@@ -156,7 +152,7 @@ public abstract class AbstractProxyServlet extends HttpServlet
         catch (Exception x)
         {
             if (_log.isDebugEnabled())
-                _log.debug(x);
+                _log.debug("Failed to stop client", x);
         }
     }
 
@@ -213,7 +209,7 @@ public abstract class AbstractProxyServlet extends HttpServlet
         {
             servletName = getClass().getName() + "." + servletName;
         }
-        return Log.getLogger(servletName);
+        return LoggerFactory.getLogger(servletName);
     }
 
     /**
@@ -356,11 +352,23 @@ public abstract class AbstractProxyServlet extends HttpServlet
      */
     protected HttpClient newHttpClient()
     {
-        int selectors = Math.max(1, ProcessorUtils.availableProcessors() / 2);
+        int selectors = 1;
         String value = getServletConfig().getInitParameter("selectors");
         if (value != null)
             selectors = Integer.parseInt(value);
-        return new HttpClient(new HttpClientTransportOverHTTP(selectors), null);
+        ClientConnector clientConnector = newClientConnector();
+        clientConnector.setSelectors(selectors);
+        return newHttpClient(clientConnector);
+    }
+
+    protected HttpClient newHttpClient(ClientConnector clientConnector)
+    {
+        return new HttpClient(new HttpClientTransportDynamic(clientConnector));
+    }
+
+    protected ClientConnector newClientConnector()
+    {
+        return new ClientConnector();
     }
 
     protected HttpClient getHttpClient()
@@ -417,8 +425,14 @@ public abstract class AbstractProxyServlet extends HttpServlet
     {
         if (!validateDestination(clientRequest.getServerName(), clientRequest.getServerPort()))
             return null;
-
+        // If the proxy is secure, we will likely get a proxied URI
+        // with the "https" scheme, but the upstream server needs
+        // to be called with the "http" scheme (the ConnectHandler
+        // is used to call upstream servers with the "https" scheme).
         StringBuffer target = clientRequest.getRequestURL();
+        // Change "https" to "http".
+        if (HttpScheme.HTTPS.is(target.substring(0, 5)))
+            target.replace(4, 5, "");
         String query = clientRequest.getQueryString();
         if (query != null)
             target.append("?").append(query);
@@ -455,7 +469,7 @@ public abstract class AbstractProxyServlet extends HttpServlet
     protected void copyRequestHeaders(HttpServletRequest clientRequest, Request proxyRequest)
     {
         // First clear possibly existing headers, as we are going to copy those from the client request.
-        proxyRequest.getHeaders().clear();
+        HttpFields.Mutable newHeaders = HttpFields.build();
 
         Set<String> headersToRemove = findConnectionHeaders(clientRequest);
 
@@ -477,13 +491,15 @@ public abstract class AbstractProxyServlet extends HttpServlet
             {
                 String headerValue = headerValues.nextElement();
                 if (headerValue != null)
-                    proxyRequest.header(headerName, headerValue);
+                    newHeaders.add(headerName, headerValue);
             }
         }
 
         // Force the Host header if configured
         if (_hostHeader != null)
-            proxyRequest.header(HttpHeader.HOST, _hostHeader);
+            newHeaders.add(HttpHeader.HOST, _hostHeader);
+
+        proxyRequest.headers(headers -> headers.clear().add(newHeaders));
     }
 
     protected Set<String> findConnectionHeaders(HttpServletRequest clientRequest)
@@ -515,15 +531,19 @@ public abstract class AbstractProxyServlet extends HttpServlet
 
     protected void addViaHeader(Request proxyRequest)
     {
-        proxyRequest.header(HttpHeader.VIA, "http/1.1 " + getViaHost());
+        proxyRequest.headers(headers -> headers.add(HttpHeader.VIA, "http/1.1 " + getViaHost()));
     }
 
     protected void addXForwardedHeaders(HttpServletRequest clientRequest, Request proxyRequest)
     {
-        proxyRequest.header(HttpHeader.X_FORWARDED_FOR, clientRequest.getRemoteAddr());
-        proxyRequest.header(HttpHeader.X_FORWARDED_PROTO, clientRequest.getScheme());
-        proxyRequest.header(HttpHeader.X_FORWARDED_HOST, clientRequest.getHeader(HttpHeader.HOST.asString()));
-        proxyRequest.header(HttpHeader.X_FORWARDED_SERVER, clientRequest.getLocalName());
+        proxyRequest.headers(headers -> headers.add(HttpHeader.X_FORWARDED_FOR, clientRequest.getRemoteAddr()));
+        proxyRequest.headers(headers -> headers.add(HttpHeader.X_FORWARDED_PROTO, clientRequest.getScheme()));
+        String hostHeader = clientRequest.getHeader(HttpHeader.HOST.asString());
+        if (hostHeader != null)
+            proxyRequest.headers(headers -> headers.add(HttpHeader.X_FORWARDED_HOST, hostHeader));
+        String localName = clientRequest.getLocalName();
+        if (localName != null)
+            proxyRequest.headers(headers -> headers.add(HttpHeader.X_FORWARDED_SERVER, localName));
     }
 
     protected void sendProxyRequest(HttpServletRequest clientRequest, HttpServletResponse proxyResponse, Request proxyRequest)
@@ -617,12 +637,8 @@ public abstract class AbstractProxyServlet extends HttpServlet
                 }
                 builder.append(System.lineSeparator());
             }
-            _log.debug("{} proxying to downstream:{}{}{}{}{}",
+            _log.debug("{} proxying to downstream:{}{}",
                 getRequestId(clientRequest),
-                System.lineSeparator(),
-                serverResponse,
-                System.lineSeparator(),
-                serverResponse.getHeaders().toString().trim(),
                 System.lineSeparator(),
                 builder);
         }
@@ -679,14 +695,14 @@ public abstract class AbstractProxyServlet extends HttpServlet
         }
         catch (Exception e)
         {
-            _log.ignore(e);
+            _log.trace("IGNORED", e);
             try
             {
                 proxyResponse.sendError(-1);
             }
             catch (Exception e2)
             {
-                _log.ignore(e2);
+                _log.trace("IGNORED", e2);
             }
         }
         finally

@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.start;
@@ -246,5 +246,46 @@ public class MainTest
         assertThat("jetty.base", baseHome.getBase(), is(homePath.toString()));
 
         ConfigurationAssert.assertConfiguration(baseHome, args, "assert-home-with-spaces.txt");
+    }
+
+    @Test
+    public void testProvidersUsingDefault() throws Exception
+    {
+        Path homePath = MavenTestingUtils.getTestResourceDir("providers-home").toPath().toRealPath();
+
+        List<String> cmdLineArgs = new ArrayList<>();
+        cmdLineArgs.add("user.dir=" + homePath);
+        cmdLineArgs.add("jetty.home=" + homePath);
+        cmdLineArgs.add("--module=server");
+
+        Main main = new Main();
+        StartArgs args = main.processCommandLine(cmdLineArgs.toArray(new String[cmdLineArgs.size()]));
+        BaseHome baseHome = main.getBaseHome();
+
+        assertThat("jetty.home", baseHome.getHome(), is(homePath.toString()));
+        assertThat("jetty.base", baseHome.getBase(), is(homePath.toString()));
+
+        ConfigurationAssert.assertConfiguration(baseHome, args, "assert-providers-default.txt");
+    }
+
+    @Test
+    public void testProvidersUsingSpecific() throws Exception
+    {
+        Path homePath = MavenTestingUtils.getTestResourceDir("providers-home").toPath().toRealPath();
+
+        List<String> cmdLineArgs = new ArrayList<>();
+        cmdLineArgs.add("user.dir=" + homePath);
+        cmdLineArgs.add("jetty.home=" + homePath);
+        cmdLineArgs.add("--module=server");
+        cmdLineArgs.add("--module=logging-b");
+
+        Main main = new Main();
+        StartArgs args = main.processCommandLine(cmdLineArgs.toArray(new String[cmdLineArgs.size()]));
+        BaseHome baseHome = main.getBaseHome();
+
+        assertThat("jetty.home", baseHome.getHome(), is(homePath.toString()));
+        assertThat("jetty.base", baseHome.getBase(), is(homePath.toString()));
+
+        ConfigurationAssert.assertConfiguration(baseHome, args, "assert-providers-specific.txt");
     }
 }

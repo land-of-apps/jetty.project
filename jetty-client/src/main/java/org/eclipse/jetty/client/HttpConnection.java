@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.client;
@@ -28,22 +28,26 @@ import java.util.concurrent.TimeoutException;
 
 import org.eclipse.jetty.client.api.Authentication;
 import org.eclipse.jetty.client.api.AuthenticationStore;
-import org.eclipse.jetty.client.api.Connection;
-import org.eclipse.jetty.client.api.ContentProvider;
 import org.eclipse.jetty.client.api.Request;
 import org.eclipse.jetty.client.api.Response;
+import org.eclipse.jetty.client.util.BytesRequestContent;
+import org.eclipse.jetty.http.HttpField;
 import org.eclipse.jetty.http.HttpFields;
 import org.eclipse.jetty.http.HttpHeader;
 import org.eclipse.jetty.http.HttpVersion;
+import org.eclipse.jetty.util.Attachable;
 import org.eclipse.jetty.util.HttpCookieStore;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
+import org.eclipse.jetty.util.thread.AutoLock;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-public abstract class HttpConnection implements Connection
+public abstract class HttpConnection implements IConnection, Attachable
 {
-    private static final Logger LOG = Log.getLogger(HttpConnection.class);
+    private static final Logger LOG = LoggerFactory.getLogger(HttpConnection.class);
 
+    private final AutoLock lock = new AutoLock();
     private final HttpDestination destination;
+    private Object attachment;
     private int idleTimeoutGuard;
     private long idleTimeoutStamp;
 
@@ -81,20 +85,59 @@ public abstract class HttpConnection implements Connection
             httpRequest.abort(result.failure);
     }
 
-    protected abstract SendFailure send(HttpExchange exchange);
-
-    protected void normalizeRequest(Request request)
+    protected SendFailure send(HttpChannel channel, HttpExchange exchange)
     {
-        boolean normalized = ((HttpRequest)request).normalized();
+        // Forbid idle timeouts for the time window where
+        // the request is associated to the channel and sent.
+        // Use a counter to support multiplexed requests.
+        boolean send;
+        try (AutoLock l = lock.lock())
+        {
+            send = idleTimeoutGuard >= 0;
+            if (send)
+                ++idleTimeoutGuard;
+        }
+
+        if (send)
+        {
+            HttpRequest request = exchange.getRequest();
+            SendFailure result;
+            if (channel.associate(exchange))
+            {
+                channel.send();
+                result = null;
+            }
+            else
+            {
+                // Association may fail, for example if the application
+                // aborted the request, so we must release the channel.
+                channel.release();
+                result = new SendFailure(new HttpRequestException("Could not associate request to connection", request), false);
+            }
+
+            try (AutoLock l = lock.lock())
+            {
+                --idleTimeoutGuard;
+                idleTimeoutStamp = System.nanoTime();
+            }
+
+            return result;
+        }
+        else
+        {
+            // This connection has been timed out by another thread
+            // that will take care of removing it from the pool.
+            return new SendFailure(new TimeoutException(), true);
+        }
+    }
+
+    protected void normalizeRequest(HttpRequest request)
+    {
+        boolean normalized = request.normalized();
         if (LOG.isDebugEnabled())
             LOG.debug("Normalizing {} {}", !normalized, request);
         if (normalized)
             return;
-
-        HttpVersion version = request.getVersion();
-        HttpFields headers = request.getHeaders();
-        ContentProvider content = request.getContent();
-        ProxyConfiguration.Proxy proxy = destination.getProxy();
 
         // Make sure the path is there
         String path = request.getPath();
@@ -104,6 +147,7 @@ public abstract class HttpConnection implements Connection
             request.path(path);
         }
 
+        ProxyConfiguration.Proxy proxy = destination.getProxy();
         if (proxy instanceof HttpProxy && !HttpClient.isSchemeSecure(request.getScheme()))
         {
             URI uri = request.getURI();
@@ -115,50 +159,54 @@ public abstract class HttpConnection implements Connection
         }
 
         // If we are HTTP 1.1, add the Host header
+        HttpVersion version = request.getVersion();
+        HttpFields headers = request.getHeaders();
         if (version.getVersion() <= 11)
         {
-            if (!headers.containsKey(HttpHeader.HOST.asString()))
-                headers.put(getHttpDestination().getHostField());
+            if (!headers.contains(HttpHeader.HOST))
+                request.addHeader(getHttpDestination().getHostField());
         }
 
         // Add content headers
-        if (content != null)
+        Request.Content content = request.getBody();
+        if (content == null)
         {
-            if (!headers.containsKey(HttpHeader.CONTENT_TYPE.asString()))
+            request.body(new BytesRequestContent());
+        }
+        else
+        {
+            if (!headers.contains(HttpHeader.CONTENT_TYPE))
             {
-                String contentType = null;
-                if (content instanceof ContentProvider.Typed)
-                    contentType = ((ContentProvider.Typed)content).getContentType();
+                String contentType = content.getContentType();
+                if (contentType == null)
+                    contentType = getHttpClient().getDefaultRequestContentType();
                 if (contentType != null)
                 {
-                    headers.put(HttpHeader.CONTENT_TYPE, contentType);
-                }
-                else
-                {
-                    contentType = getHttpClient().getDefaultRequestContentType();
-                    if (contentType != null)
-                        headers.put(HttpHeader.CONTENT_TYPE, contentType);
+                    HttpField field = new HttpField(HttpHeader.CONTENT_TYPE, contentType);
+                    request.addHeader(field);
                 }
             }
             long contentLength = content.getLength();
             if (contentLength >= 0)
             {
-                if (!headers.containsKey(HttpHeader.CONTENT_LENGTH.asString()))
-                    headers.put(HttpHeader.CONTENT_LENGTH, String.valueOf(contentLength));
+                if (!headers.contains(HttpHeader.CONTENT_LENGTH))
+                    request.addHeader(new HttpField.LongValueHttpField(HttpHeader.CONTENT_LENGTH, contentLength));
             }
         }
 
         // Cookies
+        StringBuilder cookies = convertCookies(request.getCookies(), null);
         CookieStore cookieStore = getHttpClient().getCookieStore();
         if (cookieStore != null && cookieStore.getClass() != HttpCookieStore.Empty.class)
         {
-            StringBuilder cookies = null;
             URI uri = request.getURI();
             if (uri != null)
-                cookies = convertCookies(HttpCookieStore.matchPath(uri, cookieStore.get(uri)), null);
-            cookies = convertCookies(request.getCookies(), cookies);
-            if (cookies != null)
-                request.header(HttpHeader.COOKIE.asString(), cookies.toString());
+                cookies = convertCookies(HttpCookieStore.matchPath(uri, cookieStore.get(uri)), cookies);
+        }
+        if (cookies != null)
+        {
+            HttpField cookieField = new HttpField(HttpHeader.COOKIE, cookies.toString());
+            request.addHeader(cookieField);
         }
 
         // Authentication
@@ -179,6 +227,16 @@ public abstract class HttpConnection implements Connection
         return builder;
     }
 
+    private void applyProxyAuthentication(Request request, ProxyConfiguration.Proxy proxy)
+    {
+        if (proxy != null)
+        {
+            Authentication.Result result = getHttpClient().getAuthenticationStore().findAuthenticationResult(proxy.getURI());
+            if (result != null)
+                result.apply(request);
+        }
+    }
+
     private void applyRequestAuthentication(Request request)
     {
         AuthenticationStore authenticationStore = getHttpClient().getAuthenticationStore();
@@ -194,61 +252,9 @@ public abstract class HttpConnection implements Connection
         }
     }
 
-    private void applyProxyAuthentication(Request request, ProxyConfiguration.Proxy proxy)
-    {
-        if (proxy != null)
-        {
-            Authentication.Result result = getHttpClient().getAuthenticationStore().findAuthenticationResult(proxy.getURI());
-            if (result != null)
-                result.apply(request);
-        }
-    }
-
-    protected SendFailure send(HttpChannel channel, HttpExchange exchange)
-    {
-        // Forbid idle timeouts for the time window where
-        // the request is associated to the channel and sent.
-        // Use a counter to support multiplexed requests.
-        boolean send;
-        synchronized (this)
-        {
-            send = idleTimeoutGuard >= 0;
-            if (send)
-                ++idleTimeoutGuard;
-        }
-
-        if (send)
-        {
-            HttpRequest request = exchange.getRequest();
-            SendFailure result;
-            if (channel.associate(exchange))
-            {
-                channel.send();
-                result = null;
-            }
-            else
-            {
-                channel.release();
-                result = new SendFailure(new HttpRequestException("Could not associate request to connection", request), false);
-            }
-
-            synchronized (this)
-            {
-                --idleTimeoutGuard;
-                idleTimeoutStamp = System.nanoTime();
-            }
-
-            return result;
-        }
-        else
-        {
-            return new SendFailure(new TimeoutException(), true);
-        }
-    }
-
     public boolean onIdleTimeout(long idleTimeout)
     {
-        synchronized (this)
+        try (AutoLock l = lock.lock())
         {
             if (idleTimeoutGuard == 0)
             {
@@ -267,6 +273,18 @@ public abstract class HttpConnection implements Connection
                 return false;
             }
         }
+    }
+
+    @Override
+    public void setAttachment(Object obj)
+    {
+        this.attachment = obj;
+    }
+
+    @Override
+    public Object getAttachment()
+    {
+        return attachment;
     }
 
     @Override

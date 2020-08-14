@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.io;
@@ -23,8 +23,11 @@ import java.util.Arrays;
 import java.util.Objects;
 import java.util.function.IntFunction;
 
+import org.eclipse.jetty.util.BufferUtil;
 import org.eclipse.jetty.util.annotation.ManagedAttribute;
 import org.eclipse.jetty.util.annotation.ManagedObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * <p>A ByteBuffer pool where ByteBuffers are held in queues that are held in array elements.</p>
@@ -35,6 +38,8 @@ import org.eclipse.jetty.util.annotation.ManagedObject;
 @ManagedObject
 public class ArrayByteBufferPool extends AbstractByteBufferPool
 {
+    private static final Logger LOG = LoggerFactory.getLogger(MappedByteBufferPool.class);
+
     private final int _minCapacity;
     private final ByteBufferPool.Bucket[] _direct;
     private final ByteBufferPool.Bucket[] _indirect;
@@ -119,8 +124,18 @@ public class ArrayByteBufferPool extends AbstractByteBufferPool
     {
         if (buffer == null)
             return;
+
+        int capacity = buffer.capacity();
+        // Validate that this buffer is from this pool.
+        if ((capacity % getCapacityFactor()) != 0)
+        {
+            if (LOG.isDebugEnabled())
+                LOG.debug("ByteBuffer {} does not belong to this pool, discarding it", BufferUtil.toDetailString(buffer));
+            return;
+        }
+
         boolean direct = buffer.isDirect();
-        ByteBufferPool.Bucket bucket = bucketFor(buffer.capacity(), direct, this::newBucket);
+        ByteBufferPool.Bucket bucket = bucketFor(capacity, direct, this::newBucket);
         if (bucket != null)
         {
             bucket.release(buffer);
@@ -131,7 +146,7 @@ public class ArrayByteBufferPool extends AbstractByteBufferPool
 
     private Bucket newBucket(int key)
     {
-        return new Bucket(this, key * getCapacityFactor(), getMaxQueueLength());
+        return new Bucket(key * getCapacityFactor(), getMaxQueueLength());
     }
 
     @Override

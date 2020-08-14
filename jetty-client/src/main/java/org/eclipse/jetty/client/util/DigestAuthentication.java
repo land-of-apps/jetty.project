@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.client.util;
@@ -22,9 +22,11 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -46,10 +48,11 @@ import org.eclipse.jetty.util.TypeUtil;
  */
 public class DigestAuthentication extends AbstractAuthentication
 {
+    private final Random random;
     private final String user;
     private final String password;
 
-    /**
+    /** Construct a DigestAuthentication with a {@link SecureRandom} nonce.
      * @param uri the URI to match for the authentication
      * @param realm the realm to match for the authentication
      * @param user the user that wants to authenticate
@@ -57,7 +60,21 @@ public class DigestAuthentication extends AbstractAuthentication
      */
     public DigestAuthentication(URI uri, String realm, String user, String password)
     {
+        this(uri, realm, user, password, new SecureRandom());
+    }
+
+    /**
+     * @param uri the URI to match for the authentication
+     * @param realm the realm to match for the authentication
+     * @param user the user that wants to authenticate
+     * @param password the password of the user
+     * @param random the Random generator to use for nonces.
+     */
+    public DigestAuthentication(URI uri, String realm, String user, String password, Random random)
+    {
         super(uri, realm);
+        Objects.requireNonNull(random);
+        this.random = random;
         this.user = user;
         this.password = password;
     }
@@ -85,7 +102,7 @@ public class DigestAuthentication extends AbstractAuthentication
         String nonce = params.get("nonce");
         if (nonce == null || nonce.length() == 0)
             return null;
-        String opaque = params.get("opaque");
+        final String opaque = params.get("opaque");
         String algorithm = params.get("algorithm");
         if (algorithm == null)
             algorithm = "MD5";
@@ -186,7 +203,7 @@ public class DigestAuthentication extends AbstractAuthentication
                 clientNonce = null;
                 a3 = hashA1 + ":" + nonce + ":" + hashA2;
             }
-            String hashA3 = toHexString(digester.digest(a3.getBytes(StandardCharsets.ISO_8859_1)));
+            final String hashA3 = toHexString(digester.digest(a3.getBytes(StandardCharsets.ISO_8859_1)));
 
             StringBuilder value = new StringBuilder("Digest");
             value.append(" username=\"").append(user).append("\"");
@@ -204,7 +221,7 @@ public class DigestAuthentication extends AbstractAuthentication
             }
             value.append(", response=\"").append(hashA3).append("\"");
 
-            request.header(header, value.toString());
+            request.headers(headers -> headers.add(header, value.toString()));
         }
 
         private String nextNonceCount()
@@ -216,7 +233,6 @@ public class DigestAuthentication extends AbstractAuthentication
 
         private String newClientNonce()
         {
-            Random random = new Random();
             byte[] bytes = new byte[8];
             random.nextBytes(bytes);
             return toHexString(bytes);

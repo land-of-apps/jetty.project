@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.util.thread;
@@ -37,31 +37,31 @@ public interface ThreadPool extends Executor
      *
      * @throws InterruptedException if thread was interrupted
      */
-    void join() throws InterruptedException;
+    public void join() throws InterruptedException;
 
     /**
      * @return The total number of threads currently in the pool
      */
     @ManagedAttribute("number of threads in pool")
-    int getThreads();
+    public int getThreads();
 
     /**
      * @return The number of idle threads in the pool
      */
     @ManagedAttribute("number of idle threads in pool")
-    int getIdleThreads();
+    public int getIdleThreads();
 
     /**
      * @return True if the pool is low on threads
      */
     @ManagedAttribute("indicates the pool is low on available threads")
-    boolean isLowOnThreads();
+    public boolean isLowOnThreads();
 
     /**
      * <p>Specialized sub-interface of ThreadPool that allows to get/set
      * the minimum and maximum number of threads of the pool.</p>
      */
-    interface SizedThreadPool extends ThreadPool
+    public interface SizedThreadPool extends ThreadPool
     {
         /**
          * @return the minimum number of threads

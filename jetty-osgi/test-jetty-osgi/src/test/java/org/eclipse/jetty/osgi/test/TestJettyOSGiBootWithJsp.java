@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.osgi.test;
@@ -37,7 +37,6 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.ops4j.pax.exam.CoreOptions.mavenBundle;
-import static org.ops4j.pax.exam.CoreOptions.systemProperty;
 
 /**
  * Pax-Exam to make sure the jetty-osgi-boot can be started along with the
@@ -47,8 +46,6 @@ import static org.ops4j.pax.exam.CoreOptions.systemProperty;
 @RunWith(PaxExam.class)
 public class TestJettyOSGiBootWithJsp
 {
-    private static final String LOG_LEVEL = "WARN";
-
     @Inject
     BundleContext bundleContext = null;
 
@@ -56,42 +53,36 @@ public class TestJettyOSGiBootWithJsp
     public static Option[] configure()
     {
         ArrayList<Option> options = new ArrayList<>();
+
+        options.addAll(TestOSGiUtil.configurePaxExamLogging());
+
         options.add(CoreOptions.junitBundles());
         options.addAll(TestOSGiUtil.configureJettyHomeAndPort(false, "jetty-http-boot-with-jsp.xml"));
         options.add(CoreOptions.bootDelegationPackages("org.xml.sax", "org.xml.*", "org.w3c.*", "javax.xml.*", "javax.activation.*"));
         options.add(CoreOptions.systemPackages("com.sun.org.apache.xalan.internal.res", "com.sun.org.apache.xml.internal.utils",
             "com.sun.org.apache.xml.internal.utils", "com.sun.org.apache.xpath.internal",
             "com.sun.org.apache.xpath.internal.jaxp", "com.sun.org.apache.xpath.internal.objects"));
-
         options.addAll(TestOSGiUtil.coreJettyDependencies());
-        options.add(systemProperty("org.ops4j.pax.logging.DefaultServiceLog.level").value(LOG_LEVEL));
-        options.add(systemProperty("org.eclipse.jetty.LEVEL").value(LOG_LEVEL));
+        options.add(mavenBundle().groupId("org.eclipse.jetty").artifactId("jetty-alpn-java-client").versionAsInProject().start());
+        options.add(mavenBundle().groupId("org.eclipse.jetty").artifactId("jetty-alpn-client").versionAsInProject().start());
         options.addAll(jspDependencies());
         options.add(CoreOptions.cleanCaches(true));
-        return options.toArray(new Option[options.size()]);
+        return options.toArray(new Option[0]);
     }
 
     public static List<Option> jspDependencies()
     {
-        List<Option> res = new ArrayList<>();
-        res.addAll(TestOSGiUtil.jspDependencies());
+        List<Option> res = new ArrayList<>(TestOSGiUtil.jspDependencies());
         //test webapp bundle
         res.add(mavenBundle().groupId("org.eclipse.jetty").artifactId("test-jetty-webapp").classifier("webbundle").versionAsInProject());
-
         return res;
-    }
-
-    public void assertAllBundlesActiveOrResolved()
-    {
-        TestOSGiUtil.debugBundles(bundleContext);
-        TestOSGiUtil.assertAllBundlesActiveOrResolved(bundleContext);
     }
 
     @Test
     public void testJspDump() throws Exception
     {
         if (Boolean.getBoolean(TestOSGiUtil.BUNDLE_DEBUG))
-            assertAllBundlesActiveOrResolved();
+            TestOSGiUtil.diagnoseBundles(bundleContext);
 
         HttpClient client = new HttpClient();
         try

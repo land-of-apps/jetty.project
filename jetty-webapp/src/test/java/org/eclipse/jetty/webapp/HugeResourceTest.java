@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.webapp;
@@ -44,13 +44,12 @@ import org.eclipse.jetty.client.api.ContentResponse;
 import org.eclipse.jetty.client.api.Request;
 import org.eclipse.jetty.client.api.Response;
 import org.eclipse.jetty.client.util.InputStreamResponseListener;
-import org.eclipse.jetty.client.util.MultiPartContentProvider;
-import org.eclipse.jetty.client.util.PathContentProvider;
+import org.eclipse.jetty.client.util.MultiPartRequestContent;
+import org.eclipse.jetty.client.util.PathRequestContent;
 import org.eclipse.jetty.http.HttpHeader;
 import org.eclipse.jetty.http.HttpMethod;
 import org.eclipse.jetty.server.HttpConfiguration;
 import org.eclipse.jetty.server.HttpConnectionFactory;
-import org.eclipse.jetty.server.MultiPartFormDataCompliance;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
 import org.eclipse.jetty.server.handler.DefaultHandler;
@@ -102,7 +101,7 @@ public class HugeResourceTest
             String.format("FileStore %s of %s needs at least 30GB of free space for this test (only had %,.2fGB)",
                 baseFileStore, staticBase, (double)(baseFileStore.getUnallocatedSpace() / GB)));
 
-        makeStaticFile(staticBase.resolve("test-1g.dat"), 1 * GB);
+        makeStaticFile(staticBase.resolve("test-1g.dat"), GB);
         makeStaticFile(staticBase.resolve("test-4g.dat"), 4 * GB);
         makeStaticFile(staticBase.resolve("test-10g.dat"), 10 * GB);
 
@@ -117,7 +116,7 @@ public class HugeResourceTest
     {
         ArrayList<Arguments> ret = new ArrayList<>();
 
-        ret.add(Arguments.of("test-1g.dat", 1 * GB));
+        ret.add(Arguments.of("test-1g.dat", GB));
         ret.add(Arguments.of("test-4g.dat", 4 * GB));
         ret.add(Arguments.of("test-10g.dat", 10 * GB));
 
@@ -134,7 +133,7 @@ public class HugeResourceTest
 
     private static void makeStaticFile(Path staticFile, long size) throws IOException
     {
-        byte[] buf = new byte[(int)(1 * MB)];
+        byte[] buf = new byte[(int)MB];
         Arrays.fill(buf, (byte)'x');
         ByteBuffer src = ByteBuffer.wrap(buf);
 
@@ -170,7 +169,6 @@ public class HugeResourceTest
     {
         server = new Server();
         HttpConfiguration httpConfig = new HttpConfiguration();
-        httpConfig.setMultiPartFormDataCompliance(MultiPartFormDataCompliance.RFC7578);
         ServerConnector connector = new ServerConnector(server, new HttpConnectionFactory(httpConfig));
         connector.setPort(0);
         server.addConnector(connector);
@@ -190,11 +188,7 @@ public class HugeResourceTest
         ServletHolder holder = context.addServlet(MultipartServlet.class, "/multipart");
         holder.getRegistration().setMultipartConfig(multipartConfig);
 
-        HandlerList handlers = new HandlerList();
-        handlers.addHandler(context);
-        handlers.addHandler(new DefaultHandler());
-
-        server.setHandler(handlers);
+        server.setHandler(new HandlerList(context, new DefaultHandler()));
         server.start();
     }
 
@@ -250,9 +244,9 @@ public class HugeResourceTest
     {
         Path inputFile = staticBase.resolve(filename);
 
-        PathContentProvider pathContentProvider = new PathContentProvider(inputFile);
+        PathRequestContent content = new PathRequestContent(inputFile);
         URI destUri = server.getURI().resolve("/post");
-        Request request = client.newRequest(destUri).method(HttpMethod.POST).content(pathContentProvider);
+        Request request = client.newRequest(destUri).method(HttpMethod.POST).body(content);
         ContentResponse response = request.send();
         assertThat("HTTP Response Code", response.getStatus(), is(200));
         // dumpResponse(response);
@@ -265,14 +259,15 @@ public class HugeResourceTest
     @MethodSource("staticFiles")
     public void testUploadMultipart(String filename, long expectedSize) throws Exception
     {
-        MultiPartContentProvider multipart = new MultiPartContentProvider();
+        MultiPartRequestContent multipart = new MultiPartRequestContent();
         Path inputFile = staticBase.resolve(filename);
         String name = String.format("file-%d", expectedSize);
-        multipart.addFilePart(name, filename, new PathContentProvider(inputFile), null);
+        multipart.addFilePart(name, filename, new PathRequestContent(inputFile), null);
+        multipart.close();
 
         URI destUri = server.getURI().resolve("/multipart");
         client.setIdleTimeout(90_000);
-        Request request = client.newRequest(destUri).method(HttpMethod.POST).content(multipart);
+        Request request = client.newRequest(destUri).method(HttpMethod.POST).body(multipart);
         ContentResponse response = request.send();
         assertThat("HTTP Response Code", response.getStatus(), is(200));
         // dumpResponse(response);

@@ -1,26 +1,25 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.server.session;
 
 import java.io.ByteArrayInputStream;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 
@@ -28,6 +27,7 @@ import org.eclipse.jetty.server.handler.ContextHandler;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.testcontainers.junit.jupiter.Testcontainers;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -39,6 +39,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Test the SessionTableSchema behaviour when the database treats "" as a NULL,
  * like Oracle does.
  */
+@Testcontainers(disabledWithoutDocker = true)
 public class SessionTableSchemaTest
 {
     DatabaseAdaptor _da;
@@ -51,9 +52,6 @@ public class SessionTableSchemaTest
         _da = new DatabaseAdaptor()
         {
 
-            /**
-             * @see org.eclipse.jetty.server.session.DatabaseAdaptor#isEmptyStringNull()
-             */
             @Override
             public boolean isEmptyStringNull()
             {
@@ -84,8 +82,7 @@ public class SessionTableSchemaTest
     public static void insertSessionWithoutAttributes(String id, String contextPath, String vhost)
         throws Exception
     {
-        Class.forName(JdbcTestHelper.DRIVER_CLASS);
-        try (Connection con = DriverManager.getConnection(JdbcTestHelper.DEFAULT_CONNECTION_URL);)
+        try (Connection con = JdbcTestHelper.getConnection())
         {
             PreparedStatement statement = con.prepareStatement("insert into " + JdbcTestHelper.TABLE +
                 " (" + JdbcTestHelper.ID_COL + ", " + JdbcTestHelper.CONTEXT_COL + ", virtualHost, " + JdbcTestHelper.LAST_NODE_COL +
@@ -119,8 +116,10 @@ public class SessionTableSchemaTest
         _da.initialize();
         _tableSchema.prepareTables();
 
+        String id = Long.toString(System.nanoTime());
+
         //insert a fake session at the root context
-        insertSessionWithoutAttributes("1234", "/", "0.0.0.0");
+        insertSessionWithoutAttributes(id, "/", "0.0.0.0");
 
         //test if it can be seen
         try (Connection con = _da.getConnection())
@@ -130,7 +129,7 @@ public class SessionTableSchemaTest
             handler.setContextPath("/");
             SessionContext sc = new SessionContext("0", handler.getServletContext());
             //test the load statement
-            PreparedStatement s = _tableSchema.getLoadStatement(con, "1234", sc);
+            PreparedStatement s = _tableSchema.getLoadStatement(con, id, sc);
             ResultSet rs = s.executeQuery();
             assertTrue(rs.next());
         }
@@ -144,8 +143,10 @@ public class SessionTableSchemaTest
         _da.initialize();
         _tableSchema.prepareTables();
 
+        String id = Long.toString(System.nanoTime());
+
         //insert a fake session at the root context
-        insertSessionWithoutAttributes("1234", "/", "0.0.0.0");
+        insertSessionWithoutAttributes(id, "/", "0.0.0.0");
 
         //test if it can be seen
         try (Connection con = _da.getConnection())
@@ -154,7 +155,7 @@ public class SessionTableSchemaTest
             handler.setContextPath("/");
             SessionContext sc = new SessionContext("0", handler.getServletContext());
             PreparedStatement s = _tableSchema.getCheckSessionExistsStatement(con, sc);
-            s.setString(1, "1234");
+            s.setString(1, id);
             ResultSet rs = s.executeQuery();
             assertTrue(rs.next());
         }
@@ -168,8 +169,10 @@ public class SessionTableSchemaTest
         _da.initialize();
         _tableSchema.prepareTables();
 
+        String id = Long.toString(System.nanoTime());
+
         //insert a fake session at the root context
-        insertSessionWithoutAttributes("1234", "/", "0.0.0.0");
+        insertSessionWithoutAttributes(id, "/", "0.0.0.0");
 
         //test if it can be deleted
         try (Connection con = _da.getConnection())
@@ -177,10 +180,10 @@ public class SessionTableSchemaTest
             ContextHandler handler = new ContextHandler();
             handler.setContextPath("/");
             SessionContext sc = new SessionContext("0", handler.getServletContext());
-            PreparedStatement s = _tableSchema.getDeleteStatement(con, "1234", sc);
+            PreparedStatement s = _tableSchema.getDeleteStatement(con, id, sc);
             assertEquals(1, s.executeUpdate());
 
-            assertFalse(JdbcTestHelper.existsInSessionTable("1234", false));
+            assertFalse(JdbcTestHelper.existsInSessionTable(id, false));
         }
     }
 
@@ -192,8 +195,10 @@ public class SessionTableSchemaTest
         _da.initialize();
         _tableSchema.prepareTables();
 
+        String id = Long.toString(System.nanoTime());
+
         //insert a fake session at the root context
-        insertSessionWithoutAttributes("1234", "/", "0.0.0.0");
+        insertSessionWithoutAttributes(id, "/", "0.0.0.0");
 
         try (Connection con = _da.getConnection())
         {
@@ -206,7 +211,7 @@ public class SessionTableSchemaTest
                 (System.currentTimeMillis() + 100L));
             ResultSet rs = s.executeQuery();
             assertTrue(rs.next());
-            assertEquals("1234", rs.getString(1));
+            assertEquals(id, rs.getString(1));
         }
     }
 
@@ -218,8 +223,10 @@ public class SessionTableSchemaTest
         _da.initialize();
         _tableSchema.prepareTables();
 
+        String id = Long.toString(System.nanoTime());
+
         //insert a fake session at the root context
-        insertSessionWithoutAttributes("1234", "/", "0.0.0.0");
+        insertSessionWithoutAttributes(id, "/", "0.0.0.0");
 
         try (Connection con = _da.getConnection())
         {
@@ -231,7 +238,7 @@ public class SessionTableSchemaTest
                 (System.currentTimeMillis() + 100L));
             ResultSet rs = s.executeQuery();
             assertTrue(rs.next());
-            assertEquals("1234", rs.getString(1));
+            assertEquals(id, rs.getString(1));
         }
     }
 
@@ -243,8 +250,10 @@ public class SessionTableSchemaTest
         _da.initialize();
         _tableSchema.prepareTables();
 
+        String id = Long.toString(System.nanoTime());
+
         //insert a fake session at the root context
-        insertSessionWithoutAttributes("1234", "/", "0.0.0.0");
+        insertSessionWithoutAttributes(id, "/", "0.0.0.0");
 
         try (Connection con = _da.getConnection())
         {
@@ -252,7 +261,7 @@ public class SessionTableSchemaTest
             handler.setContextPath("/");
             SessionContext sc = new SessionContext("0", handler.getServletContext());
             PreparedStatement s = _tableSchema.getUpdateStatement(con,
-                "1234",
+                id,
                 sc);
 
             s.setString(1, "0");//should be my node id

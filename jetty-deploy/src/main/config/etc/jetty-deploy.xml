@@ -1,6 +1,13 @@
-<?xml version="1.0"?><!DOCTYPE Configure PUBLIC "-//Jetty//Configure//EN" "http://www.eclipse.org/jetty/configure_9_3.dtd">
+<?xml version="1.0"?>
+<!DOCTYPE Configure PUBLIC "-//Jetty//Configure//EN" "https://www.eclipse.org/jetty/configure_10_0.dtd">
 
-<!-- =============================================================== --><!-- Create the deployment manager                                   --><!-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - --><!-- The deplyment manager handles the lifecycle of deploying web    --><!-- applications. Apps are provided by instances of the             --><!-- AppProvider interface.                                          --><!-- =============================================================== -->
+<!-- =============================================================== -->
+<!-- Create the deployment manager                                   -->
+<!-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -->
+<!-- The deplyment manager handles the lifecycle of deploying web    -->
+<!-- applications. Apps are provided by instances of the             -->
+<!-- AppProvider interface.                                          -->
+<!-- =============================================================== -->
 <Configure id="Server" class="org.eclipse.jetty.server.Server">
 
   <Call name="addBean">
@@ -11,7 +18,7 @@
         </Set>
         <Call name="setContextAttribute">
           <Arg>org.eclipse.jetty.server.webapp.ContainerIncludeJarPattern</Arg>
-          <Arg>.*/[^/]*servlet-api-[^/]*\.jar$|.*/javax.servlet.jsp.jstl-.*\.jar$|.*/org.apache.taglibs.taglibs-standard-impl-.*\.jar$</Arg>
+          <Arg>.*/jetty-servlet-api-[^/]*\.jar$|.*/javax.servlet.jsp.jstl-.*\.jar$|.*/org.apache.taglibs.taglibs-standard-impl-.*\.jar$</Arg>
         </Call>
 
         <!-- Add a customize step to the deployment lifecycle -->
@@ -29,14 +36,14 @@
           </Arg>
         </Call> -->
 
-        <Call id="webappprovider" name="addAppProvider">
+        <Call name="addAppProvider">
           <Arg>
-            <New class="org.eclipse.jetty.deploy.providers.WebAppProvider">
+            <New id="webappprovider" class="org.eclipse.jetty.deploy.providers.WebAppProvider">
               <Set name="monitoredDirName">
                 <Property>
                   <Name>jetty.deploy.monitoredPath</Name>
                   <Default>
-                    <Property name="jetty.base" default="." />/<Property name="jetty.deploy.monitoredDir" deprecated="jetty.deploy.monitoredDirName" default="webapps"/>
+                    <Property name="jetty.base" default="." />/<Property name="jetty.deploy.monitoredDir" default="webapps"/>
                   </Default>
                 </Property>
               </Set>

@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.client;
@@ -41,6 +41,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
+import java.util.function.Consumer;
 import java.util.function.LongConsumer;
 import java.util.function.Supplier;
 
@@ -49,8 +50,9 @@ import org.eclipse.jetty.client.api.ContentResponse;
 import org.eclipse.jetty.client.api.Request;
 import org.eclipse.jetty.client.api.Response;
 import org.eclipse.jetty.client.api.Result;
+import org.eclipse.jetty.client.internal.RequestContentAdapter;
 import org.eclipse.jetty.client.util.FutureResponseListener;
-import org.eclipse.jetty.client.util.PathContentProvider;
+import org.eclipse.jetty.client.util.PathRequestContent;
 import org.eclipse.jetty.http.HttpField;
 import org.eclipse.jetty.http.HttpFields;
 import org.eclipse.jetty.http.HttpHeader;
@@ -63,7 +65,7 @@ public class HttpRequest implements Request
 {
     private static final URI NULL_URI = URI.create("null:0");
 
-    private final HttpFields headers = new HttpFields();
+    private final HttpFields.Mutable headers = HttpFields.build();
     private final Fields params = new Fields(true);
     private final List<Response.ResponseListener> responseListeners = new ArrayList<>();
     private final AtomicReference<Throwable> aborted = new AtomicReference<>();
@@ -77,16 +79,18 @@ public class HttpRequest implements Request
     private URI uri;
     private String method = HttpMethod.GET.asString();
     private HttpVersion version = HttpVersion.HTTP_1_1;
+    private boolean versionExplicit;
     private long idleTimeout = -1;
     private long timeout;
     private long timeoutAt;
-    private ContentProvider content;
+    private Content content;
     private boolean followRedirects;
     private List<HttpCookie> cookies;
     private Map<String, Object> attributes;
     private List<RequestListener> requestListeners;
     private BiFunction<Request, Request, Response.CompleteListener> pushListener;
     private Supplier<HttpFields> trailers;
+    private String upgradeProtocol;
     private Object tag;
     private boolean normalized;
 
@@ -234,10 +238,16 @@ public class HttpRequest implements Request
         return version;
     }
 
+    public boolean isVersionExplicit()
+    {
+        return versionExplicit;
+    }
+
     @Override
     public Request version(HttpVersion version)
     {
         this.version = Objects.requireNonNull(version);
+        this.versionExplicit = true;
         return this;
     }
 
@@ -297,6 +307,7 @@ public class HttpRequest implements Request
     }
 
     @Override
+    @Deprecated
     public Request header(String name, String value)
     {
         if (value == null)
@@ -307,6 +318,7 @@ public class HttpRequest implements Request
     }
 
     @Override
+    @Deprecated
     public Request header(HttpHeader header, String value)
     {
         if (value == null)
@@ -363,6 +375,19 @@ public class HttpRequest implements Request
     public HttpFields getHeaders()
     {
         return headers;
+    }
+
+    @Override
+    public Request headers(Consumer<HttpFields.Mutable> consumer)
+    {
+        consumer.accept(headers);
+        return this;
+    }
+
+    public HttpRequest addHeader(HttpField header)
+    {
+        headers.add(header);
+        return this;
     }
 
     @Override
@@ -646,10 +671,18 @@ public class HttpRequest implements Request
         return this;
     }
 
+    public HttpRequest upgradeProtocol(String upgradeProtocol)
+    {
+        this.upgradeProtocol = upgradeProtocol;
+        return this;
+    }
+
     @Override
     public ContentProvider getContent()
     {
-        return content;
+        if (content instanceof RequestContentAdapter)
+            return ((RequestContentAdapter)content).getContentProvider();
+        return null;
     }
 
     @Override
@@ -662,7 +695,19 @@ public class HttpRequest implements Request
     public Request content(ContentProvider content, String contentType)
     {
         if (contentType != null)
-            header(HttpHeader.CONTENT_TYPE, contentType);
+            headers.put(HttpHeader.CONTENT_TYPE, contentType);
+        return body(ContentProvider.toRequestContent(content));
+    }
+
+    @Override
+    public Content getBody()
+    {
+        return content;
+    }
+
+    @Override
+    public Request body(Content content)
+    {
         this.content = content;
         return this;
     }
@@ -676,7 +721,7 @@ public class HttpRequest implements Request
     @Override
     public Request file(Path file, String contentType) throws IOException
     {
-        return content(new PathContentProvider(contentType, file));
+        return body(new PathRequestContent(contentType, file));
     }
 
     @Override
@@ -802,15 +847,16 @@ public class HttpRequest implements Request
         return trailers;
     }
 
+    public String getUpgradeProtocol()
+    {
+        return upgradeProtocol;
+    }
+
     @Override
     public boolean abort(Throwable cause)
     {
         if (aborted.compareAndSet(null, Objects.requireNonNull(cause)))
-        {
-            if (content instanceof Callback)
-                ((Callback)content).failed(cause);
             return conversation.abort(cause);
-        }
         return false;
     }
 
@@ -828,7 +874,7 @@ public class HttpRequest implements Request
      * headers, etc.</p>
      *
      * @return whether this request was already normalized
-     * @see HttpConnection#normalizeRequest(Request)
+     * @see HttpConnection#normalizeRequest(HttpRequest)
      */
     boolean normalized()
     {

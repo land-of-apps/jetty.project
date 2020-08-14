@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.test.rfcs;
@@ -24,23 +24,23 @@ import java.net.Socket;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
-import java.util.Enumeration;
 import java.util.List;
 import java.util.TimeZone;
 
+import org.eclipse.jetty.http.HttpField;
 import org.eclipse.jetty.http.HttpFields;
 import org.eclipse.jetty.http.HttpHeader;
 import org.eclipse.jetty.http.HttpParser;
 import org.eclipse.jetty.http.HttpStatus;
-import org.eclipse.jetty.http.HttpTester;
+import org.eclipse.jetty.http.tools.HttpTester;
+import org.eclipse.jetty.logging.StacklessLogging;
 import org.eclipse.jetty.test.support.StringUtil;
-import org.eclipse.jetty.test.support.TestableJettyServer;
+import org.eclipse.jetty.test.support.XmlBasedJettyServer;
 import org.eclipse.jetty.test.support.rawhttp.HttpSocket;
 import org.eclipse.jetty.test.support.rawhttp.HttpTesting;
 import org.eclipse.jetty.toolchain.test.FS;
 import org.eclipse.jetty.toolchain.test.MavenTestingUtils;
 import org.eclipse.jetty.toolchain.test.StringAssert;
-import org.eclipse.jetty.util.log.StacklessLogging;
 import org.hamcrest.Matchers;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -65,7 +65,7 @@ public abstract class RFC2616BaseTest
      * STRICT RFC TESTS
      */
     private static final boolean STRICT = false;
-    private static TestableJettyServer server;
+    private static XmlBasedJettyServer server;
     private HttpTesting http;
 
     class TestFile
@@ -91,7 +91,7 @@ public abstract class RFC2616BaseTest
         }
     }
 
-    public static void setUpServer(TestableJettyServer testableserver, Class<?> testclazz) throws Exception
+    public static void setUpServer(XmlBasedJettyServer testableserver, Class<?> testclazz) throws Exception
     {
         File testWorkDir = MavenTestingUtils.getTargetTestingDir(testclazz.getName());
         FS.ensureDirExists(testWorkDir);
@@ -137,7 +137,7 @@ public abstract class RFC2616BaseTest
         expected.set(Calendar.ZONE_OFFSET, 0); // Use GMT+0:00
         expected.set(Calendar.DST_OFFSET, 0); // No Daylight Savings Offset
 
-        HttpFields fields = new HttpFields();
+        HttpFields.Mutable fields = HttpFields.build();
 
         // RFC 822 Preferred Format
         fields.put("D1", "Sun, 6 Nov 1994 08:49:37 GMT");
@@ -334,17 +334,16 @@ public abstract class RFC2616BaseTest
     @Test
     public void test39()
     {
-        HttpFields fields = new HttpFields();
+        HttpFields.Mutable fields = HttpFields.build();
 
         fields.put("Q", "bbb;q=0.5,aaa,ccc;q=0.002,d;q=0,e;q=0.0001,ddd;q=0.001,aa2,abb;q=0.7");
-        Enumeration<String> qualities = fields.getValues("Q", ", \t");
-        List<?> list = HttpFields.qualityList(qualities);
-        assertEquals("aaa", HttpFields.valueParameters(list.get(0).toString(), null), "Quality parameters");
-        assertEquals("aa2", HttpFields.valueParameters(list.get(1).toString(), null), "Quality parameters");
-        assertEquals("abb", HttpFields.valueParameters(list.get(2).toString(), null), "Quality parameters");
-        assertEquals("bbb", HttpFields.valueParameters(list.get(3).toString(), null), "Quality parameters");
-        assertEquals("ccc", HttpFields.valueParameters(list.get(4).toString(), null), "Quality parameters");
-        assertEquals("ddd", HttpFields.valueParameters(list.get(5).toString(), null), "Quality parameters");
+        List<String> list = fields.getQualityCSV("Q");
+        assertEquals("aaa", HttpField.valueParameters(list.get(0).toString(), null), "Quality parameters");
+        assertEquals("aa2", HttpField.valueParameters(list.get(1).toString(), null), "Quality parameters");
+        assertEquals("abb", HttpField.valueParameters(list.get(2).toString(), null), "Quality parameters");
+        assertEquals("bbb", HttpField.valueParameters(list.get(3).toString(), null), "Quality parameters");
+        assertEquals("ccc", HttpField.valueParameters(list.get(4).toString(), null), "Quality parameters");
+        assertEquals("ddd", HttpField.valueParameters(list.get(5).toString(), null), "Quality parameters");
     }
 
     /**
@@ -1054,12 +1053,10 @@ public abstract class RFC2616BaseTest
     {
         String specId;
 
-        String serverURI = server.getServerURI().toASCIIString();
-
         // HTTP/1.0
-
         StringBuffer req1 = new StringBuffer();
         req1.append("GET /redirect/ HTTP/1.0\n");
+        req1.append("Host: myhost:1234\n");
         req1.append("Connection: Close\n");
         req1.append("\n");
 
@@ -1067,7 +1064,7 @@ public abstract class RFC2616BaseTest
 
         specId = "10.3 Redirection HTTP/1.0 - basic";
         assertThat(specId, response.getStatus(), is(HttpStatus.FOUND_302));
-        assertEquals(serverURI + "/tests/", response.get("Location"), specId);
+        assertEquals(server.getScheme() + "://myhost:1234/tests/", response.get("Location"), specId);
     }
 
     /**
@@ -1587,7 +1584,7 @@ public abstract class RFC2616BaseTest
 
         HttpTester.Response response = http.request(req1);
 
-        assertThat("BadByteRange: '" + rangedef + "'", response.getStatus(), is(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE_416));
+        assertThat("BadByteRange: '" + rangedef + "'", response.getStatus(), is(HttpStatus.RANGE_NOT_SATISFIABLE_416));
     }
 
     /**

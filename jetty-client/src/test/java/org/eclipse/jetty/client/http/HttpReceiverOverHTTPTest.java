@@ -1,32 +1,34 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.client.http;
 
 import java.io.EOFException;
 import java.nio.charset.StandardCharsets;
-import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Stream;
 
+import org.eclipse.jetty.client.DuplexHttpDestination;
 import org.eclipse.jetty.client.HttpClient;
+import org.eclipse.jetty.client.HttpDestination;
 import org.eclipse.jetty.client.HttpExchange;
 import org.eclipse.jetty.client.HttpRequest;
 import org.eclipse.jetty.client.HttpResponseException;
@@ -57,13 +59,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 public class HttpReceiverOverHTTPTest
 {
     private HttpClient client;
-    private HttpDestinationOverHTTP destination;
+    private HttpDestination destination;
     private ByteArrayEndPoint endPoint;
     private HttpConnectionOverHTTP connection;
 
     public static Stream<Arguments> complianceModes()
     {
         return Stream.of(
+            HttpCompliance.RFC7230,
+            HttpCompliance.RFC2616,
             HttpCompliance.LEGACY,
             HttpCompliance.RFC2616_LEGACY,
             HttpCompliance.RFC7230_LEGACY
@@ -75,7 +79,7 @@ public class HttpReceiverOverHTTPTest
         client = new HttpClient();
         client.setHttpCompliance(compliance);
         client.start();
-        destination = new HttpDestinationOverHTTP(client, new Origin("http", "localhost", 8080));
+        destination = new DuplexHttpDestination(client, new Origin("http", "localhost", 8080));
         destination.start();
         endPoint = new ByteArrayEndPoint();
         connection = new HttpConnectionOverHTTP(endPoint, destination, new Promise.Adapter<>());
@@ -92,7 +96,7 @@ public class HttpReceiverOverHTTPTest
     {
         HttpRequest request = (HttpRequest)client.newRequest("http://localhost");
         FutureResponseListener listener = new FutureResponseListener(request);
-        HttpExchange exchange = new HttpExchange(destination, request, Collections.<Response.ResponseListener>singletonList(listener));
+        HttpExchange exchange = new HttpExchange(destination, request, List.of(listener));
         boolean associated = connection.getHttpChannel().associate(exchange);
         assertTrue(associated);
         exchange.requestComplete(null);

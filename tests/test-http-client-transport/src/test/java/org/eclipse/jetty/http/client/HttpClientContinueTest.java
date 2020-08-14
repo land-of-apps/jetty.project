@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.http.client;
@@ -39,9 +39,9 @@ import org.eclipse.jetty.client.ContinueProtocolHandler;
 import org.eclipse.jetty.client.api.ContentResponse;
 import org.eclipse.jetty.client.api.Response;
 import org.eclipse.jetty.client.api.Result;
+import org.eclipse.jetty.client.util.AsyncRequestContent;
 import org.eclipse.jetty.client.util.BufferingResponseListener;
-import org.eclipse.jetty.client.util.BytesContentProvider;
-import org.eclipse.jetty.client.util.DeferredContentProvider;
+import org.eclipse.jetty.client.util.BytesRequestContent;
 import org.eclipse.jetty.http.HttpGenerator;
 import org.eclipse.jetty.http.HttpHeader;
 import org.eclipse.jetty.http.HttpHeaderValue;
@@ -103,8 +103,8 @@ public class HttpClientContinueTest extends AbstractTest<TransportScenario>
         });
 
         ContentResponse response = scenario.client.newRequest(scenario.newURI())
-            .header(HttpHeader.EXPECT, HttpHeaderValue.CONTINUE.asString())
-            .content(new BytesContentProvider(contents))
+            .headers(headers -> headers.put(HttpHeader.EXPECT, HttpHeaderValue.CONTINUE))
+            .body(new BytesRequestContent(contents))
             .timeout(5, TimeUnit.SECONDS)
             .send();
 
@@ -144,8 +144,8 @@ public class HttpClientContinueTest extends AbstractTest<TransportScenario>
         byte[] content1 = new byte[10240];
         byte[] content2 = new byte[16384];
         ContentResponse response = scenario.client.newRequest(scenario.newURI())
-            .header(HttpHeader.EXPECT, HttpHeaderValue.CONTINUE.asString())
-            .content(new BytesContentProvider(content1, content2)
+            .headers(headers -> headers.put(HttpHeader.EXPECT, HttpHeaderValue.CONTINUE))
+            .body(new BytesRequestContent(content1, content2)
             {
                 @Override
                 public long getLength()
@@ -185,7 +185,7 @@ public class HttpClientContinueTest extends AbstractTest<TransportScenario>
         testExpect100ContinueWithContentRespondError(transport, 413);
     }
 
-    private void testExpect100ContinueWithContentRespondError(Transport transport, final int error) throws Exception
+    private void testExpect100ContinueWithContentRespondError(Transport transport, int error) throws Exception
     {
         init(transport);
         scenario.start(new AbstractHandler()
@@ -200,10 +200,10 @@ public class HttpClientContinueTest extends AbstractTest<TransportScenario>
 
         byte[] content1 = new byte[10240];
         byte[] content2 = new byte[16384];
-        final CountDownLatch latch = new CountDownLatch(1);
+        CountDownLatch latch = new CountDownLatch(1);
         scenario.client.newRequest(scenario.newURI())
-            .header(HttpHeader.EXPECT, HttpHeaderValue.CONTINUE.asString())
-            .content(new BytesContentProvider(content1, content2))
+            .headers(headers -> headers.put(HttpHeader.EXPECT, HttpHeaderValue.CONTINUE))
+            .body(new BytesRequestContent(content1, content2))
             .send(new BufferingResponseListener()
             {
                 @Override
@@ -228,7 +228,7 @@ public class HttpClientContinueTest extends AbstractTest<TransportScenario>
     public void testExpect100ContinueWithContentWithRedirect(Transport transport) throws Exception
     {
         init(transport);
-        final String data = "success";
+        String data = "success";
         scenario.start(new AbstractHandler()
         {
             @Override
@@ -250,12 +250,12 @@ public class HttpClientContinueTest extends AbstractTest<TransportScenario>
         });
 
         byte[] content = new byte[10240];
-        final CountDownLatch latch = new CountDownLatch(1);
+        CountDownLatch latch = new CountDownLatch(1);
         scenario.client.newRequest(scenario.newURI())
             .method(HttpMethod.POST)
             .path("/continue")
-            .header(HttpHeader.EXPECT, HttpHeaderValue.CONTINUE.asString())
-            .content(new BytesContentProvider(content))
+            .headers(headers -> headers.put(HttpHeader.EXPECT, HttpHeaderValue.CONTINUE))
+            .body(new BytesRequestContent(content))
             .send(new BufferingResponseListener()
             {
                 @Override
@@ -278,7 +278,7 @@ public class HttpClientContinueTest extends AbstractTest<TransportScenario>
         init(transport);
         // A request with Expect: 100-Continue cannot receive non-final responses like 3xx
 
-        final String data = "success";
+        String data = "success";
         scenario.start(new AbstractHandler()
         {
             @Override
@@ -300,12 +300,12 @@ public class HttpClientContinueTest extends AbstractTest<TransportScenario>
         });
 
         byte[] content = new byte[10240];
-        final CountDownLatch latch = new CountDownLatch(1);
+        CountDownLatch latch = new CountDownLatch(1);
         scenario.client.newRequest(scenario.newURI())
             .method(HttpMethod.POST)
             .path("/redirect")
-            .header(HttpHeader.EXPECT, HttpHeaderValue.CONTINUE.asString())
-            .content(new BytesContentProvider(content))
+            .headers(headers -> headers.put(HttpHeader.EXPECT, HttpHeaderValue.CONTINUE))
+            .body(new BytesRequestContent(content))
             .send(new BufferingResponseListener()
             {
                 @Override
@@ -329,8 +329,8 @@ public class HttpClientContinueTest extends AbstractTest<TransportScenario>
     public void testExpect100ContinueWithContentWithResponseFailureBefore100Continue(Transport transport) throws Exception
     {
         init(transport);
-        final long idleTimeout = 1000;
-        scenario.start(new AbstractHandler()
+        long idleTimeout = 1000;
+        scenario.startServer(new AbstractHandler()
         {
             @Override
             public void handle(String target, Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws ServletException
@@ -346,14 +346,13 @@ public class HttpClientContinueTest extends AbstractTest<TransportScenario>
                 }
             }
         });
-
-        scenario.client.setIdleTimeout(2 * idleTimeout);
+        scenario.startClient(httpClient -> httpClient.setIdleTimeout(2 * idleTimeout));
 
         byte[] content = new byte[1024];
-        final CountDownLatch latch = new CountDownLatch(1);
+        CountDownLatch latch = new CountDownLatch(1);
         scenario.client.newRequest(scenario.newURI())
-            .header(HttpHeader.EXPECT, HttpHeaderValue.CONTINUE.asString())
-            .content(new BytesContentProvider(content))
+            .headers(headers -> headers.put(HttpHeader.EXPECT, HttpHeaderValue.CONTINUE))
+            .body(new BytesRequestContent(content))
             .idleTimeout(idleTimeout, TimeUnit.MILLISECONDS)
             .send(new BufferingResponseListener()
             {
@@ -377,8 +376,8 @@ public class HttpClientContinueTest extends AbstractTest<TransportScenario>
     public void testExpect100ContinueWithContentWithResponseFailureAfter100Continue(Transport transport) throws Exception
     {
         init(transport);
-        final long idleTimeout = 1000;
-        scenario.start(new AbstractHandler()
+        long idleTimeout = 1000;
+        scenario.startServer(new AbstractHandler()
         {
             @Override
             public void handle(String target, Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException
@@ -396,14 +395,13 @@ public class HttpClientContinueTest extends AbstractTest<TransportScenario>
                 }
             }
         });
-
-        scenario.client.setIdleTimeout(idleTimeout);
+        scenario.startClient(httpClient -> httpClient.setIdleTimeout(idleTimeout));
 
         byte[] content = new byte[1024];
-        final CountDownLatch latch = new CountDownLatch(1);
+        CountDownLatch latch = new CountDownLatch(1);
         scenario.client.newRequest(scenario.newURI())
-            .header(HttpHeader.EXPECT, HttpHeaderValue.CONTINUE.asString())
-            .content(new BytesContentProvider(content))
+            .headers(headers -> headers.put(HttpHeader.EXPECT, HttpHeaderValue.CONTINUE))
+            .body(new BytesRequestContent(content))
             .send(new BufferingResponseListener()
             {
                 @Override
@@ -441,7 +439,7 @@ public class HttpClientContinueTest extends AbstractTest<TransportScenario>
             @Override
             public Response.Listener getResponseListener()
             {
-                final Response.Listener listener = super.getResponseListener();
+                Response.Listener listener = super.getResponseListener();
                 return new Response.Listener.Adapter()
                 {
                     @Override
@@ -460,10 +458,10 @@ public class HttpClientContinueTest extends AbstractTest<TransportScenario>
         });
 
         byte[] content = new byte[1024];
-        final CountDownLatch latch = new CountDownLatch(1);
+        CountDownLatch latch = new CountDownLatch(1);
         scenario.client.newRequest(scenario.newURI())
-            .header(HttpHeader.EXPECT, HttpHeaderValue.CONTINUE.asString())
-            .content(new BytesContentProvider(content))
+            .headers(headers -> headers.put(HttpHeader.EXPECT, HttpHeaderValue.CONTINUE))
+            .body(new BytesRequestContent(content))
             .send(new BufferingResponseListener()
             {
                 @Override
@@ -497,17 +495,17 @@ public class HttpClientContinueTest extends AbstractTest<TransportScenario>
             }
         });
 
-        final byte[] chunk1 = new byte[]{0, 1, 2, 3};
-        final byte[] chunk2 = new byte[]{4, 5, 6, 7};
-        final byte[] data = new byte[chunk1.length + chunk2.length];
+        byte[] chunk1 = new byte[]{0, 1, 2, 3};
+        byte[] chunk2 = new byte[]{4, 5, 6, 7};
+        byte[] data = new byte[chunk1.length + chunk2.length];
         System.arraycopy(chunk1, 0, data, 0, chunk1.length);
         System.arraycopy(chunk2, 0, data, chunk1.length, chunk2.length);
 
-        final CountDownLatch latch = new CountDownLatch(1);
-        DeferredContentProvider content = new DeferredContentProvider();
+        CountDownLatch latch = new CountDownLatch(1);
+        AsyncRequestContent content = new AsyncRequestContent();
         scenario.client.newRequest(scenario.newURI())
-            .header(HttpHeader.EXPECT, HttpHeaderValue.CONTINUE.asString())
-            .content(content)
+            .headers(headers -> headers.put(HttpHeader.EXPECT, HttpHeaderValue.CONTINUE))
+            .body(content)
             .send(new BufferingResponseListener()
             {
                 @Override
@@ -548,17 +546,17 @@ public class HttpClientContinueTest extends AbstractTest<TransportScenario>
             }
         });
 
-        final byte[] chunk1 = new byte[]{0, 1, 2, 3};
-        final byte[] chunk2 = new byte[]{4, 5, 6, 7};
-        final byte[] data = new byte[chunk1.length + chunk2.length];
+        byte[] chunk1 = new byte[]{0, 1, 2, 3};
+        byte[] chunk2 = new byte[]{4, 5, 6, 7};
+        byte[] data = new byte[chunk1.length + chunk2.length];
         System.arraycopy(chunk1, 0, data, 0, chunk1.length);
         System.arraycopy(chunk2, 0, data, chunk1.length, chunk2.length);
 
-        final CountDownLatch latch = new CountDownLatch(1);
-        DeferredContentProvider content = new DeferredContentProvider(ByteBuffer.wrap(chunk1));
+        CountDownLatch latch = new CountDownLatch(1);
+        AsyncRequestContent content = new AsyncRequestContent(ByteBuffer.wrap(chunk1));
         scenario.client.newRequest(scenario.newURI())
-            .header(HttpHeader.EXPECT, HttpHeaderValue.CONTINUE.asString())
-            .content(content)
+            .headers(headers -> headers.put(HttpHeader.EXPECT, HttpHeaderValue.CONTINUE))
+            .body(content)
             .send(new BufferingResponseListener()
             {
                 @Override
@@ -593,18 +591,18 @@ public class HttpClientContinueTest extends AbstractTest<TransportScenario>
             }
         });
 
-        final byte[] data = new byte[]{0, 1, 2, 3, 4, 5, 6, 7};
-        final DeferredContentProvider content = new DeferredContentProvider();
+        byte[] data = new byte[]{0, 1, 2, 3, 4, 5, 6, 7};
+        AsyncRequestContent content = new AsyncRequestContent();
 
-        final CountDownLatch latch = new CountDownLatch(1);
+        CountDownLatch latch = new CountDownLatch(1);
         scenario.client.newRequest(scenario.newURI())
-            .header(HttpHeader.EXPECT, HttpHeaderValue.CONTINUE.asString())
+            .headers(headers -> headers.put(HttpHeader.EXPECT, HttpHeaderValue.CONTINUE))
             .onRequestHeaders(request ->
             {
                 content.offer(ByteBuffer.wrap(data));
                 content.close();
             })
-            .content(content)
+            .body(content)
             .send(new BufferingResponseListener()
             {
                 @Override
@@ -634,13 +632,13 @@ public class HttpClientContinueTest extends AbstractTest<TransportScenario>
             }
         });
 
-        final byte[] chunk1 = new byte[]{0, 1, 2, 3};
-        final byte[] chunk2 = new byte[]{4, 5, 6};
-        final byte[] data = new byte[chunk1.length + chunk2.length];
+        byte[] chunk1 = new byte[]{0, 1, 2, 3};
+        byte[] chunk2 = new byte[]{4, 5, 6};
+        byte[] data = new byte[chunk1.length + chunk2.length];
         System.arraycopy(chunk1, 0, data, 0, chunk1.length);
         System.arraycopy(chunk2, 0, data, chunk1.length, chunk2.length);
 
-        final DeferredContentProvider content = new DeferredContentProvider(ByteBuffer.wrap(chunk1));
+        AsyncRequestContent content = new AsyncRequestContent(ByteBuffer.wrap(chunk1));
 
         scenario.client.getProtocolHandlers().put(new ContinueProtocolHandler()
         {
@@ -660,10 +658,10 @@ public class HttpClientContinueTest extends AbstractTest<TransportScenario>
             }
         });
 
-        final CountDownLatch latch = new CountDownLatch(1);
+        CountDownLatch latch = new CountDownLatch(1);
         scenario.client.newRequest(scenario.newURI())
-            .header(HttpHeader.EXPECT, HttpHeaderValue.CONTINUE.asString())
-            .content(content)
+            .headers(headers -> headers.put(HttpHeader.EXPECT, HttpHeaderValue.CONTINUE))
+            .body(content)
             .send(new BufferingResponseListener()
             {
                 @Override
@@ -694,10 +692,10 @@ public class HttpClientContinueTest extends AbstractTest<TransportScenario>
         {
             server.bind(new InetSocketAddress("localhost", 0));
 
-            final CountDownLatch latch = new CountDownLatch(1);
+            CountDownLatch latch = new CountDownLatch(1);
             scenario.client.newRequest("localhost", server.getLocalPort())
-                .header(HttpHeader.EXPECT, HttpHeaderValue.CONTINUE.asString())
-                .content(new BytesContentProvider(new byte[]{0}))
+                .headers(headers -> headers.put(HttpHeader.EXPECT, HttpHeaderValue.CONTINUE))
+                .body(new BytesRequestContent(new byte[]{0}))
                 .send(result ->
                 {
                     assertTrue(result.isSucceeded(), result.toString());
@@ -758,7 +756,7 @@ public class HttpClientContinueTest extends AbstractTest<TransportScenario>
         byte[] bytes = new byte[1024];
         new Random().nextBytes(bytes);
         ContentResponse response = scenario.client.newRequest(scenario.newURI())
-            .content(new BytesContentProvider(bytes))
+            .body(new BytesRequestContent(bytes))
             .timeout(5, TimeUnit.SECONDS)
             .send();
 

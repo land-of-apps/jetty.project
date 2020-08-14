@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.client;
@@ -22,11 +22,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.Socket;
 import java.nio.ByteBuffer;
-import java.nio.channels.SelectableChannel;
 import java.nio.channels.SelectionKey;
+import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -36,16 +34,16 @@ import javax.servlet.http.HttpServletResponse;
 
 import org.eclipse.jetty.client.api.ContentResponse;
 import org.eclipse.jetty.client.http.HttpClientTransportOverHTTP;
-import org.eclipse.jetty.client.util.FormContentProvider;
-import org.eclipse.jetty.client.util.StringContentProvider;
+import org.eclipse.jetty.client.util.FormRequestContent;
+import org.eclipse.jetty.client.util.StringRequestContent;
 import org.eclipse.jetty.http.HttpHeader;
 import org.eclipse.jetty.http.HttpHeaderValue;
 import org.eclipse.jetty.http.HttpStatus;
+import org.eclipse.jetty.io.ClientConnector;
 import org.eclipse.jetty.io.EndPoint;
 import org.eclipse.jetty.io.ManagedSelector;
 import org.eclipse.jetty.io.NetworkTrafficListener;
 import org.eclipse.jetty.io.NetworkTrafficSocketChannelEndPoint;
-import org.eclipse.jetty.io.SelectorManager;
 import org.eclipse.jetty.server.Handler;
 import org.eclipse.jetty.server.HttpConfiguration;
 import org.eclipse.jetty.server.NetworkTrafficServerConnector;
@@ -87,7 +85,7 @@ public class NetworkTrafficListenerTest
 
     private void startClient() throws Exception
     {
-        client = new NetworkTrafficHttpClient(new ArrayList<>());
+        client = new NetworkTrafficHttpClient(new AtomicReference<>());
         client.start();
     }
 
@@ -107,7 +105,7 @@ public class NetworkTrafficListenerTest
 
         CountDownLatch openedLatch = new CountDownLatch(1);
         CountDownLatch closedLatch = new CountDownLatch(1);
-        connector.addNetworkTrafficListener(new NetworkTrafficListener()
+        connector.setNetworkTrafficListener(new NetworkTrafficListener()
         {
             public volatile Socket socket;
 
@@ -151,7 +149,7 @@ public class NetworkTrafficListenerTest
         CountDownLatch serverIncomingLatch = new CountDownLatch(1);
         AtomicReference<String> serverOutgoing = new AtomicReference<>("");
         CountDownLatch serverOutgoingLatch = new CountDownLatch(1);
-        connector.addNetworkTrafficListener(new NetworkTrafficListener()
+        connector.setNetworkTrafficListener(new NetworkTrafficListener()
         {
             @Override
             public void incoming(Socket socket, ByteBuffer bytes)
@@ -172,7 +170,7 @@ public class NetworkTrafficListenerTest
         CountDownLatch clientIncomingLatch = new CountDownLatch(1);
         AtomicReference<String> clientOutgoing = new AtomicReference<>("");
         CountDownLatch clientOutgoingLatch = new CountDownLatch(1);
-        client.listeners.add(new NetworkTrafficListener()
+        client.listener.set(new NetworkTrafficListener()
         {
             @Override
             public void outgoing(Socket socket, ByteBuffer bytes)
@@ -190,7 +188,7 @@ public class NetworkTrafficListenerTest
         });
 
         ContentResponse response = client.newRequest("localhost", connector.getLocalPort())
-            .header(HttpHeader.CONNECTION, HttpHeaderValue.CLOSE.asString())
+            .headers(headers -> headers.put(HttpHeader.CONNECTION, HttpHeaderValue.CLOSE))
             .send();
         assertEquals(HttpStatus.OK_200, response.getStatus());
 
@@ -221,7 +219,7 @@ public class NetworkTrafficListenerTest
         CountDownLatch serverIncomingLatch = new CountDownLatch(1);
         AtomicReference<String> serverOutgoing = new AtomicReference<>("");
         CountDownLatch serverOutgoingLatch = new CountDownLatch(1);
-        connector.addNetworkTrafficListener(new NetworkTrafficListener()
+        connector.setNetworkTrafficListener(new NetworkTrafficListener()
         {
             @Override
             public void incoming(Socket socket, ByteBuffer bytes)
@@ -242,7 +240,7 @@ public class NetworkTrafficListenerTest
         CountDownLatch clientIncomingLatch = new CountDownLatch(1);
         AtomicReference<String> clientOutgoing = new AtomicReference<>("");
         CountDownLatch clientOutgoingLatch = new CountDownLatch(1);
-        client.listeners.add(new NetworkTrafficListener()
+        client.listener.set(new NetworkTrafficListener()
         {
             @Override
             public void outgoing(Socket socket, ByteBuffer bytes)
@@ -295,7 +293,7 @@ public class NetworkTrafficListenerTest
         CountDownLatch serverIncomingLatch = new CountDownLatch(1);
         AtomicReference<String> serverOutgoing = new AtomicReference<>("");
         CountDownLatch serverOutgoingLatch = new CountDownLatch(1);
-        connector.addNetworkTrafficListener(new NetworkTrafficListener()
+        connector.setNetworkTrafficListener(new NetworkTrafficListener()
         {
             @Override
             public void incoming(Socket socket, ByteBuffer bytes)
@@ -317,7 +315,7 @@ public class NetworkTrafficListenerTest
         CountDownLatch clientIncomingLatch = new CountDownLatch(1);
         AtomicReference<String> clientOutgoing = new AtomicReference<>("");
         CountDownLatch clientOutgoingLatch = new CountDownLatch(1);
-        client.listeners.add(new NetworkTrafficListener()
+        client.listener.set(new NetworkTrafficListener()
         {
             @Override
             public void outgoing(Socket socket, ByteBuffer bytes)
@@ -364,7 +362,7 @@ public class NetworkTrafficListenerTest
         CountDownLatch serverIncomingLatch = new CountDownLatch(1);
         AtomicReference<String> serverOutgoing = new AtomicReference<>("");
         CountDownLatch serverOutgoingLatch = new CountDownLatch(1);
-        connector.addNetworkTrafficListener(new NetworkTrafficListener()
+        connector.setNetworkTrafficListener(new NetworkTrafficListener()
         {
             @Override
             public void incoming(Socket socket, ByteBuffer bytes)
@@ -385,7 +383,7 @@ public class NetworkTrafficListenerTest
         CountDownLatch clientIncomingLatch = new CountDownLatch(1);
         AtomicReference<String> clientOutgoing = new AtomicReference<>("");
         CountDownLatch clientOutgoingLatch = new CountDownLatch(1);
-        client.listeners.add(new NetworkTrafficListener()
+        client.listener.set(new NetworkTrafficListener()
         {
             @Override
             public void outgoing(Socket socket, ByteBuffer bytes)
@@ -407,7 +405,7 @@ public class NetworkTrafficListenerTest
         fields.put("a", "1");
         fields.put("b", "2");
         ContentResponse response = client.newRequest("localhost", connector.getLocalPort())
-            .content(new FormContentProvider(fields))
+            .body(new FormRequestContent(fields))
             .send();
         assertEquals(HttpStatus.FOUND_302, response.getStatus());
 
@@ -445,7 +443,7 @@ public class NetworkTrafficListenerTest
         AtomicReference<String> serverIncoming = new AtomicReference<>("");
         AtomicReference<String> serverOutgoing = new AtomicReference<>("");
         CountDownLatch serverOutgoingLatch = new CountDownLatch(1);
-        connector.addNetworkTrafficListener(new NetworkTrafficListener()
+        connector.setNetworkTrafficListener(new NetworkTrafficListener()
         {
             @Override
             public void incoming(Socket socket, ByteBuffer bytes)
@@ -464,7 +462,7 @@ public class NetworkTrafficListenerTest
         AtomicReference<String> clientIncoming = new AtomicReference<>("");
         CountDownLatch clientIncomingLatch = new CountDownLatch(1);
         AtomicReference<String> clientOutgoing = new AtomicReference<>("");
-        client.listeners.add(new NetworkTrafficListener()
+        client.listener.set(new NetworkTrafficListener()
         {
             @Override
             public void outgoing(Socket socket, ByteBuffer bytes)
@@ -488,7 +486,7 @@ public class NetworkTrafficListenerTest
         }
 
         ContentResponse response = client.newRequest("localhost", connector.getLocalPort())
-            .content(new StringContentProvider(requestContent))
+            .body(new StringRequestContent(requestContent))
             .send();
         assertEquals(HttpStatus.OK_200, response.getStatus());
 
@@ -501,26 +499,19 @@ public class NetworkTrafficListenerTest
 
     private static class NetworkTrafficHttpClient extends HttpClient
     {
-        private final List<NetworkTrafficListener> listeners;
+        private final AtomicReference<NetworkTrafficListener> listener;
 
-        private NetworkTrafficHttpClient(List<NetworkTrafficListener> listeners)
+        private NetworkTrafficHttpClient(AtomicReference<NetworkTrafficListener> listener)
         {
-            super(new HttpClientTransportOverHTTP()
+            super(new HttpClientTransportOverHTTP(new ClientConnector()
             {
                 @Override
-                protected SelectorManager newSelectorManager(HttpClient client)
+                protected EndPoint newEndPoint(SocketChannel channel, ManagedSelector selector, SelectionKey selectionKey)
                 {
-                    return new AbstractConnectorHttpClientTransport.ClientSelectorManager(client, getSelectors())
-                    {
-                        @Override
-                        protected EndPoint newEndPoint(SelectableChannel channel, ManagedSelector selector, SelectionKey key)
-                        {
-                            return new NetworkTrafficSocketChannelEndPoint(channel, selector, key, getScheduler(), client.getIdleTimeout(), listeners);
-                        }
-                    };
+                    return new NetworkTrafficSocketChannelEndPoint(channel, selector, selectionKey, getScheduler(), getIdleTimeout().toMillis(), listener.get());
                 }
-            }, null);
-            this.listeners = listeners;
+            }));
+            this.listener = listener;
         }
     }
 }

@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.server;
@@ -28,8 +28,9 @@ import org.eclipse.jetty.util.RolloverFileOutputStream;
 import org.eclipse.jetty.util.annotation.ManagedAttribute;
 import org.eclipse.jetty.util.annotation.ManagedObject;
 import org.eclipse.jetty.util.component.AbstractLifeCycle;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
+import org.eclipse.jetty.util.thread.AutoLock;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Writer which outputs pre-formatted request log strings to a file using {@link RolloverFileOutputStream}.
@@ -37,8 +38,9 @@ import org.eclipse.jetty.util.log.Logger;
 @ManagedObject("Request Log writer which writes to file")
 public class RequestLogWriter extends AbstractLifeCycle implements RequestLog.Writer
 {
-    private static final Logger LOG = Log.getLogger(RequestLogWriter.class);
+    private static final Logger LOG = LoggerFactory.getLogger(RequestLogWriter.class);
 
+    private final AutoLock _lock = new AutoLock();
     private String _filename;
     private boolean _append;
     private int _retainDays;
@@ -105,12 +107,6 @@ public class RequestLogWriter extends AbstractLifeCycle implements RequestLog.Wr
         if (_fileOut instanceof RolloverFileOutputStream)
             return ((RolloverFileOutputStream)_fileOut).getDatedFilename();
         return null;
-    }
-
-    @Deprecated
-    protected boolean isEnabled()
-    {
-        return (_fileOut != null);
     }
 
     /**
@@ -181,7 +177,7 @@ public class RequestLogWriter extends AbstractLifeCycle implements RequestLog.Wr
     @Override
     public void write(String requestEntry) throws IOException
     {
-        synchronized (this)
+        try (AutoLock l = _lock.lock())
         {
             if (_writer == null)
                 return;
@@ -192,24 +188,24 @@ public class RequestLogWriter extends AbstractLifeCycle implements RequestLog.Wr
     }
 
     @Override
-    protected synchronized void doStart() throws Exception
+    protected void doStart() throws Exception
     {
-        if (_filename != null)
+        try (AutoLock l = _lock.lock())
         {
-            _fileOut = new RolloverFileOutputStream(_filename, _append, _retainDays, TimeZone.getTimeZone(getTimeZone()), _filenameDateFormat, null);
-            _closeOut = true;
-            LOG.info("Opened " + getDatedFilename());
-        }
-        else
-            _fileOut = System.err;
-
-        _out = _fileOut;
-
-        synchronized (this)
-        {
+            if (_filename != null)
+            {
+                _fileOut = new RolloverFileOutputStream(_filename, _append, _retainDays, TimeZone.getTimeZone(getTimeZone()), _filenameDateFormat, null);
+                _closeOut = true;
+                LOG.info("Opened " + getDatedFilename());
+            }
+            else
+            {
+                _fileOut = System.err;
+            }
+            _out = _fileOut;
             _writer = new OutputStreamWriter(_out);
+            super.doStart();
         }
-        super.doStart();
     }
 
     public void setTimeZone(String timeZone)
@@ -226,7 +222,7 @@ public class RequestLogWriter extends AbstractLifeCycle implements RequestLog.Wr
     @Override
     protected void doStop() throws Exception
     {
-        synchronized (this)
+        try (AutoLock ignored = _lock.lock())
         {
             super.doStop();
             try
@@ -236,17 +232,19 @@ public class RequestLogWriter extends AbstractLifeCycle implements RequestLog.Wr
             }
             catch (IOException e)
             {
-                LOG.ignore(e);
+                LOG.trace("IGNORED", e);
             }
             if (_out != null && _closeOut)
+            {
                 try
                 {
                     _out.close();
                 }
                 catch (IOException e)
                 {
-                    LOG.ignore(e);
+                    LOG.trace("IGNORED", e);
                 }
+            }
 
             _out = null;
             _fileOut = null;

@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.util.thread;
@@ -40,15 +40,14 @@ import org.eclipse.jetty.util.annotation.Name;
 import org.eclipse.jetty.util.component.ContainerLifeCycle;
 import org.eclipse.jetty.util.component.Dumpable;
 import org.eclipse.jetty.util.component.DumpableCollection;
-import org.eclipse.jetty.util.component.LifeCycle;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
 import org.eclipse.jetty.util.thread.ThreadPool.SizedThreadPool;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @ManagedObject("A thread pool")
 public class QueuedThreadPool extends ContainerLifeCycle implements ThreadFactory, SizedThreadPool, Dumpable, TryExecutor
 {
-    private static final Logger LOG = Log.getLogger(QueuedThreadPool.class);
+    private static final Logger LOG = LoggerFactory.getLogger(QueuedThreadPool.class);
     private static Runnable NOOP = () ->
     {
     };
@@ -65,7 +64,7 @@ public class QueuedThreadPool extends ContainerLifeCycle implements ThreadFactor
     private final AtomicBiInteger _counts = new AtomicBiInteger(Integer.MIN_VALUE, 0);
     private final AtomicLong _lastShrink = new AtomicLong();
     private final Set<Thread> _threads = ConcurrentHashMap.newKeySet();
-    private final Object _joinLock = new Object();
+    private final AutoLock.WithCondition _joinLock = new AutoLock.WithCondition();
     private final BlockingQueue<Runnable> _jobs;
     private final ThreadGroup _threadGroup;
     private final ThreadFactory _threadFactory;
@@ -80,6 +79,7 @@ public class QueuedThreadPool extends ContainerLifeCycle implements ThreadFactor
     private boolean _detailedDump = false;
     private int _lowThreadsThreshold = 1;
     private ThreadPoolBudget _budget;
+    private long _stopTimeout;
 
     public QueuedThreadPool()
     {
@@ -157,6 +157,16 @@ public class QueuedThreadPool extends ContainerLifeCycle implements ThreadFactor
         if (budget != null && budget.getSizedThreadPool() != this)
             throw new IllegalArgumentException();
         _budget = budget;
+    }
+
+    public void setStopTimeout(long stopTimeout)
+    {
+        _stopTimeout = stopTimeout;
+    }
+
+    public long getStopTimeout()
+    {
+        return _stopTimeout;
     }
 
     @Override
@@ -257,7 +267,7 @@ public class QueuedThreadPool extends ContainerLifeCycle implements ThreadFactor
                 }
                 catch (Throwable t)
                 {
-                    LOG.warn(t);
+                    LOG.warn("Unable to close job: " + job, t);
                 }
             }
             else if (job != NOOP)
@@ -267,9 +277,9 @@ public class QueuedThreadPool extends ContainerLifeCycle implements ThreadFactor
         if (_budget != null)
             _budget.reset();
 
-        synchronized (_joinLock)
+        try (AutoLock.WithCondition l = _joinLock.lock())
         {
-            _joinLock.notifyAll();
+            l.signalAll();
         }
     }
 
@@ -555,16 +565,16 @@ public class QueuedThreadPool extends ContainerLifeCycle implements ThreadFactor
     }
 
     /**
-     * Blocks until the thread pool is {@link LifeCycle#stop stopped}.
+     * Blocks until the thread pool is {@link org.eclipse.jetty.util.component.LifeCycle} stopped.
      */
     @Override
     public void join() throws InterruptedException
     {
-        synchronized (_joinLock)
+        try (AutoLock.WithCondition l = _joinLock.lock())
         {
             while (isRunning())
             {
-                _joinLock.wait();
+                l.await();
             }
         }
 
@@ -675,10 +685,17 @@ public class QueuedThreadPool extends ContainerLifeCycle implements ThreadFactor
             int threads = AtomicBiInteger.getHi(encoded);
             int idle = AtomicBiInteger.getLo(encoded);
             if (threads == Integer.MIN_VALUE) // This is a marker that the pool is stopped.
-                return false;
-            long update = AtomicBiInteger.encode(threads + deltaThreads, idle + deltaIdle);
-            if (_counts.compareAndSet(encoded, update))
-                return true;
+            {
+                long update = AtomicBiInteger.encode(threads, idle + deltaIdle);
+                if (_counts.compareAndSet(encoded, update))
+                    return false;
+            }
+            else
+            {
+                long update = AtomicBiInteger.encode(threads + deltaThreads, idle + deltaIdle);
+                if (_counts.compareAndSet(encoded, update))
+                    return true;
+            }
         }
     }
 
@@ -815,16 +832,6 @@ public class QueuedThreadPool extends ContainerLifeCycle implements ThreadFactor
     }
 
     /**
-     * @param queue the job queue
-     * @deprecated pass the queue to the constructor instead
-     */
-    @Deprecated
-    public void setQueue(BlockingQueue<Runnable> queue)
-    {
-        throw new UnsupportedOperationException("Use constructor injection");
-    }
-
-    /**
      * @param id the thread ID to interrupt.
      * @return true if the thread was found and interrupted.
      */
@@ -890,10 +897,10 @@ public class QueuedThreadPool extends ContainerLifeCycle implements ThreadFactor
                     // If we had a job,
                     if (job != null)
                     {
+                        idle = true;
                         // signal that we are idle again
                         if (!addCounts(0, 1))
                             break;
-                        idle = true;
                     }
                     // else check we are still running
                     else if (_counts.getHi() == Integer.MIN_VALUE)
@@ -943,11 +950,11 @@ public class QueuedThreadPool extends ContainerLifeCycle implements ThreadFactor
                     {
                         if (LOG.isDebugEnabled())
                             LOG.debug("interrupted {} in {}", job, QueuedThreadPool.this);
-                        LOG.ignore(e);
+                        LOG.trace("IGNORED", e);
                     }
                     catch (Throwable e)
                     {
-                        LOG.warn(e);
+                        LOG.warn("Job failed", e);
                     }
                     finally
                     {

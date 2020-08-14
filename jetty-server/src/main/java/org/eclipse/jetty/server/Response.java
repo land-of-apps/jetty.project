@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.server;
@@ -27,6 +27,7 @@ import java.util.EnumSet;
 import java.util.Iterator;
 import java.util.ListIterator;
 import java.util.Locale;
+import java.util.Map;
 import java.util.function.Supplier;
 import javax.servlet.ServletOutputStream;
 import javax.servlet.ServletResponse;
@@ -55,20 +56,18 @@ import org.eclipse.jetty.http.MetaData;
 import org.eclipse.jetty.http.MimeTypes;
 import org.eclipse.jetty.http.PreEncodedHttpField;
 import org.eclipse.jetty.io.RuntimeIOException;
+import org.eclipse.jetty.server.handler.ContextHandler.Context;
 import org.eclipse.jetty.server.session.SessionHandler;
 import org.eclipse.jetty.util.AtomicBiInteger;
 import org.eclipse.jetty.util.Callback;
 import org.eclipse.jetty.util.StringUtil;
 import org.eclipse.jetty.util.URIUtil;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
 
 /**
  * <p>{@link Response} provides the implementation for {@link HttpServletResponse}.</p>
  */
 public class Response implements HttpServletResponse
 {
-    private static final Logger LOG = Log.getLogger(Response.class);
     private static final int __MIN_BUFFER_SIZE = 1;
     private static final HttpField __EXPIRES_01JAN1970 = new PreEncodedHttpField(HttpHeader.EXPIRES, DateGenerator.__01Jan1970);
 
@@ -85,7 +84,7 @@ public class Response implements HttpServletResponse
     public static final String SET_INCLUDE_HEADER_PREFIX = "org.eclipse.jetty.server.include.";
 
     private final HttpChannel _channel;
-    private final HttpFields _fields = new HttpFields();
+    private final HttpFields.Mutable _fields = HttpFields.build();
     private final AtomicBiInteger _errorSentAndIncludes = new AtomicBiInteger(); // hi is errorSent flag, lo is include count
     private final HttpOutput _out;
     private int _status = HttpStatus.OK_200;
@@ -105,7 +104,7 @@ public class Response implements HttpServletResponse
         NOT_SET, INFERRED, SET_LOCALE, SET_CONTENT_TYPE, SET_CHARACTER_ENCODING
     }
 
-    private static final EnumSet<EncodingFrom> __localeOverride = EnumSet.of(EncodingFrom.NOT_SET, EncodingFrom.INFERRED);
+    private static final EnumSet<EncodingFrom> __localeOverride = EnumSet.of(EncodingFrom.NOT_SET, EncodingFrom.INFERRED, EncodingFrom.SET_LOCALE);
     private static final EnumSet<EncodingFrom> __explicitCharset = EnumSet.of(EncodingFrom.SET_LOCALE, EncodingFrom.SET_CHARACTER_ENCODING);
 
     public Response(HttpChannel channel, HttpOutput out)
@@ -212,7 +211,7 @@ public class Response implements HttpServletResponse
             return cookie;
 
         //sameSite is not set, use the default configured for the context, if one exists
-        SameSite contextDefault = HttpCookie.getSameSiteDefault(_channel.getRequest().getServletContext());
+        SameSite contextDefault = HttpCookie.getSameSiteDefault(_channel.getRequest().getContext());
         if (contextDefault == null)
             return cookie; //no default set
 
@@ -226,6 +225,35 @@ public class Response implements HttpServletResponse
             cookie.getComment(),
             cookie.getVersion(),
             contextDefault);
+    }
+
+    @Override
+    public void addCookie(Cookie cookie)
+    {
+        //Servlet Spec 9.3 Include method: cannot set a cookie if handling an include
+        if (isMutable())
+        {
+            if (StringUtil.isBlank(cookie.getName()))
+                throw new IllegalArgumentException("Cookie.name cannot be blank/null");
+
+            String comment = cookie.getComment();
+            // HttpOnly was supported as a comment in cookie flags before the java.net.HttpCookie implementation so need to check that
+            boolean httpOnly = cookie.isHttpOnly() || HttpCookie.isHttpOnlyInComment(comment);
+            SameSite sameSite = HttpCookie.getSameSiteFromComment(comment);
+            comment = HttpCookie.getCommentWithoutAttributes(comment);
+
+            addCookie(new HttpCookie(
+                cookie.getName(),
+                cookie.getValue(),
+                cookie.getDomain(),
+                cookie.getPath(),
+                cookie.getMaxAge(),
+                httpOnly,
+                cookie.getSecure(),
+                comment,
+                cookie.getVersion(),
+                sameSite));
+        }
     }
 
     /**
@@ -278,35 +306,9 @@ public class Response implements HttpServletResponse
         addCookie(cookie);
     }
 
-    @Override
-    public void addCookie(Cookie cookie)
-    {
-        if (StringUtil.isBlank(cookie.getName()))
-            throw new IllegalArgumentException("Cookie.name cannot be blank/null");
-
-        String comment = cookie.getComment();
-        // HttpOnly was supported as a comment in cookie flags before the java.net.HttpCookie implementation so need to check that
-        boolean httpOnly = cookie.isHttpOnly() || HttpCookie.isHttpOnlyInComment(comment);
-        SameSite sameSite = HttpCookie.getSameSiteFromComment(comment);
-        comment = HttpCookie.getCommentWithoutAttributes(comment);
-
-        addCookie(new HttpCookie(
-            cookie.getName(),
-            cookie.getValue(),
-            cookie.getDomain(),
-            cookie.getPath(),
-            (long)cookie.getMaxAge(),
-            httpOnly,
-            cookie.getSecure(),
-            comment,
-            cookie.getVersion(),
-            sameSite));
-    }
-
-    @Override
     public boolean containsHeader(String name)
     {
-        return _fields.containsKey(name);
+        return _fields.contains(name);
     }
 
     @Override
@@ -321,7 +323,7 @@ public class Response implements HttpServletResponse
         HttpURI uri = null;
         if (sessionManager.isCheckingRemoteSessionIdEncoding() && URIUtil.hasScheme(url))
         {
-            uri = new HttpURI(url);
+            uri = HttpURI.from(url);
             String path = uri.getPath();
             path = (path == null ? "" : path);
             int port = uri.getPort();
@@ -333,7 +335,7 @@ public class Response implements HttpServletResponse
                 return url;
             if (request.getServerPort() != port)
                 return url;
-            if (!path.startsWith(request.getContextPath())) //TODO the root context path is "", with which every non null string starts
+            if (request.getContext() != null && !path.startsWith(request.getContextPath()))
                 return url;
         }
 
@@ -375,7 +377,7 @@ public class Response implements HttpServletResponse
         String id = sessionManager.getExtendedId(session);
 
         if (uri == null)
-            uri = new HttpURI(url);
+            uri = HttpURI.from(url);
 
         // Already encoded
         int prefix = url.indexOf(sessionURLPrefix);
@@ -414,14 +416,14 @@ public class Response implements HttpServletResponse
     }
 
     @Override
-    @Deprecated
+    @Deprecated(since = "Servlet API 2.1")
     public String encodeUrl(String url)
     {
         return encodeURL(url);
     }
 
     @Override
-    @Deprecated
+    @Deprecated(since = "Servlet API 2.1")
     public String encodeRedirectUrl(String url)
     {
         return encodeRedirectURL(url);
@@ -502,7 +504,9 @@ public class Response implements HttpServletResponse
 
         if (!URIUtil.hasScheme(location))
         {
-            StringBuilder buf = _channel.getRequest().getRootURL();
+            StringBuilder buf = _channel.getHttpConfiguration().isRelativeRedirectAllowed()
+                ? new StringBuilder()
+                : _channel.getRequest().getRootURL();
             if (location.startsWith("/"))
             {
                 // absolute in context
@@ -541,7 +545,13 @@ public class Response implements HttpServletResponse
     public void setDateHeader(String name, long date)
     {
         if (isMutable())
-            _fields.putDateField(name, date);
+        {
+            HttpHeader header = HttpHeader.CACHE.get(name);
+            if (header == null)
+                _fields.putDateField(name, date);
+            else
+                _fields.putDateField(header, date);
+        }
     }
 
     @Override
@@ -689,20 +699,20 @@ public class Response implements HttpServletResponse
     }
 
     @Override
-    @Deprecated
-    public void setStatus(int sc, String sm)
+    @Deprecated(since = "Servlet API 2.1")
+    public void setStatus(int sc, String message)
     {
-        setStatusWithReason(sc, sm);
+        setStatusWithReason(sc, null);
     }
 
-    public void setStatusWithReason(int sc, String sm)
+    public void setStatusWithReason(int sc, String message)
     {
         if (sc <= 0)
             throw new IllegalArgumentException();
         if (isMutable())
         {
             _status = sc;
-            _reason = sm;
+            _reason = message;
         }
     }
 
@@ -714,9 +724,18 @@ public class Response implements HttpServletResponse
             String encoding = MimeTypes.getCharsetAssumedFromContentType(_contentType);
             if (encoding != null)
                 return encoding;
+
             encoding = MimeTypes.getCharsetInferredFromContentType(_contentType);
             if (encoding != null)
                 return encoding;
+
+            Context context = _channel.getRequest().getContext();
+            if (context != null)
+            {
+                encoding = context.getResponseCharacterEncoding();
+                if (encoding != null)
+                    return encoding;
+            }
             return StringUtil.__ISO_8859_1;
         }
         return _characterEncoding;
@@ -760,23 +779,42 @@ public class Response implements HttpServletResponse
 
         if (_outputType == OutputType.NONE)
         {
-            /* get encoding from Content-Type header */
+            //first try explicit char encoding
             String encoding = _characterEncoding;
+
+            //try char set from mime type
             if (encoding == null)
             {
                 if (_mimeType != null && _mimeType.isCharsetAssumed())
                     encoding = _mimeType.getCharsetString();
-                else
-                {
-                    encoding = MimeTypes.getCharsetAssumedFromContentType(_contentType);
-                    if (encoding == null)
-                    {
-                        encoding = MimeTypes.getCharsetInferredFromContentType(_contentType);
-                        if (encoding == null)
-                            encoding = StringUtil.__ISO_8859_1;
-                        setCharacterEncoding(encoding, EncodingFrom.INFERRED);
-                    }
-                }
+            }
+
+            //try char set assumed from content type
+            if (encoding == null)
+            {
+                encoding = MimeTypes.getCharsetAssumedFromContentType(_contentType);
+            }
+            
+            //try char set inferred from content type
+            if (encoding == null)
+            {
+                encoding = MimeTypes.getCharsetInferredFromContentType(_contentType);
+                setCharacterEncoding(encoding, EncodingFrom.INFERRED);
+            }
+            
+            //try any default char encoding for the context
+            if (encoding == null)
+            {
+                Context context = _channel.getRequest().getContext();
+                if (context != null)
+                    encoding = context.getResponseCharacterEncoding();
+            }
+            
+            //fallback to last resort iso-8859-1
+            if (encoding == null)
+            {
+                encoding = StringUtil.__ISO_8859_1;
+                setCharacterEncoding(encoding, EncodingFrom.INFERRED);
             }
 
             Locale locale = getLocale();
@@ -987,11 +1025,9 @@ public class Response implements HttpServletResponse
             _contentType = contentType;
             _mimeType = MimeTypes.CACHE.get(contentType);
 
-            String charset;
-            if (_mimeType != null && _mimeType.getCharset() != null && !_mimeType.isCharsetAssumed())
+            String charset = MimeTypes.getCharsetFromContentType(contentType);
+            if (charset == null && _mimeType != null && _mimeType.isCharsetAssumed())
                 charset = _mimeType.getCharsetString();
-            else
-                charset = MimeTypes.getCharsetFromContentType(contentType);
 
             if (charset == null)
             {
@@ -1000,11 +1036,10 @@ public class Response implements HttpServletResponse
                     case NOT_SET:
                         break;
                     case INFERRED:
-                    case SET_CONTENT_TYPE:
                         if (isWriting())
                         {
-                            _mimeType = null;
                             _contentType = _contentType + ";charset=" + _characterEncoding;
+                            _mimeType = MimeTypes.CACHE.get(_contentType);
                         }
                         else
                         {
@@ -1012,21 +1047,25 @@ public class Response implements HttpServletResponse
                             _characterEncoding = null;
                         }
                         break;
+                    case SET_CONTENT_TYPE:
                     case SET_LOCALE:
                     case SET_CHARACTER_ENCODING:
                     {
                         _contentType = contentType + ";charset=" + _characterEncoding;
-                        _mimeType = null;
+                        _mimeType = MimeTypes.CACHE.get(_contentType);
+                        break;
                     }
+                    default:
+                        throw new IllegalStateException(_encodingFrom.toString());
                 }
             }
             else if (isWriting() && !charset.equalsIgnoreCase(_characterEncoding))
             {
                 // too late to change the character encoding;
-                _mimeType = null;
                 _contentType = MimeTypes.getContentTypeWithoutCharset(_contentType);
-                if (_characterEncoding != null)
+                if (_characterEncoding != null  && (_mimeType == null || !_mimeType.isCharsetAssumed()))
                     _contentType = _contentType + ";charset=" + _characterEncoding;
+                _mimeType = MimeTypes.CACHE.get(_contentType);
             }
             else
             {
@@ -1177,20 +1216,37 @@ public class Response implements HttpServletResponse
         _out.reopen();
     }
 
-    public void setTrailers(Supplier<HttpFields> trailers)
-    {
-        this._trailers = trailers;
-    }
-
     public Supplier<HttpFields> getTrailers()
     {
         return _trailers;
     }
 
+    public void setTrailers(Supplier<HttpFields> trailers)
+    {
+        _trailers = trailers;
+    }
+
+    @Override
+    public Supplier<Map<String, String>> getTrailerFields()
+    {
+        if (_trailers instanceof HttpFieldsSupplier)
+            return ((HttpFieldsSupplier)_trailers).getSupplier();
+        return null;
+    }
+
+    @Override
+    public void setTrailerFields(Supplier<Map<String, String>> trailers)
+    {
+        if (isCommitted())
+            throw new IllegalStateException("Committed");
+        if (getHttpChannel().getRequest().getHttpVersion().ordinal() <= HttpVersion.HTTP_1_0.ordinal())
+            throw new IllegalStateException("Trailers not supported");
+        this._trailers = new HttpFieldsSupplier(trailers);
+    }
+
     protected MetaData.Response newResponseMetaData()
     {
-        MetaData.Response info = new MetaData.Response(_channel.getRequest().getHttpVersion(), getStatus(), getReason(), _fields, getLongContentLength());
-        info.setTrailerSupplier(getTrailers());
+        MetaData.Response info = new MetaData.Response(_channel.getRequest().getHttpVersion(), getStatus(), getReason(), _fields, getLongContentLength(), getTrailers());
         return info;
     }
 
@@ -1261,7 +1317,7 @@ public class Response implements HttpServletResponse
         return _reason;
     }
 
-    public HttpFields getHttpFields()
+    public HttpFields.Mutable getHttpFields()
     {
         return _fields;
     }
@@ -1368,5 +1424,34 @@ public class Response implements HttpServletResponse
             return unwrap(((ServletResponseWrapper)servletResponse).getResponse());
         }
         return (HttpServletResponse)servletResponse;
+    }
+
+    private static class HttpFieldsSupplier implements Supplier<HttpFields>
+    {
+        private final Supplier<Map<String, String>> _supplier;
+
+        public HttpFieldsSupplier(Supplier<Map<String, String>> trailers)
+        {
+            _supplier = trailers;
+        }
+
+        @Override
+        public HttpFields get()
+        {
+            Map<String, String> t = _supplier.get();
+            if (t == null)
+                return null;
+            HttpFields.Mutable fields = HttpFields.build();
+            for (Map.Entry<String, String> e : t.entrySet())
+            {
+                fields.add(e.getKey(), e.getValue());
+            }
+            return fields.asImmutable();
+        }
+
+        public Supplier<Map<String, String>> getSupplier()
+        {
+            return _supplier;
+        }
     }
 }

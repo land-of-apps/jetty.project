@@ -28,12 +28,12 @@ public interface ServerProxy
      *
      * @param awc a AntWebAppContext object.
      */
-    void addWebApplication(AntWebAppContext awc);
+    public void addWebApplication(AntWebAppContext awc);
 
     /**
      * Starts this server.
      */
-    void start();
+    public void start();
 
-    Object getProxiedObject();
+    public Object getProxiedObject();
 }

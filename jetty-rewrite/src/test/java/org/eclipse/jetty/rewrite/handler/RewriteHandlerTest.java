@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.rewrite.handler;
@@ -23,6 +23,7 @@ import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
+import org.eclipse.jetty.http.HttpURI;
 import org.eclipse.jetty.server.Request;
 import org.eclipse.jetty.server.handler.AbstractHandler;
 import org.junit.jupiter.api.BeforeEach;
@@ -83,8 +84,8 @@ public class RewriteHandlerTest extends AbstractRuleTestCase
         _handler.setOriginalPathAttribute("/before");
         _handler.setRewriteRequestURI(true);
         _handler.setRewritePathInfo(true);
-        _request.setURIPathQuery("/xxx/bar");
-        _request.setPathInfo("/xxx/bar");
+        _request.setHttpURI(HttpURI.build(_request.getHttpURI(), "/xxx/bar"));
+        _request.setContext(_request.getContext(), "/xxx/bar");
         _handler.handle("/xxx/bar", _request, _request, _response);
         assertEquals(201, _response.getStatus());
         assertEquals("/bar/zzz", _request.getAttribute("target"));
@@ -97,8 +98,8 @@ public class RewriteHandlerTest extends AbstractRuleTestCase
         _handler.setOriginalPathAttribute("/before");
         _handler.setRewriteRequestURI(false);
         _handler.setRewritePathInfo(false);
-        _request.setURIPathQuery("/foo/bar");
-        _request.setPathInfo("/foo/bar");
+        _request.setHttpURI(HttpURI.build(_request.getHttpURI(), "/foo/bar"));
+        _request.setContext(_request.getContext(), "/foo/bar");
 
         _handler.handle("/foo/bar", _request, _request, _response);
         assertEquals(201, _response.getStatus());
@@ -110,8 +111,8 @@ public class RewriteHandlerTest extends AbstractRuleTestCase
         _response.setStatus(200);
         _request.setHandled(false);
         _handler.setOriginalPathAttribute(null);
-        _request.setURIPathQuery("/aaa/bar");
-        _request.setPathInfo("/aaa/bar");
+        _request.setHttpURI(HttpURI.build(_request.getHttpURI(), "/aaa/bar"));
+        _request.setContext(_request.getContext(), "/aaa/bar");
         _handler.handle("/aaa/bar", _request, _request, _response);
         assertEquals(201, _response.getStatus());
         assertEquals("/ddd/bar", _request.getAttribute("target"));
@@ -124,8 +125,8 @@ public class RewriteHandlerTest extends AbstractRuleTestCase
         _handler.setOriginalPathAttribute("before");
         _handler.setRewriteRequestURI(true);
         _handler.setRewritePathInfo(true);
-        _request.setURIPathQuery("/aaa/bar");
-        _request.setPathInfo("/aaa/bar");
+        _request.setHttpURI(HttpURI.build(_request.getHttpURI(), "/aaa/bar"));
+        _request.setContext(_request.getContext(), "/aaa/bar");
         _handler.handle("/aaa/bar", _request, _request, _response);
         assertEquals(201, _response.getStatus());
         assertEquals("/ddd/bar", _request.getAttribute("target"));
@@ -136,8 +137,8 @@ public class RewriteHandlerTest extends AbstractRuleTestCase
         _response.setStatus(200);
         _request.setHandled(false);
         _rule2.setTerminating(true);
-        _request.setURIPathQuery("/aaa/bar");
-        _request.setPathInfo("/aaa/bar");
+        _request.setHttpURI(HttpURI.build(_request.getHttpURI(), "/aaa/bar"));
+        _request.setContext(_request.getContext(), "/aaa/bar");
         _handler.handle("/aaa/bar", _request, _request, _response);
         assertEquals(201, _response.getStatus());
         assertEquals("/ccc/bar", _request.getAttribute("target"));
@@ -152,8 +153,8 @@ public class RewriteHandlerTest extends AbstractRuleTestCase
         _request.setAttribute("target", null);
         _request.setAttribute("URI", null);
         _request.setAttribute("info", null);
-        _request.setURIPathQuery("/aaa/bar");
-        _request.setPathInfo("/aaa/bar");
+        _request.setHttpURI(HttpURI.build(_request.getHttpURI(), "/aaa/bar"));
+        _request.setContext(_request.getContext(), "/aaa/bar");
         _handler.handle("/aaa/bar", _request, _request, _response);
         assertEquals(200, _response.getStatus());
         assertEquals(null, _request.getAttribute("target"));
@@ -171,8 +172,8 @@ public class RewriteHandlerTest extends AbstractRuleTestCase
         _handler.setOriginalPathAttribute("/before");
         _handler.setRewriteRequestURI(true);
         _handler.setRewritePathInfo(false);
-        _request.setURIPathQuery("/ccc/x%20y");
-        _request.setPathInfo("/ccc/x y");
+        _request.setHttpURI(HttpURI.build(_request.getHttpURI(), "/ccc/x%20y"));
+        _request.setContext(_request.getContext(), "/ccc/x y");
         _handler.handle("/ccc/x y", _request, _request, _response);
         assertEquals(201, _response.getStatus());
         assertEquals("/ddd/x y", _request.getAttribute("target"));
@@ -188,8 +189,8 @@ public class RewriteHandlerTest extends AbstractRuleTestCase
         _handler.setOriginalPathAttribute("/before");
         _handler.setRewriteRequestURI(true);
         _handler.setRewritePathInfo(false);
-        _request.setURIPathQuery("/xxx/x%20y");
-        _request.setPathInfo("/xxx/x y");
+        _request.setHttpURI(HttpURI.build(_request.getHttpURI(), "/xxx/x%20y"));
+        _request.setContext(_request.getContext(), "/xxx/x y");
         _handler.handle("/xxx/x y", _request, _request, _response);
         assertEquals(201, _response.getStatus());
         assertEquals("/x y/zzz", _request.getAttribute("target"));

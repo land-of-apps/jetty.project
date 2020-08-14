@@ -1,23 +1,25 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.rewrite.handler;
 
+import org.eclipse.jetty.http.HttpURI;
+import org.eclipse.jetty.server.Dispatcher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
@@ -42,7 +44,7 @@ public class ValidUrlRuleTest extends AbstractRuleTestCase
     public void testValidUrl() throws Exception
     {
         _rule.setCode("404");
-        _request.setURIPathQuery("/valid/uri.html");
+        _request.setHttpURI(HttpURI.build(_request.getHttpURI(), "/valid/uri.html"));
 
         _rule.matchAndApply(_request.getRequestURI(), _request, _response);
 
@@ -53,7 +55,7 @@ public class ValidUrlRuleTest extends AbstractRuleTestCase
     public void testInvalidUrl() throws Exception
     {
         _rule.setCode("404");
-        _request.setURIPathQuery("/invalid%0c/uri.html");
+        _request.setHttpURI(HttpURI.build(_request.getHttpURI(), "/invalid%0c/uri.html"));
 
         String result = _rule.matchAndApply(_request.getRequestURI(), _request, _response);
 
@@ -61,29 +63,29 @@ public class ValidUrlRuleTest extends AbstractRuleTestCase
     }
 
     @Test
-    public void testInvalidUrlWithReason() throws Exception
+    public void testInvalidUrlWithMessage() throws Exception
     {
         _rule.setCode("405");
-        _rule.setReason("foo");
-        _request.setURIPathQuery("/%00/");
+        _rule.setMessage("foo");
+        _request.setHttpURI(HttpURI.build(_request.getHttpURI(), "/%00/"));
 
         String result = _rule.matchAndApply(_request.getRequestURI(), _request, _response);
 
         assertEquals(405, _response.getStatus());
-        assertEquals("foo", _response.getReason());
+        assertEquals("foo", _request.getAttribute(Dispatcher.ERROR_MESSAGE));
     }
 
     @Test
     public void testInvalidJsp() throws Exception
     {
         _rule.setCode("405");
-        _rule.setReason("foo");
-        _request.setURIPathQuery("/jsp/bean1.jsp%00");
+        _rule.setMessage("foo");
+        _request.setHttpURI(HttpURI.build(_request.getHttpURI(), "/jsp/bean1.jsp%00"));
 
         String result = _rule.matchAndApply(_request.getRequestURI(), _request, _response);
 
         assertEquals(405, _response.getStatus());
-        assertEquals("foo", _response.getReason());
+        assertEquals("foo", _request.getAttribute(Dispatcher.ERROR_MESSAGE));
     }
 
     @Disabled("Not working in jetty-9")
@@ -91,13 +93,13 @@ public class ValidUrlRuleTest extends AbstractRuleTestCase
     public void testInvalidShamrock() throws Exception
     {
         _rule.setCode("405");
-        _rule.setReason("foo");
-        _request.setURIPathQuery("/jsp/shamrock-%00%E2%98%98.jsp");
+        _rule.setMessage("foo");
+        _request.setHttpURI(HttpURI.build(_request.getHttpURI(), "/jsp/shamrock-%00%E2%98%98.jsp"));
 
         String result = _rule.matchAndApply(_request.getRequestURI(), _request, _response);
 
         assertEquals(405, _response.getStatus());
-        assertEquals("foo", _response.getReason());
+        assertEquals("foo", _request.getAttribute(Dispatcher.ERROR_MESSAGE));
     }
 
     @Disabled("Not working in jetty-9")
@@ -105,8 +107,8 @@ public class ValidUrlRuleTest extends AbstractRuleTestCase
     public void testValidShamrock() throws Exception
     {
         _rule.setCode("405");
-        _rule.setReason("foo");
-        _request.setURIPathQuery("/jsp/shamrock-%E2%98%98.jsp");
+        _rule.setMessage("foo");
+        _request.setHttpURI(HttpURI.build(_request.getHttpURI(), "/jsp/shamrock-%E2%98%98.jsp"));
 
         String result = _rule.matchAndApply(_request.getRequestURI(), _request, _response);
 

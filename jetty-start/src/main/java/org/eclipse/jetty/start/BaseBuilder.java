@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.start;
@@ -43,7 +43,7 @@ import org.eclipse.jetty.start.fileinits.UriFileInitializer;
  */
 public class BaseBuilder
 {
-    public interface Config
+    public static interface Config
     {
         /**
          * Add a module to the start environment in <code>${jetty.base}</code>
@@ -53,7 +53,7 @@ public class BaseBuilder
          * @return The ini file if module was added, null if module was not added.
          * @throws IOException if unable to add the module
          */
-        String addModule(Module module, Props props) throws IOException;
+        public String addModule(Module module, Props props) throws IOException;
     }
 
     private static final String EXITING_LICENSE_NOT_ACKNOWLEDGED = "Exiting: license not acknowledged!";
@@ -136,7 +136,7 @@ public class BaseBuilder
         }
 
         if (StartLog.isDebugEnabled())
-            StartLog.debug("added=%s", newlyAdded);
+            StartLog.debug("Newly Added %s", newlyAdded);
 
         // Check the licenses
         if (startArgs.isLicenseCheckRequired())
@@ -179,13 +179,13 @@ public class BaseBuilder
             if (Files.exists(startini))
             {
                 int ini = 0;
-                Path startdStartini = startd.resolve("start.ini");
-                while (Files.exists(startdStartini))
+                Path startdStartIni = startd.resolve("start.ini");
+                while (Files.exists(startdStartIni))
                 {
                     ini++;
-                    startdStartini = startd.resolve("start" + ini + ".ini");
+                    startdStartIni = startd.resolve("start" + ini + ".ini");
                 }
-                Files.move(startini, startdStartini);
+                Files.move(startini, startdStartIni);
                 modified.set(true);
             }
         }

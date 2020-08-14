@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.server.session;
@@ -29,9 +29,9 @@ import org.eclipse.jetty.util.StringUtil;
 import org.eclipse.jetty.util.annotation.ManagedAttribute;
 import org.eclipse.jetty.util.annotation.ManagedObject;
 import org.eclipse.jetty.util.component.ContainerLifeCycle;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
-import org.eclipse.jetty.util.thread.Locker.Lock;
+import org.eclipse.jetty.util.thread.AutoLock;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * AbstractSessionCache
@@ -55,7 +55,7 @@ import org.eclipse.jetty.util.thread.Locker.Lock;
 @ManagedObject
 public abstract class AbstractSessionCache extends ContainerLifeCycle implements SessionCache
 {
-    static final Logger LOG = Log.getLogger("org.eclipse.jetty.server.session");
+    private static final Logger LOG = LoggerFactory.getLogger(AbstractSessionCache.class);
 
     /**
      * The authoritative source of session data
@@ -99,6 +99,12 @@ public abstract class AbstractSessionCache extends ContainerLifeCycle implements
      * a dirty session will be flushed to the session store.
      */
     protected boolean _flushOnResponseCommit;
+    
+    /**
+     * If true, when the server shuts down, all sessions in the
+     * cache will be invalidated before being removed.
+     */
+    protected boolean _invalidateOnShutdown;
 
     /**
      * Create a new Session object from pre-existing session data
@@ -183,9 +189,6 @@ public abstract class AbstractSessionCache extends ContainerLifeCycle implements
         return _handler;
     }
 
-    /**
-     * @see org.eclipse.jetty.server.session.SessionCache#initialize(org.eclipse.jetty.server.session.SessionContext)
-     */
     @Override
     public void initialize(SessionContext context)
     {
@@ -194,9 +197,6 @@ public abstract class AbstractSessionCache extends ContainerLifeCycle implements
         _context = context;
     }
 
-    /**
-     * @see org.eclipse.jetty.util.component.AbstractLifeCycle#doStart()
-     */
     @Override
     protected void doStart() throws Exception
     {
@@ -213,9 +213,6 @@ public abstract class AbstractSessionCache extends ContainerLifeCycle implements
         super.doStart();
     }
 
-    /**
-     * @see org.eclipse.jetty.util.component.AbstractLifeCycle#doStop()
-     */
     @Override
     protected void doStop() throws Exception
     {
@@ -232,9 +229,6 @@ public abstract class AbstractSessionCache extends ContainerLifeCycle implements
         return _sessionDataStore;
     }
 
-    /**
-     * @see org.eclipse.jetty.server.session.SessionCache#setSessionDataStore(org.eclipse.jetty.server.session.SessionDataStore)
-     */
     @Override
     public void setSessionDataStore(SessionDataStore sessionStore)
     {
@@ -353,7 +347,7 @@ public abstract class AbstractSessionCache extends ContainerLifeCycle implements
                 Session s = loadSession(k);
                 if (s != null)
                 {
-                    try (Lock lock = s.lock())
+                    try (AutoLock lock = s.lock())
                     {
                         s.setResident(true); //ensure freshly loaded session is resident
                     }
@@ -378,7 +372,7 @@ public abstract class AbstractSessionCache extends ContainerLifeCycle implements
             
         if (session != null)
         {
-            try (Lock lock = session.lock())
+            try (AutoLock lock = session.lock())
             {
                 if (!session.isResident()) //session isn't marked as resident in cache
                 {
@@ -444,7 +438,7 @@ public abstract class AbstractSessionCache extends ContainerLifeCycle implements
         if (id == null || session == null)
             throw new IllegalArgumentException("Add key=" + id + " session=" + (session == null ? "null" : session.getId()));
 
-        try (Lock lock = session.lock())
+        try (AutoLock lock = session.lock())
         {
             if (session.getSessionHandler() == null)
                 throw new IllegalStateException("Session " + id + " is not managed");
@@ -475,7 +469,7 @@ public abstract class AbstractSessionCache extends ContainerLifeCycle implements
         if (session == null)
             return;
 
-        try (Lock lock = session.lock())
+        try (AutoLock lock = session.lock())
         {
             //only write the session out at this point if the attributes changed. If only
             //the lastAccess/expiry time changed defer the write until the last request exits
@@ -529,7 +523,7 @@ public abstract class AbstractSessionCache extends ContainerLifeCycle implements
         if (id == null || session == null)
             throw new IllegalArgumentException("Put key=" + id + " session=" + (session == null ? "null" : session.getId()));
 
-        try (Lock lock = session.lock())
+        try (AutoLock lock = session.lock())
         {
             if (session.getSessionHandler() == null)
                 throw new IllegalStateException("Session " + id + " is not managed");
@@ -617,7 +611,7 @@ public abstract class AbstractSessionCache extends ContainerLifeCycle implements
         Session s = doGet(id);
         if (s != null)
         {
-            try (Lock lock = s.lock())
+            try (AutoLock lock = s.lock())
             {
                 //wait for the lock and check the validity of the session
                 return s.isValid();
@@ -669,9 +663,6 @@ public abstract class AbstractSessionCache extends ContainerLifeCycle implements
         return doDelete(id);
     }
 
-    /**
-     * @see org.eclipse.jetty.server.session.SessionCache#checkExpiration(Set)
-     */
     @Override
     public Set<String> checkExpiration(Set<String> candidates)
     {
@@ -719,7 +710,7 @@ public abstract class AbstractSessionCache extends ContainerLifeCycle implements
 
         if (LOG.isDebugEnabled())
             LOG.debug("Checking for idle {}", session.getId());
-        try (Lock s = session.lock())
+        try (AutoLock s = session.lock())
         {
             if (getEvictionPolicy() > 0 && session.isIdleLongerThan(getEvictionPolicy()) &&
                     session.isValid() && session.isResident() && session.getRequests() <= 0)
@@ -747,8 +738,7 @@ public abstract class AbstractSessionCache extends ContainerLifeCycle implements
                 }
                 catch (Exception e)
                 {
-                    LOG.warn("Passivation of idle session {} failed", session.getId());
-                    LOG.warn(e);
+                    LOG.warn("Passivation of idle session {} failed", session.getId(), e);
                 }
             }
         }
@@ -783,7 +773,7 @@ public abstract class AbstractSessionCache extends ContainerLifeCycle implements
         if (session == null)
             return;
 
-        try (Lock lock = session.lock())
+        try (AutoLock lock = session.lock())
         {
             String oldId = session.getId();
             session.checkValidForWrite(); //can't change id on invalid session
@@ -806,13 +796,22 @@ public abstract class AbstractSessionCache extends ContainerLifeCycle implements
         }
     }
 
-    /**
-     * @see org.eclipse.jetty.server.session.SessionCache#setSaveOnInactiveEviction(boolean)
-     */
     @Override
     public void setSaveOnInactiveEviction(boolean saveOnEvict)
     {
         _saveOnInactiveEviction = saveOnEvict;
+    }
+
+    @Override
+    public void setInvalidateOnShutdown(boolean invalidateOnShutdown)
+    {
+        _invalidateOnShutdown = invalidateOnShutdown;
+    }
+
+    @Override
+    public boolean isInvalidateOnShutdown()
+    {
+        return _invalidateOnShutdown;
     }
 
     /**
@@ -828,9 +827,6 @@ public abstract class AbstractSessionCache extends ContainerLifeCycle implements
         return _saveOnInactiveEviction;
     }
 
-    /**
-     * @see org.eclipse.jetty.server.session.SessionCache#newSession(javax.servlet.http.HttpServletRequest, java.lang.String, long, long)
-     */
     @Override
     public Session newSession(HttpServletRequest request, String id, long time, long maxInactiveMs)
     {
@@ -845,8 +841,7 @@ public abstract class AbstractSessionCache extends ContainerLifeCycle implements
         }
         catch (Exception e)
         {
-            LOG.warn("Save of new session {} failed", id);
-            LOG.warn(e);
+            LOG.warn("Save of new session {} failed", id, e);
         }
         return session;
     }

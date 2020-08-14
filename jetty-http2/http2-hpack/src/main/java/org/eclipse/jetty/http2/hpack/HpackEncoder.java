@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.http2.hpack;
@@ -36,14 +36,14 @@ import org.eclipse.jetty.http.MetaData;
 import org.eclipse.jetty.http.PreEncodedHttpField;
 import org.eclipse.jetty.http2.hpack.HpackContext.Entry;
 import org.eclipse.jetty.http2.hpack.HpackContext.StaticEntry;
+import org.eclipse.jetty.util.BufferUtil;
 import org.eclipse.jetty.util.StringUtil;
-import org.eclipse.jetty.util.TypeUtil;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class HpackEncoder
 {
-    private static final Logger LOG = Log.getLogger(HpackEncoder.class);
+    private static final Logger LOG = LoggerFactory.getLogger(HpackEncoder.class);
     private static final HttpField[] STATUSES = new HttpField[599];
     static final EnumSet<HttpHeader> DO_NOT_HUFFMAN =
         EnumSet.of(
@@ -195,14 +195,21 @@ public class HpackEncoder
             {
                 MetaData.Request request = (MetaData.Request)metadata;
 
-                String scheme = request.getURI().getScheme();
-                encode(buffer, HttpScheme.HTTPS.is(scheme) ? C_SCHEME_HTTPS : C_SCHEME_HTTP);
                 String method = request.getMethod();
                 HttpMethod httpMethod = method == null ? null : HttpMethod.fromString(method);
                 HttpField methodField = C_METHODS.get(httpMethod);
                 encode(buffer, methodField == null ? new HttpField(HttpHeader.C_METHOD, method) : methodField);
                 encode(buffer, new HttpField(HttpHeader.C_AUTHORITY, request.getURI().getAuthority()));
-                encode(buffer, new HttpField(HttpHeader.C_PATH, request.getURI().getPathQuery()));
+                boolean isConnect = HttpMethod.CONNECT.is(request.getMethod());
+                String protocol = request.getProtocol();
+                if (!isConnect || protocol != null)
+                {
+                    String scheme = request.getURI().getScheme();
+                    encode(buffer, HttpScheme.HTTPS.is(scheme) ? C_SCHEME_HTTPS : C_SCHEME_HTTP);
+                    encode(buffer, new HttpField(HttpHeader.C_PATH, request.getURI().getPathQuery()));
+                    if (protocol != null)
+                        encode(buffer,new HttpField(HttpHeader.C_PROTOCOL,protocol));
+                }
             }
             else if (metadata.isResponse())
             {
@@ -295,15 +302,13 @@ public class HpackEncoder
         int fieldSize = field.getName().length() + field.getValue().length();
         _headerListSize += fieldSize + 32;
 
-        final int p = _debug ? buffer.position() : -1;
-
         String encoding = null;
 
-        // Is there an entry for the field?
+        // Is there an index entry for the field?
         Entry entry = _context.get(field);
         if (entry != null)
         {
-            // Known field entry, so encode it as indexed
+            // This is a known indexed field, send as static or dynamic indexed.
             if (entry.isStatic())
             {
                 buffer.put(((StaticEntry)entry).getEncodedField());
@@ -321,10 +326,10 @@ public class HpackEncoder
         }
         else
         {
-            // Unknown field entry, so we will have to send literally.
+            // Unknown field entry, so we will have to send literally, but perhaps add an index.
             final boolean indexed;
 
-            // But do we know it's name?
+            // Do we know its name?
             HttpHeader header = field.getHeader();
 
             // Select encoding strategy
@@ -342,12 +347,11 @@ public class HpackEncoder
                     if (_debug)
                         encoding = indexed ? "PreEncodedIdx" : "PreEncoded";
                 }
-                // has the custom header name been seen before?
-                else if (name == null)
+                else if (name == null && fieldSize < _context.getMaxDynamicTableSize())
                 {
-                    // unknown name and value, so let's index this just in case it is
-                    // the first time we have seen a custom name or a custom field.
-                    // unless the name is changing, this is worthwhile
+                    // unknown name and value that will fit in dynamic table, so let's index
+                    // this just in case it is the first time we have seen a custom name or a
+                    // custom field.  Unless the name is once only, this is worthwhile
                     indexed = true;
                     encodeName(buffer, (byte)0x40, 6, field.getName(), null);
                     encodeValue(buffer, true, field.getValue());
@@ -356,7 +360,7 @@ public class HpackEncoder
                 }
                 else
                 {
-                    // known custom name, but unknown value.
+                    // Known name, but different value.
                     // This is probably a custom field with changing value, so don't index.
                     indexed = false;
                     encodeName(buffer, (byte)0x00, 4, field.getName(), null);
@@ -395,14 +399,16 @@ public class HpackEncoder
                             (huffman ? "HuffV" : "LitV") +
                             (neverIndex ? "!!Idx" : "!Idx");
                 }
-                else if (fieldSize >= _context.getMaxDynamicTableSize() || header == HttpHeader.CONTENT_LENGTH && field.getValue().length() > 2)
+                else if (fieldSize >= _context.getMaxDynamicTableSize() || header == HttpHeader.CONTENT_LENGTH && !"0".equals(field.getValue()))
                 {
-                    // Non indexed if field too large or a content length for 3 digits or more
+                    // The field is too large or a non zero content length, so do not index.
                     indexed = false;
                     encodeName(buffer, (byte)0x00, 4, header.asString(), name);
                     encodeValue(buffer, true, field.getValue());
                     if (_debug)
-                        encoding = "LitIdxNS" + (1 + NBitInteger.octectsNeeded(4, _context.index(name))) + "HuffV!Idx";
+                        encoding = "Lit" +
+                            ((name == null) ? "HuffN" : "IdxNS" + (1 + NBitInteger.octectsNeeded(4, _context.index(name)))) +
+                            "HuffV!Idx";
                 }
                 else
                 {
@@ -424,9 +430,8 @@ public class HpackEncoder
 
         if (_debug)
         {
-            int e = buffer.position();
             if (LOG.isDebugEnabled())
-                LOG.debug("encode {}:'{}' to '{}'", encoding, field, TypeUtil.toHexString(buffer.array(), buffer.arrayOffset() + p, e - p));
+                LOG.debug("encode {}:'{}' to '{}'", encoding, field, BufferUtil.toHexString(buffer.duplicate().flip()));
         }
     }
 

@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.server.session;
@@ -45,54 +45,33 @@ public class NullSessionCacheTest extends AbstractSessionCacheTest
         factory.setFlushOnResponseCommit(flushOnResponseCommit);
         return factory;
     }
-    
-    @Test
-    public void testShutdownWithSessionStore()
-        throws Exception
+
+    @Override
+    public void checkSessionBeforeShutdown(String id,
+                                           SessionDataStore store,
+                                           SessionCache cache,
+                                           TestSessionActivationListener activationListener,
+                                           TestHttpSessionListener sessionListener) throws Exception
     {
-        Server server = new Server();
+        assertFalse(cache.contains(id)); //NullSessionCache never caches
+        assertTrue(store.exists(id));
+        assertFalse(sessionListener.destroyedSessions.contains(id));
+        assertEquals(1, activationListener.passivateCalls);
+        assertEquals(0, activationListener.activateCalls); //NullSessionCache always evicts on release, so never reactivates
+    }
 
-        ServletContextHandler context = new ServletContextHandler(ServletContextHandler.SESSIONS);
-        context.setContextPath("/test");
-        context.setServer(server);
-
-        AbstractSessionCacheFactory cacheFactory = newSessionCacheFactory(SessionCache.NEVER_EVICT, false, false, false, false);
-        SessionCache cache = cacheFactory.getSessionCache(context.getSessionHandler());
-
-        TestSessionDataStore store = new TestSessionDataStore(true);//fake passivation
-        cache.setSessionDataStore(store);
-        context.getSessionHandler().setSessionCache(cache);
-
-        context.start();
-
-        //put a session in the cache and store
-        long now = System.currentTimeMillis();
-        SessionData data = store.newSessionData("1234", now - 20, now - 10, now - 20, TimeUnit.MINUTES.toMillis(10));
-        Session session = cache.newSession(data);
-        TestSessionActivationListener listener = new TestSessionActivationListener();
-        cache.add("1234", session);
-        //cache never contains the session
-        assertFalse(cache.contains("1234"));
-        session.setAttribute("aaa", listener);
-        //write session out on release
-        cache.release("1234", session);
-        assertEquals(1, store._numSaves.get());
-        assertEquals(1, listener.passivateCalls);
-        assertEquals(0, listener.activateCalls); //NullSessionCache always evicts on release, so never reactivates
-
-        assertTrue(store.exists("1234"));
-        //cache never contains session
-        assertFalse(cache.contains("1234"));
-
-        context.stop(); //calls shutdown
-
-        //session should still exist in store
-        assertTrue(store.exists("1234"));
-        //cache never contains the session
-        assertFalse(cache.contains("1234"));
-        //shutdown does not save session
-        assertEquals(1, listener.passivateCalls);
-        assertEquals(0, listener.activateCalls);
+    @Override
+    public void checkSessionAfterShutdown(String id,
+                                          SessionDataStore store,
+                                          SessionCache cache,
+                                          TestSessionActivationListener activationListener,
+                                          TestHttpSessionListener sessionListener) throws Exception
+    {
+        assertFalse(cache.contains(id)); //NullSessionCache never caches
+        assertTrue(store.exists(id)); //NullSessionCache doesn't do anything on shutdown
+        assertFalse(sessionListener.destroyedSessions.contains(id)); //NullSessionCache does nothing on shutdown
+        assertEquals(1, activationListener.passivateCalls);
+        assertEquals(0, activationListener.activateCalls); //NullSessionCache always evicts on release, so never reactivates
     }
     
     @Test

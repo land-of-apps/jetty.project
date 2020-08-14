@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.util.statistic;
@@ -22,6 +22,8 @@ import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+
+import org.eclipse.jetty.util.thread.AutoLock;
 
 /**
  * <p>Statistics on a time sequence rate.</p>
@@ -34,6 +36,7 @@ import java.util.stream.Collectors;
  */
 public class RateStatistic
 {
+    private final AutoLock _lock = new AutoLock();
     private final Deque<Long> _samples = new ArrayDeque<>();
     private final long _nanoPeriod;
     private final TimeUnit _units;
@@ -61,7 +64,7 @@ public class RateStatistic
      */
     public void reset()
     {
-        synchronized (this)
+        try (AutoLock l = _lock.lock())
         {
             _samples.clear();
             _max = 0;
@@ -88,7 +91,7 @@ public class RateStatistic
     protected void age(long period, TimeUnit units)
     {
         long increment = TimeUnit.NANOSECONDS.convert(period, units);
-        synchronized (this)
+        try (AutoLock l = _lock.lock())
         {
             int size = _samples.size();
             for (int i = 0; i < size; i++)
@@ -107,7 +110,7 @@ public class RateStatistic
     public int record()
     {
         long now = System.nanoTime();
-        synchronized (this)
+        try (AutoLock l = _lock.lock())
         {
             _count++;
             _samples.add(now);
@@ -124,7 +127,7 @@ public class RateStatistic
      */
     public int getRate()
     {
-        synchronized (this)
+        try (AutoLock l = _lock.lock())
         {
             update();
             return _samples.size();
@@ -136,7 +139,7 @@ public class RateStatistic
      */
     public long getMax()
     {
-        synchronized (this)
+        try (AutoLock l = _lock.lock())
         {
             return _max;
         }
@@ -148,7 +151,7 @@ public class RateStatistic
      */
     public long getOldest(TimeUnit units)
     {
-        synchronized (this)
+        try (AutoLock l = _lock.lock())
         {
             Long head = _samples.peekFirst();
             if (head == null)
@@ -162,7 +165,7 @@ public class RateStatistic
      */
     public long getCount()
     {
-        synchronized (this)
+        try (AutoLock l = _lock.lock())
         {
             return _count;
         }
@@ -176,7 +179,7 @@ public class RateStatistic
     public String dump(TimeUnit units)
     {
         long now = System.nanoTime();
-        synchronized (this)
+        try (AutoLock l = _lock.lock())
         {
             String samples = _samples.stream()
                 .mapToLong(t -> units.convert(now - t, TimeUnit.NANOSECONDS))
@@ -194,7 +197,7 @@ public class RateStatistic
 
     private String toString(long nanoTime)
     {
-        synchronized (this)
+        try (AutoLock l = _lock.lock())
         {
             update(nanoTime);
             return String.format("%s@%x{count=%d,max=%d,rate=%d per %d %s}",

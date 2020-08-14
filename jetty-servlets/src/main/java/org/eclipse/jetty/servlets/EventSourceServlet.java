@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.servlets;
@@ -33,6 +33,8 @@ import javax.servlet.ServletOutputStream;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+
+import org.eclipse.jetty.util.thread.AutoLock;
 
 /**
  * <p>A servlet that implements the <a href="http://www.w3.org/TR/eventsource/">event source protocol</a>,
@@ -127,6 +129,7 @@ public abstract class EventSourceServlet extends HttpServlet
 
     protected class EventSourceEmitter implements EventSource.Emitter, Runnable
     {
+        private final AutoLock lock = new AutoLock();
         private final EventSource eventSource;
         private final AsyncContext async;
         private final ServletOutputStream output;
@@ -143,7 +146,7 @@ public abstract class EventSourceServlet extends HttpServlet
         @Override
         public void event(String name, String data) throws IOException
         {
-            synchronized (this)
+            try (AutoLock l = lock.lock())
             {
                 output.write(EVENT_FIELD);
                 output.write(name.getBytes(StandardCharsets.UTF_8));
@@ -155,7 +158,7 @@ public abstract class EventSourceServlet extends HttpServlet
         @Override
         public void data(String data) throws IOException
         {
-            synchronized (this)
+            try (AutoLock l = lock.lock())
             {
                 BufferedReader reader = new BufferedReader(new StringReader(data));
                 String line;
@@ -173,7 +176,7 @@ public abstract class EventSourceServlet extends HttpServlet
         @Override
         public void comment(String comment) throws IOException
         {
-            synchronized (this)
+            try (AutoLock l = lock.lock())
             {
                 output.write(COMMENT_FIELD);
                 output.write(comment.getBytes(StandardCharsets.UTF_8));
@@ -191,7 +194,7 @@ public abstract class EventSourceServlet extends HttpServlet
             // on the second flush()
             try
             {
-                synchronized (this)
+                try (AutoLock l = lock.lock())
                 {
                     output.write('\r');
                     flush();
@@ -217,7 +220,7 @@ public abstract class EventSourceServlet extends HttpServlet
         @Override
         public void close()
         {
-            synchronized (this)
+            try (AutoLock l = lock.lock())
             {
                 closed = true;
                 heartBeat.cancel(false);
@@ -227,7 +230,7 @@ public abstract class EventSourceServlet extends HttpServlet
 
         private void scheduleHeartBeat()
         {
-            synchronized (this)
+            try (AutoLock l = lock.lock())
             {
                 if (!closed)
                     heartBeat = scheduler.schedule(this, heartBeatPeriod, TimeUnit.SECONDS);

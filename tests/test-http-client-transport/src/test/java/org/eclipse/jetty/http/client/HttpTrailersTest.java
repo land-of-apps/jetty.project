@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.http.client;
@@ -27,6 +27,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 import javax.servlet.ServletInputStream;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -34,8 +35,9 @@ import javax.servlet.http.HttpServletResponse;
 import org.eclipse.jetty.client.HttpRequest;
 import org.eclipse.jetty.client.HttpResponse;
 import org.eclipse.jetty.client.api.ContentResponse;
-import org.eclipse.jetty.client.util.BytesContentProvider;
+import org.eclipse.jetty.client.util.BytesRequestContent;
 import org.eclipse.jetty.client.util.InputStreamResponseListener;
+import org.eclipse.jetty.http.HttpField;
 import org.eclipse.jetty.http.HttpFields;
 import org.eclipse.jetty.http.HttpMethod;
 import org.eclipse.jetty.http.HttpStatus;
@@ -96,19 +98,18 @@ public class HttpTrailersTest extends AbstractTest<TransportScenario>
                 }
 
                 // Now the trailers can be accessed.
-                HttpFields trailers = jettyRequest.getTrailers();
+                HttpFields trailers = jettyRequest.getTrailerHttpFields();
                 assertNotNull(trailers);
                 assertEquals(trailerValue, trailers.get(trailerName));
             }
         });
 
-        HttpFields trailers = new HttpFields();
-        trailers.put(trailerName, trailerValue);
+        HttpFields trailers = HttpFields.build().put(trailerName, trailerValue).asImmutable();
 
         HttpRequest request = (HttpRequest)scenario.client.newRequest(scenario.newURI());
         request = request.trailers(() -> trailers);
         if (content != null)
-            request.method(HttpMethod.POST).content(new BytesContentProvider(content));
+            request.method(HttpMethod.POST).body(new BytesRequestContent(content));
         ContentResponse response = request.timeout(5, TimeUnit.SECONDS).send();
         assertEquals(HttpStatus.OK_200, response.getStatus());
     }
@@ -133,12 +134,12 @@ public class HttpTrailersTest extends AbstractTest<TransportScenario>
                 }
 
                 // Now the trailers can be accessed.
-                HttpFields trailers = jettyRequest.getTrailers();
+                HttpFields trailers = jettyRequest.getTrailerHttpFields();
                 assertNull(trailers);
             }
         });
 
-        HttpFields trailers = new HttpFields();
+        HttpFields trailers = HttpFields.EMPTY;
         HttpRequest request = (HttpRequest)scenario.client.newRequest(scenario.newURI());
         request = request.trailers(() -> trailers);
         ContentResponse response = request.timeout(5, TimeUnit.SECONDS).send();
@@ -175,8 +176,7 @@ public class HttpTrailersTest extends AbstractTest<TransportScenario>
 
                 if (once.compareAndSet(false, true))
                 {
-                    HttpFields trailers = new HttpFields();
-                    trailers.put(trailerName, trailerValue);
+                    HttpFields trailers = HttpFields.build().put(trailerName, trailerValue);
                     jettyResponse.setTrailers(() -> trailers);
                 }
 
@@ -238,9 +238,9 @@ public class HttpTrailersTest extends AbstractTest<TransportScenario>
             @Override
             protected void service(String target, Request jettyRequest, HttpServletRequest request, HttpServletResponse response)
             {
-                HttpFields trailers = new HttpFields();
-                Response jettyResponse = jettyRequest.getResponse();
-                jettyResponse.setTrailers(() -> trailers);
+                HttpFields trailers = HttpFields.build();
+                response.setTrailerFields(() ->
+                    trailers.stream().collect(Collectors.toMap(HttpField::getName, HttpField::getValue)));
             }
         });
 
@@ -280,11 +280,9 @@ public class HttpTrailersTest extends AbstractTest<TransportScenario>
             @Override
             protected void service(String target, Request jettyRequest, HttpServletRequest request, HttpServletResponse response) throws IOException
             {
-                HttpFields trailers = new HttpFields();
-                trailers.put(trailerName, trailerValue);
-
-                Response jettyResponse = jettyRequest.getResponse();
-                jettyResponse.setTrailers(() -> trailers);
+                HttpFields trailers = HttpFields.build().put(trailerName, trailerValue);
+                response.setTrailerFields(() ->
+                    trailers.stream().collect(Collectors.toMap(HttpField::getName, HttpField::getValue)));
 
                 // Write a large content
                 response.getOutputStream().write(content);
@@ -331,8 +329,7 @@ public class HttpTrailersTest extends AbstractTest<TransportScenario>
             protected void service(String target, Request jettyRequest, HttpServletRequest request, HttpServletResponse response) throws IOException
             {
                 Response jettyResponse = jettyRequest.getResponse();
-                HttpFields trailers = new HttpFields();
-                trailers.put("name", "value");
+                HttpFields trailers = HttpFields.build().put("name", "value");
                 jettyResponse.setTrailers(() -> trailers);
                 // Fill some other response field.
                 response.setHeader("name", "value");

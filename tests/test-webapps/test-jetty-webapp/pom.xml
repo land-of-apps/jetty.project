@@ -3,7 +3,7 @@
   <parent>
     <groupId>org.eclipse.jetty.tests</groupId>
     <artifactId>test-webapps-parent</artifactId>
-    <version>9.4.29.v20200521</version>
+    <version>10.0.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
   <modelVersion>4.0.0</modelVersion>
@@ -65,7 +65,7 @@
             <supportedProjectType>war</supportedProjectType>
           </supportedProjectTypes>
           <instructions>
-            <Import-Package>javax.servlet.jsp.*;version="[2.2.0,3.0)",org.eclipse.jetty.*;version="[$(version;===;${parsedVersion.osgiVersion}),$(version;==+;${parsedVersion.osgiVersion}))",*</Import-Package>
+            <Import-Package>javax.servlet.jsp.*;version="[2.2.0,4.1)",org.eclipse.jetty.*;version="[$(version;===;${parsedVersion.osgiVersion}),$(version;==+;${parsedVersion.osgiVersion}))",*</Import-Package>
             <Export-Package>!com.acme*</Export-Package>
             <!-- the test webapp is configured via a jetty xml file
             in order to add the security handler. -->
@@ -107,12 +107,9 @@
         <configuration>
           <stopPort>8087</stopPort>
           <stopKey>foo</stopKey>
-          <scanIntervalSeconds>1</scanIntervalSeconds>
+          <scan>1</scan>
           <systemProperties>
-            <systemProperty>
-              <name>fooprop</name>
-              <value>222</value>
-            </systemProperty>
+              <fooprop>222</fooprop>
           </systemProperties>
           <webApp>
             <contextPath>/test</contextPath>
@@ -138,30 +135,24 @@
   </build>
   <dependencies>
     <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-api</artifactId>
+    </dependency>
+    <dependency>
       <groupId>org.eclipse.jetty</groupId>
-      <artifactId>jetty-continuation</artifactId>
-      <version>${project.version}</version>
+      <artifactId>jetty-slf4j-impl</artifactId>
+      <scope>compile</scope>
     </dependency>
     <dependency>
       <groupId>org.eclipse.jetty</groupId>
       <artifactId>jetty-servlets</artifactId>
       <version>${project.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>javax.servlet</groupId>
-      <artifactId>javax.servlet-api</artifactId>
       <scope>provided</scope>
     </dependency>
     <dependency>
-      <groupId>org.eclipse.jetty.websocket</groupId>
-      <artifactId>websocket-servlet</artifactId>
-      <version>${project.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.eclipse.jetty.websocket</groupId>
-      <artifactId>websocket-server</artifactId>
-      <version>${project.version}</version>
-      <scope>test</scope>
+      <groupId>org.eclipse.jetty.toolchain</groupId>
+      <artifactId>jetty-servlet-api</artifactId>
+      <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.eclipse.jetty</groupId>
@@ -206,10 +197,32 @@
       <scope>provided</scope>
     </dependency>
     <dependency>
-      <groupId>javax.websocket</groupId>
-      <artifactId>javax.websocket-api</artifactId>
-      <version>1.0</version>
+      <groupId>jakarta.annotation</groupId>
+      <artifactId>jakarta.annotation-api</artifactId>
       <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.jetty.toolchain</groupId>
+      <artifactId>jetty-javax-websocket-api</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.jetty.websocket</groupId>
+      <artifactId>websocket-jetty-api</artifactId>
+      <version>${project.version}</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.jetty.websocket</groupId>
+      <artifactId>websocket-jetty-server</artifactId>
+      <version>${project.version}</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.jetty.websocket</groupId>
+      <artifactId>websocket-javax-server</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
     </dependency>
   </dependencies>
   <profiles>

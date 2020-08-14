@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.servlet;
@@ -21,10 +21,11 @@ package org.eclipse.jetty.servlet;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.EnumSet;
+import java.util.Objects;
 import java.util.stream.Collectors;
 import javax.servlet.DispatcherType;
 
-import org.eclipse.jetty.http.PathMap;
+import org.eclipse.jetty.http.pathmap.ServletPathSpec;
 import org.eclipse.jetty.util.TypeUtil;
 import org.eclipse.jetty.util.annotation.ManagedAttribute;
 import org.eclipse.jetty.util.annotation.ManagedObject;
@@ -85,8 +86,9 @@ public class FilterMapping implements Dumpable
                 return INCLUDE;
             case ERROR:
                 return ERROR;
+            default:
+                throw new IllegalStateException(type.toString());
         }
-        throw new IllegalArgumentException(type.toString());
     }
 
     /**
@@ -109,13 +111,14 @@ public class FilterMapping implements Dumpable
                 return DispatcherType.INCLUDE;
             case ERROR:
                 return DispatcherType.ERROR;
+            default:
+                throw new IllegalArgumentException(Integer.toString(type));
         }
-        throw new IllegalArgumentException(Integer.toString(type));
     }
 
     private int _dispatches = DEFAULT;
     private String _filterName;
-    private transient FilterHolder _holder;
+    private FilterHolder _holder;
     private String[] _pathSpecs;
     private String[] _servletNames;
 
@@ -136,7 +139,7 @@ public class FilterMapping implements Dumpable
         {
             for (int i = 0; i < _pathSpecs.length; i++)
             {
-                if (_pathSpecs[i] != null && PathMap.match(_pathSpecs[i], path, true))
+                if (_pathSpecs[i] != null && ServletPathSpec.match(_pathSpecs[i], path, true))
                     return true;
             }
         }
@@ -153,8 +156,11 @@ public class FilterMapping implements Dumpable
      */
     boolean appliesTo(int type)
     {
+        FilterHolder holder = _holder;
+        if (_holder == null)
+            return false;
         if (_dispatches == 0)
-            return type == REQUEST || type == ASYNC && _holder.isAsyncSupported();
+            return type == REQUEST || type == ASYNC && (_holder != null && _holder.isAsyncSupported());
         return (_dispatches & type) != 0;
     }
 
@@ -246,7 +252,7 @@ public class FilterMapping implements Dumpable
      */
     public void setFilterName(String filterName)
     {
-        _filterName = filterName;
+        _filterName = Objects.requireNonNull(filterName); 
     }
 
     /**
@@ -254,7 +260,7 @@ public class FilterMapping implements Dumpable
      */
     void setFilterHolder(FilterHolder holder)
     {
-        _holder = holder;
+        _holder = Objects.requireNonNull(holder);
         setFilterName(holder.getName());
     }
 

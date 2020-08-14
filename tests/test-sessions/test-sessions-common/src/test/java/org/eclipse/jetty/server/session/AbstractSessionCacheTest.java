@@ -1,37 +1,34 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.server.session;
 
 import java.util.Collections;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
-
 import javax.servlet.http.HttpSession;
 import javax.servlet.http.HttpSessionActivationListener;
 import javax.servlet.http.HttpSessionEvent;
 
+import org.eclipse.jetty.logging.StacklessLogging;
 import org.eclipse.jetty.server.Request;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.servlet.ServletContextHandler;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.StacklessLogging;
 import org.junit.jupiter.api.Test;
 
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -44,8 +41,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- *  Base class for all tests on all flavours of SessionCache
- *
+ * Base class for all tests on all flavours of SessionCache
  */
 public abstract class AbstractSessionCacheTest
 {
@@ -119,10 +115,24 @@ public abstract class AbstractSessionCacheTest
             ++activateCalls;
         }
     }
-    
-    public abstract AbstractSessionCacheFactory newSessionCacheFactory(int evictionPolicy, boolean saveOnCreate, 
-                                                                       boolean saveOnInactiveEvict, boolean removeUnloadableSessions,
+
+    public abstract AbstractSessionCacheFactory newSessionCacheFactory(int evictionPolicy,
+                                                                       boolean saveOnCreate, 
+                                                                       boolean saveOnInactiveEvict,
+                                                                       boolean removeUnloadableSessions,
                                                                        boolean flushOnResponseCommit);
+
+    public abstract void checkSessionBeforeShutdown(String id,
+                                                    SessionDataStore store, 
+                                                    SessionCache cache, 
+                                                    TestSessionActivationListener activationListener,
+                                                    TestHttpSessionListener sessionListener) throws Exception;
+    
+    public abstract void checkSessionAfterShutdown(String id,
+                                                   SessionDataStore store,
+                                                   SessionCache cache,
+                                                   TestSessionActivationListener activationListener,
+                                                   TestHttpSessionListener sessionListener) throws Exception;
 
     /**
      * Test that a session that exists in the datastore, but that cannot be
@@ -151,7 +161,7 @@ public abstract class AbstractSessionCacheTest
         context.getSessionHandler().setSessionCache(cache);
         server.start();
 
-        try (StacklessLogging stackless = new StacklessLogging(Log.getLogger("org.eclipse.jetty.server.session")))
+        try (StacklessLogging stackless = new StacklessLogging(AbstractSessionCacheTest.class.getPackage()))
         {
             //check that session 1234 cannot be read, ie returns null AND
             //that it is deleted in the datastore
@@ -243,11 +253,14 @@ public abstract class AbstractSessionCacheTest
         assertEquals(now - 20, session.getCreationTime());
     }
     
+    /**
+     * Test state of session with call to commit
+     * 
+     * @throws Exception
+     */
     @Test
     public void testCommit() throws Exception
     {
-        //Test state of session with call to commit
-        
         Server server = new Server();
 
         ServletContextHandler context = new ServletContextHandler(ServletContextHandler.SESSIONS);
@@ -320,11 +333,14 @@ public abstract class AbstractSessionCacheTest
         commitAndCheckSaveState(cache, store, session, false, true, false, true, 0, 0);
     }
     
+    /**
+     * Test what happens with various states of a session when commit
+     * is called before release
+     * @throws Exception
+     */
     @Test
     public void testCommitAndRelease() throws Exception
     {
-        //test what happens with various states of a session when commit
-        //is called before release
         Server server = new Server();
 
         ServletContextHandler context = new ServletContextHandler(ServletContextHandler.SESSIONS);
@@ -421,7 +437,7 @@ public abstract class AbstractSessionCacheTest
         assertFalse(session.getSessionData().isDirty());
         assertTrue(session.getSessionData().isMetaDataDirty());
     }
-    
+
     /**
      * Test the exist method.
      */
@@ -596,6 +612,92 @@ public abstract class AbstractSessionCacheTest
         cache.newSession(null, "1234", now, TimeUnit.MINUTES.toMillis(10));
         assertFalse(store.exists("1234"));
     }
+    
+    /**
+     * Test shutting down the server with invalidateOnShutdown==false
+     * 
+     * @throws Exception
+     */
+    @Test
+    public void testNoInvalidateOnShutdown()
+        throws Exception
+    {
+        Server server = new Server();
+
+        ServletContextHandler context = new ServletContextHandler(ServletContextHandler.SESSIONS);
+        context.setContextPath("/test");
+        context.setServer(server);
+        server.setHandler(context);
+
+        AbstractSessionCacheFactory cacheFactory = newSessionCacheFactory(SessionCache.NEVER_EVICT, false, false, false, false);
+        SessionCache cache = cacheFactory.getSessionCache(context.getSessionHandler());
+
+        TestSessionDataStore store = new TestSessionDataStore(true);//fake passivation
+        cache.setSessionDataStore(store);
+        context.getSessionHandler().setSessionCache(cache);
+        TestHttpSessionListener sessionListener = new TestHttpSessionListener();
+        context.getSessionHandler().addEventListener(sessionListener);
+
+        server.start();
+
+        //put a session in the cache and store
+        long now = System.currentTimeMillis();
+        SessionData data = store.newSessionData("1234", now - 20, now - 10, now - 20, TimeUnit.MINUTES.toMillis(10));
+        Session session = cache.newSession(data);
+        TestSessionActivationListener activationListener = new TestSessionActivationListener();
+        cache.add("1234", session);
+        session.setAttribute("aaa", activationListener);
+        cache.release("1234", session);
+        checkSessionBeforeShutdown("1234", store, cache, activationListener, sessionListener);
+
+        server.stop(); //calls shutdown
+
+        checkSessionAfterShutdown("1234", store, cache, activationListener, sessionListener);
+    }
+    
+    /**
+     * Test shutdown of the server with invalidateOnShutdown==true
+     * @throws Exception
+     */
+    @Test
+    public void testInvalidateOnShutdown()
+        throws Exception
+    {
+        Server server = new Server();
+
+        ServletContextHandler context = new ServletContextHandler(ServletContextHandler.SESSIONS);
+        context.setContextPath("/test");
+        server.setHandler(context);
+
+        //flushOnResponseCommit is true
+        AbstractSessionCacheFactory cacheFactory = newSessionCacheFactory(SessionCache.NEVER_EVICT, false, false, false, true);
+        cacheFactory.setInvalidateOnShutdown(true);
+        SessionCache cache = cacheFactory.getSessionCache(context.getSessionHandler());
+
+
+        TestSessionDataStore store = new TestSessionDataStore(true); //fake a passivating store
+        cache.setSessionDataStore(store);
+        context.getSessionHandler().setSessionCache(cache);
+        TestHttpSessionListener sessionListener = new TestHttpSessionListener();
+        context.getSessionHandler().addEventListener(sessionListener);
+
+        server.start();
+
+        //Make a session in the store and cache and check that it is invalidated on shutdown
+        long now = System.currentTimeMillis();
+        SessionData data = store.newSessionData("8888", now - 20, now - 10, now - 20, TimeUnit.MINUTES.toMillis(10));
+        Session session = cache.newSession(data);
+        cache.add("8888", session);
+
+        TestSessionActivationListener activationListener = new TestSessionActivationListener();
+        session.setAttribute("aaa", activationListener);
+        cache.release("8888", session);
+        checkSessionBeforeShutdown("8888", store, cache, activationListener, sessionListener);
+
+        server.stop();
+
+        checkSessionAfterShutdown("8888", store, cache, activationListener, sessionListener);
+    }
 
     public void commitAndCheckSaveState(SessionCache cache, TestSessionDataStore store, Session session, 
                                         boolean expectedBeforeDirty, boolean expectedBeforeMetaDirty, 
@@ -611,7 +713,7 @@ public abstract class AbstractSessionCacheTest
         assertEquals(expectedAfterMetaDirty, session.getSessionData().isMetaDataDirty());
         assertEquals(expectedAfterNumSaves, store._numSaves.get());
     }
-    
+
     public Session createUnExpiredSession(SessionCache cache, SessionDataStore store, String id)
     {
         long now = System.currentTimeMillis();

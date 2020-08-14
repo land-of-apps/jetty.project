@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.server;
@@ -30,7 +30,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.concurrent.Exchanger;
 import java.util.concurrent.TimeUnit;
-import javax.net.ssl.SSLException;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -38,15 +37,15 @@ import javax.servlet.http.HttpServletResponse;
 import org.eclipse.jetty.io.AbstractConnection;
 import org.eclipse.jetty.io.EndPoint;
 import org.eclipse.jetty.io.ssl.SslConnection;
+import org.eclipse.jetty.logging.StacklessLogging;
 import org.eclipse.jetty.server.handler.AbstractHandler;
 import org.eclipse.jetty.util.IO;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
-import org.eclipse.jetty.util.log.StacklessLogging;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static java.time.Duration.ofSeconds;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -64,7 +63,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public abstract class ConnectorTimeoutTest extends HttpServerTestFixture
 {
-    protected static final Logger LOG = Log.getLogger(ConnectorTimeoutTest.class);
+    protected static final Logger LOG = LoggerFactory.getLogger(ConnectorTimeoutTest.class);
 
     protected static final int MAX_IDLE_TIME = 2000;
     private int sleepTime = MAX_IDLE_TIME + MAX_IDLE_TIME / 5;
@@ -83,7 +82,6 @@ public abstract class ConnectorTimeoutTest extends HttpServerTestFixture
         super.before();
         if (_httpConfiguration != null)
         {
-            _httpConfiguration.setBlockingTimeout(-1L);
             _httpConfiguration.setMinRequestDataRate(-1);
             _httpConfiguration.setIdleTimeout(-1);
         }
@@ -287,8 +285,6 @@ public abstract class ConnectorTimeoutTest extends HttpServerTestFixture
     @Disabled // TODO make more stable
     public void testNoBlockingTimeoutRead() throws Exception
     {
-        _httpConfiguration.setBlockingTimeout(-1L);
-
         configureServer(new EchoHandler());
         Socket client = newSocket(_serverURI.getHost(), _serverURI.getPort());
         client.setSoTimeout(10000);
@@ -350,8 +346,6 @@ public abstract class ConnectorTimeoutTest extends HttpServerTestFixture
     @Disabled // TODO make more stable
     public void testBlockingTimeoutRead() throws Exception
     {
-        _httpConfiguration.setBlockingTimeout(750L);
-
         configureServer(new EchoHandler());
         Socket client = newSocket(_serverURI.getHost(), _serverURI.getPort());
         client.setSoTimeout(10000);
@@ -451,7 +445,6 @@ public abstract class ConnectorTimeoutTest extends HttpServerTestFixture
     @Disabled // TODO make more stable
     public void testBlockingTimeoutWrite() throws Exception
     {
-        _httpConfiguration.setBlockingTimeout(750L);
         configureServer(new HugeResponseHandler());
         Socket client = newSocket(_serverURI.getHost(), _serverURI.getPort());
         client.setSoTimeout(10000);
@@ -547,9 +540,9 @@ public abstract class ConnectorTimeoutTest extends HttpServerTestFixture
                 assertThat(response, is(""));
                 assertEquals(-1, is.read());
             }
-            catch (Exception e)
+            catch (IOException e)
             {
-                LOG.warn(e);
+                LOG.warn("Unable to read stream", e);
             }
         });
         assertTrue(TimeUnit.NANOSECONDS.toMillis(System.nanoTime()) - start < maximumTestRuntime);

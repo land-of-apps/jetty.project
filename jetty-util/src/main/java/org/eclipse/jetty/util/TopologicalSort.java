@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.util;
@@ -47,6 +47,8 @@ import java.util.TreeSet;
  */
 public class TopologicalSort<T>
 {
+    // IMPORTANT NOTE: This class cannot use Logging, as this class is used by jetty-start
+
     private final Map<T, Set<T>> _dependencies = new HashMap<>();
 
     /**
@@ -55,7 +57,7 @@ public class TopologicalSort<T>
      * @param dependent The dependent item will be sorted after all its dependencies
      * @param dependency The dependency item, will be sorted before its dependent item
      */
-    public void addDependency(T dependent, T dependency)
+    public void addDependency(T dependent, T... dependency)
     {
         Set<T> set = _dependencies.get(dependent);
         if (set == null)
@@ -63,12 +65,28 @@ public class TopologicalSort<T>
             set = new HashSet<>();
             _dependencies.put(dependent, set);
         }
-        set.add(dependency);
+        for (T d : dependency)
+        {
+            set.add(d);
+        }
+    }
+
+    /**
+     * An alternative to {@link #addDependency(Object, Object[])}, which is
+     * equivalent to addDependency(after,before) as the after item is dependent
+     * of the before item.
+     *
+     * @param before The item will be sorted before the after
+     * @param after The item will be sorted after the before
+     */
+    public void addBeforeAfter(T before, T after)
+    {
+        addDependency(after, before);
     }
 
     /**
      * Sort the passed array according to dependencies previously set with
-     * {@link #addDependency(Object, Object)}.  Where possible, ordering will be
+     * {@link #addDependency(Object, Object[])}.  Where possible, ordering will be
      * preserved if no dependency
      *
      * @param array The array to be sorted.
@@ -90,7 +108,7 @@ public class TopologicalSort<T>
 
     /**
      * Sort the passed list according to dependencies previously set with
-     * {@link #addDependency(Object, Object)}.  Where possible, ordering will be
+     * {@link #addDependency(Object, Object[])}.  Where possible, ordering will be
      * preserved if no dependency
      *
      * @param list The list to be sorted.

@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.gcloud.session;
@@ -45,8 +45,8 @@ import org.eclipse.jetty.util.ClassLoadingObjectInputStream;
 import org.eclipse.jetty.util.StringUtil;
 import org.eclipse.jetty.util.annotation.ManagedAttribute;
 import org.eclipse.jetty.util.annotation.ManagedObject;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * GCloudSessionDataStore
@@ -54,7 +54,7 @@ import org.eclipse.jetty.util.log.Logger;
 @ManagedObject
 public class GCloudSessionDataStore extends AbstractSessionDataStore
 {
-    private static final Logger LOG = Log.getLogger("org.eclipse.jetty.server.session");
+    private static final Logger LOG = LoggerFactory.getLogger(GCloudSessionDataStore.class);
 
     public static final int DEFAULT_MAX_QUERY_RESULTS = 100;
     public static final int DEFAULT_MAX_RETRIES = 5;
@@ -594,7 +594,7 @@ public class GCloudSessionDataStore extends AbstractSessionDataStore
                     }
                     catch (Exception e)
                     {
-                        LOG.warn(e);
+                        LOG.warn("Unable to expire candidate sessions individually", e);
                     }
                 }
             }
@@ -603,7 +603,7 @@ public class GCloudSessionDataStore extends AbstractSessionDataStore
         }
         catch (Exception e)
         {
-            LOG.warn(e);
+            LOG.warn("Unable to get expired", e);
             return expired; //return what we got
         }
     }
@@ -785,7 +785,7 @@ public class GCloudSessionDataStore extends AbstractSessionDataStore
 
                     try
                     {
-                        Thread.sleep(backoff);
+                        Thread.currentThread().sleep(backoff);
                     }
                     catch (InterruptedException ignored)
                     {
@@ -904,14 +904,14 @@ public class GCloudSessionDataStore extends AbstractSessionDataStore
             return null;
 
         //turn an Entity into a Session
-        String id = entity.getString(_model.getId());
-        String contextPath = entity.getString(_model.getContextPath());
-        String vhost = entity.getString(_model.getVhost());
-        long accessed = entity.getLong(_model.getAccessed());
-        long lastAccessed = entity.getLong(_model.getLastAccessed());
-        long createTime = entity.getLong(_model.getCreateTime());
-        long cookieSet = entity.getLong(_model.getCookieSetTime());
-        String lastNode = entity.getString(_model.getLastNode());
+        final String id = entity.getString(_model.getId());
+        final String contextPath = entity.getString(_model.getContextPath());
+        final String vhost = entity.getString(_model.getVhost());
+        final long accessed = entity.getLong(_model.getAccessed());
+        final long lastAccessed = entity.getLong(_model.getLastAccessed());
+        final long createTime = entity.getLong(_model.getCreateTime());
+        final long cookieSet = entity.getLong(_model.getCookieSetTime());
+        final String lastNode = entity.getString(_model.getLastNode());
 
         long lastSaved = 0;
         //for compatibility with previously saved sessions, lastSaved may not be present
@@ -921,11 +921,11 @@ public class GCloudSessionDataStore extends AbstractSessionDataStore
         }
         catch (DatastoreException e)
         {
-            LOG.ignore(e);
+            LOG.trace("IGNORED", e);
         }
         long expiry = entity.getLong(_model.getExpiry());
         long maxInactive = entity.getLong(_model.getMaxInactive());
-        Blob blob = entity.getBlob(_model.getAttributes());
+        Blob blob = (Blob)entity.getBlob(_model.getAttributes());
 
         SessionData session = newSessionData(id, createTime, accessed, lastAccessed, maxInactive);
         session.setLastNode(lastNode);

@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.util;
@@ -35,7 +35,6 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.EventListener;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -50,8 +49,8 @@ import java.util.function.Predicate;
 import java.util.stream.Stream;
 
 import org.eclipse.jetty.util.component.AbstractLifeCycle;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static java.nio.file.StandardWatchEventKinds.ENTRY_CREATE;
 import static java.nio.file.StandardWatchEventKinds.ENTRY_DELETE;
@@ -454,7 +453,7 @@ public class PathWatcher extends AbstractLifeCycle implements Runnable
             }
             catch (Exception e)
             {
-                LOG.ignore(e);
+                LOG.trace("IGNORED", e);
                 return DirAction.IGNORE;
             }
         }
@@ -476,7 +475,7 @@ public class PathWatcher extends AbstractLifeCycle implements Runnable
             }
             catch (IOException e)
             {
-                LOG.ignore(e);
+                LOG.trace("IGNORED", e);
                 return false;
             }
         }
@@ -502,15 +501,15 @@ public class PathWatcher extends AbstractLifeCycle implements Runnable
         }
     }
 
-    public enum DirAction
+    public static enum DirAction
     {
-        IGNORE, WATCH, ENTER
+        IGNORE, WATCH, ENTER;
     }
 
     /**
      * Listener for path change events
      */
-    public interface Listener extends EventListener
+    public static interface Listener extends EventListener
     {
         void onPathWatchEvent(PathWatchEvent event);
     }
@@ -520,7 +519,7 @@ public class PathWatcher extends AbstractLifeCycle implements Runnable
      *
      * Listener that reports accumulated events in one shot
      */
-    public interface EventListListener extends EventListener
+    public static interface EventListListener extends EventListener
     {
         void onPathWatchEvents(List<PathWatchEvent> events);
     }
@@ -629,9 +628,6 @@ public class PathWatcher extends AbstractLifeCycle implements Runnable
             config.setPauseUntil(now + getUpdateQuietTimeMillis());
         }
 
-        /**
-         * @see java.lang.Object#equals(java.lang.Object)
-         */
         @Override
         public boolean equals(Object obj)
         {
@@ -659,7 +655,11 @@ public class PathWatcher extends AbstractLifeCycle implements Runnable
             {
                 return false;
             }
-            return type == other.type;
+            if (type != other.type)
+            {
+                return false;
+            }
+            return true;
         }
 
         public Path getPath()
@@ -672,15 +672,6 @@ public class PathWatcher extends AbstractLifeCycle implements Runnable
             return type;
         }
 
-        @Deprecated
-        public int getCount()
-        {
-            return 1;
-        }
-
-        /**
-         * @see java.lang.Object#hashCode()
-         */
         @Override
         public int hashCode()
         {
@@ -691,9 +682,6 @@ public class PathWatcher extends AbstractLifeCycle implements Runnable
             return result;
         }
 
-        /**
-         * @see java.lang.Object#toString()
-         */
         @Override
         public String toString()
         {
@@ -706,9 +694,9 @@ public class PathWatcher extends AbstractLifeCycle implements Runnable
      *
      * Type of an event
      */
-    public enum PathWatchEventType
+    public static enum PathWatchEventType
     {
-        ADDED, DELETED, MODIFIED, UNKNOWN
+        ADDED, DELETED, MODIFIED, UNKNOWN;
     }
 
     private static final boolean IS_WINDOWS;
@@ -727,7 +715,7 @@ public class PathWatcher extends AbstractLifeCycle implements Runnable
         }
     }
 
-    static final Logger LOG = Log.getLogger(PathWatcher.class);
+    static final Logger LOG = LoggerFactory.getLogger(PathWatcher.class);
 
     @SuppressWarnings("unchecked")
     protected static <T> WatchEvent<T> cast(WatchEvent<?> event)
@@ -867,9 +855,6 @@ public class PathWatcher extends AbstractLifeCycle implements Runnable
         s.append("]");
     }
 
-    /**
-     * @see org.eclipse.jetty.util.component.AbstractLifeCycle#doStart()
-     */
     @Override
     protected void doStart() throws Exception
     {
@@ -899,9 +884,6 @@ public class PathWatcher extends AbstractLifeCycle implements Runnable
         super.doStart();
     }
 
-    /**
-     * @see org.eclipse.jetty.util.component.AbstractLifeCycle#doStop()
-     */
     @Override
     protected void doStop() throws Exception
     {
@@ -950,16 +932,13 @@ public class PathWatcher extends AbstractLifeCycle implements Runnable
                 LOG.info("Using Non-Native Java {}", pollingWatchServiceClass.getName());
                 Class<?> c = Class.forName("com.sun.nio.file.SensitivityWatchEventModifier");
                 Field f = c.getField("HIGH");
-                modifiers = new WatchEvent.Modifier[]
-                    {
-                        (WatchEvent.Modifier)f.get(c)
-                    };
+                modifiers = new WatchEvent.Modifier[]{(WatchEvent.Modifier)f.get(c)};
             }
         }
         catch (Throwable t)
         {
             // Unknown JVM environment, assuming native.
-            LOG.ignore(t);
+            LOG.trace("IGNORED", t);
         }
 
         this.watchModifiers = modifiers;
@@ -1048,9 +1027,9 @@ public class PathWatcher extends AbstractLifeCycle implements Runnable
         {
             throw e;
         }
-        catch (Throwable ex)
+        catch (Throwable th)
         {
-            throw new IOException(ex);
+            throw new IOException(th);
         }
     }
 
@@ -1178,11 +1157,11 @@ public class PathWatcher extends AbstractLifeCycle implements Runnable
             {
                 if (isRunning())
                 {
-                    LOG.warn(e);
+                    LOG.warn("Watch failed", e);
                 }
                 else
                 {
-                    LOG.ignore(e);
+                    LOG.trace("IGNORED", e);
                 }
             }
         }
@@ -1241,7 +1220,7 @@ public class PathWatcher extends AbstractLifeCycle implements Runnable
                 }
                 catch (IOException e)
                 {
-                    LOG.warn(e);
+                    LOG.warn("Unable to register", e);
                 }
             }
         }
@@ -1282,6 +1261,9 @@ public class PathWatcher extends AbstractLifeCycle implements Runnable
                     pending.remove(path);
                 events.add(event);
                 break;
+
+            default:
+                throw new IllegalStateException(event.toString());
         }
     }
 
@@ -1344,7 +1326,7 @@ public class PathWatcher extends AbstractLifeCycle implements Runnable
                 }
                 catch (Throwable t)
                 {
-                    LOG.warn(t);
+                    LOG.warn("Unable to notify PathWatch Events", t);
                 }
             }
             else
@@ -1367,7 +1349,7 @@ public class PathWatcher extends AbstractLifeCycle implements Runnable
                         }
                         catch (Throwable t)
                         {
-                            LOG.warn(t);
+                            LOG.warn("Unable to notify PathWatch Events", t);
                         }
                     }
                 }

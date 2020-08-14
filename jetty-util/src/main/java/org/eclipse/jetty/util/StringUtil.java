@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.util;
@@ -36,13 +36,7 @@ public class StringUtil
     private static final Trie<String> CHARSETS = new ArrayTrie<>(256);
 
     public static final String ALL_INTERFACES = "0.0.0.0";
-    public static final String CRLF = IO.CRLF;
-
-    /**
-     * @deprecated use {@link System#lineSeparator()} instead
-     */
-    @Deprecated
-    public static final String __LINE_SEPARATOR = System.lineSeparator();
+    public static final String CRLF = "\r\n";
 
     public static final String __ISO_8859_1 = "iso-8859-1";
     public static final String __UTF8 = "utf-8";
@@ -88,7 +82,8 @@ public class StringUtil
 
     // @checkstyle-disable-check : IllegalTokenTextCheck
 
-    public static final char[] lowercases = {
+    public static final char[] lowercases =
+    {
         '\000', '\001', '\002', '\003', '\004', '\005', '\006', '\007',
         '\010', '\011', '\012', '\013', '\014', '\015', '\016', '\017',
         '\020', '\021', '\022', '\023', '\024', '\025', '\026', '\027',
@@ -106,6 +101,8 @@ public class StringUtil
         '\160', '\161', '\162', '\163', '\164', '\165', '\166', '\167',
         '\170', '\171', '\172', '\173', '\174', '\175', '\176', '\177'
     };
+
+    // @checkstyle-enable-check : IllegalTokenTextCheck
 
     /**
      * fast lower case conversion. Only works on ascii (not unicode)
@@ -367,18 +364,6 @@ public class StringUtil
     }
 
     /**
-     * Remove single or double quotes.
-     *
-     * @param s the input string
-     * @return the string with quotes removed
-     */
-    @Deprecated
-    public static String unquote(String s)
-    {
-        return QuotedStringTokenizer.unquote(s);
-    }
-
-    /**
      * Append substring to StringBuilder
      *
      * @param buf StringBuilder to append to
@@ -451,6 +436,22 @@ public class StringUtil
             buf.append((char)(i / 10 + '0'));
             buf.append((char)(i % 10 + '0'));
         }
+    }
+
+    /**
+     * Generate a string from another string repeated n times.
+     *
+     * @param s the string to use
+     * @param n the number of times this string should be appended
+     */
+    public static String stringFrom(String s, int n)
+    {
+        StringBuilder stringBuilder = new StringBuilder(s.length() * n);
+        for (int i = 0; i < n; i++)
+        {
+            stringBuilder.append(s);
+        }
+        return stringBuilder.toString();
     }
 
     /**
@@ -700,11 +701,6 @@ public class StringUtil
         return s.getBytes(StandardCharsets.ISO_8859_1);
     }
 
-    public static byte[] getUtf8Bytes(String s)
-    {
-        return s.getBytes(StandardCharsets.UTF_8);
-    }
-
     public static byte[] getBytes(String s, String charset)
     {
         try
@@ -717,110 +713,9 @@ public class StringUtil
         }
     }
 
-    /**
-     * Converts a binary SID to a string SID
-     *
-     * http://en.wikipedia.org/wiki/Security_Identifier
-     *
-     * S-1-IdentifierAuthority-SubAuthority1-SubAuthority2-...-SubAuthorityn
-     *
-     * @param sidBytes the SID bytes to build from
-     * @return the string SID
-     */
-    @Deprecated
-    public static String sidBytesToString(byte[] sidBytes)
+    public static byte[] getUtf8Bytes(String s)
     {
-        StringBuilder sidString = new StringBuilder();
-
-        // Identify this as a SID
-        sidString.append("S-");
-
-        // Add SID revision level (expect 1 but may change someday)
-        sidString.append(sidBytes[0]).append('-');
-
-        StringBuilder tmpBuilder = new StringBuilder();
-
-        // crunch the six bytes of issuing authority value
-        for (int i = 2; i <= 7; ++i)
-        {
-            tmpBuilder.append(Integer.toHexString(sidBytes[i] & 0xFF));
-        }
-
-        sidString.append(Long.parseLong(tmpBuilder.toString(), 16)); // '-' is in the subauth loop
-
-        // the number of subAuthorities we need to attach
-        int subAuthorityCount = sidBytes[1];
-        // attach each of the subAuthorities
-        for (int i = 0; i < subAuthorityCount; ++i)
-        {
-            int offset = i * 4;
-            tmpBuilder.setLength(0);
-            // these need to be zero padded hex and little endian
-            tmpBuilder.append(String.format("%02X%02X%02X%02X",
-                (sidBytes[11 + offset] & 0xFF),
-                (sidBytes[10 + offset] & 0xFF),
-                (sidBytes[9 + offset] & 0xFF),
-                (sidBytes[8 + offset] & 0xFF)));
-            sidString.append('-').append(Long.parseLong(tmpBuilder.toString(), 16));
-        }
-
-        return sidString.toString();
-    }
-
-    /**
-     * Converts a string SID to a binary SID
-     *
-     * http://en.wikipedia.org/wiki/Security_Identifier
-     *
-     * S-1-IdentifierAuthority-SubAuthority1-SubAuthority2-...-SubAuthorityn
-     *
-     * @param sidString the string SID
-     * @return the binary SID
-     */
-    @Deprecated
-    public static byte[] sidStringToBytes(String sidString)
-    {
-        String[] sidTokens = sidString.split("-");
-
-        int subAuthorityCount = sidTokens.length - 3; // S-Rev-IdAuth-
-
-        int byteCount = 0;
-        byte[] sidBytes = new byte[1 + 1 + 6 + (4 * subAuthorityCount)];
-
-        // the revision byte
-        sidBytes[byteCount++] = (byte)Integer.parseInt(sidTokens[1]);
-        // the # of sub authorities byte
-        sidBytes[byteCount++] = (byte)subAuthorityCount;
-        // the certAuthority
-        String hexStr = Long.toHexString(Long.parseLong(sidTokens[2]));
-
-        while (hexStr.length() < 12) // pad to 12 characters
-        {
-            hexStr = "0" + hexStr;
-        }
-        // place the certAuthority 6 bytes
-        for (int i = 0; i < hexStr.length(); i = i + 2)
-        {
-            sidBytes[byteCount++] = (byte)Integer.parseInt(hexStr.substring(i, i + 2), 16);
-        }
-
-        for (int i = 3; i < sidTokens.length; ++i)
-        {
-            hexStr = Long.toHexString(Long.parseLong(sidTokens[i]));
-
-            while (hexStr.length() < 8) // pad to 8 characters
-            {
-                hexStr = "0" + hexStr;
-            }
-
-            // place the inverted sub authorities, 4 bytes each
-            for (int j = hexStr.length(); j > 0; j = j - 2)
-            {
-                sidBytes[byteCount++] = (byte)Integer.parseInt(hexStr.substring(j - 2, j), 16);
-            }
-        }
-
-        return sidBytes;
+        return s.getBytes(StandardCharsets.UTF_8);
     }
 
     /**
@@ -1017,6 +912,7 @@ public class StringUtil
                     state = CsvSplitState.DATA;
                     out.append(ch);
                     continue;
+
                 case DATA:
                     if (Character.isWhitespace(ch))
                     {
@@ -1056,6 +952,7 @@ public class StringUtil
                     out.append(ch);
                     last = -1;
                     continue;
+
                 case QUOTE:
                     if ('\\' == ch)
                     {
@@ -1084,6 +981,9 @@ public class StringUtil
                         continue;
                     }
                     continue;
+
+                default:
+                    throw new IllegalStateException(state.toString());
             }
         }
         switch (state)
@@ -1091,6 +991,7 @@ public class StringUtil
             case PRE_DATA:
             case POST_DATA:
                 break;
+
             case DATA:
             case QUOTE:
             case SLOSH:
@@ -1101,6 +1002,9 @@ public class StringUtil
                 out.setLength(last);
                 list.add(out.toString());
                 break;
+
+            default:
+                throw new IllegalStateException(state.toString());
         }
 
         return list;

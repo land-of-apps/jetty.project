@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.http.client;
@@ -42,6 +42,7 @@ import org.eclipse.jetty.http2.client.http.HttpClientTransportOverHTTP2;
 import org.eclipse.jetty.http2.server.AbstractHTTP2ServerConnectionFactory;
 import org.eclipse.jetty.http2.server.HTTP2CServerConnectionFactory;
 import org.eclipse.jetty.http2.server.HTTP2ServerConnectionFactory;
+import org.eclipse.jetty.io.ClientConnector;
 import org.eclipse.jetty.jmx.MBeanContainer;
 import org.eclipse.jetty.server.AbstractConnector;
 import org.eclipse.jetty.server.ConnectionFactory;
@@ -56,27 +57,27 @@ import org.eclipse.jetty.server.SslConnectionFactory;
 import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.eclipse.jetty.servlet.ServletHolder;
 import org.eclipse.jetty.toolchain.test.MavenTestingUtils;
-import org.eclipse.jetty.unixsocket.UnixSocketConnector;
 import org.eclipse.jetty.unixsocket.client.HttpClientTransportOverUnixSockets;
+import org.eclipse.jetty.unixsocket.server.UnixSocketConnector;
 import org.eclipse.jetty.util.BlockingArrayQueue;
 import org.eclipse.jetty.util.SocketAddressResolver;
 import org.eclipse.jetty.util.StringUtil;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
 import org.eclipse.jetty.util.ssl.SslContextFactory;
 import org.eclipse.jetty.util.thread.QueuedThreadPool;
 import org.junit.jupiter.api.Assumptions;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static org.eclipse.jetty.http.client.Transport.UNIX_SOCKET;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 public class TransportScenario
 {
-    private static final Logger LOG = Log.getLogger(TransportScenario.class);
+    private static final Logger LOG = LoggerFactory.getLogger(TransportScenario.class);
 
     protected final HttpConfiguration httpConfig = new HttpConfiguration();
     protected final Transport transport;
-    protected SslContextFactory sslContextFactory;
+    protected SslContextFactory.Server sslContextFactory;
     protected Server server;
     protected Connector connector;
     protected ServletContextHandler context;
@@ -136,34 +137,17 @@ public class TransportScenario
         return transport.isTlsBased() ? "https" : "http";
     }
 
-    @Deprecated
-    public boolean isHttp1Based()
+    public HTTP2Client newHTTP2Client(SslContextFactory.Client sslContextFactory)
     {
-        return transport.isHttp1Based();
+        ClientConnector clientConnector = new ClientConnector();
+        clientConnector.setSelectors(1);
+        clientConnector.setSslContextFactory(sslContextFactory);
+        return new HTTP2Client(clientConnector);
     }
 
-    @Deprecated
-    public boolean isTransportSecure()
+    public HttpClient newHttpClient(HttpClientTransport transport)
     {
-        return transport.isTlsBased();
-    }
-
-    @Deprecated
-    public boolean isHttp2Based()
-    {
-        return transport.isHttp2Based();
-    }
-
-    public HTTP2Client newHTTP2Client()
-    {
-        HTTP2Client http2Client = new HTTP2Client();
-        http2Client.setSelectors(1);
-        return http2Client;
-    }
-
-    public HttpClient newHttpClient(HttpClientTransport transport, SslContextFactory sslContextFactory)
-    {
-        return new HttpClient(transport, sslContextFactory);
+        return new HttpClient(transport);
     }
 
     public Connector newServerConnector(Server server)
@@ -187,29 +171,27 @@ public class TransportScenario
         return ret.toString();
     }
 
-    public HttpClientTransport provideClientTransport()
-    {
-        return provideClientTransport(this.transport);
-    }
-
-    public HttpClientTransport provideClientTransport(Transport transport)
+    public HttpClientTransport provideClientTransport(Transport transport, SslContextFactory.Client sslContextFactory)
     {
         switch (transport)
         {
             case HTTP:
             case HTTPS:
             {
-                return new HttpClientTransportOverHTTP(1);
+                ClientConnector clientConnector = new ClientConnector();
+                clientConnector.setSelectors(1);
+                clientConnector.setSslContextFactory(sslContextFactory);
+                return new HttpClientTransportOverHTTP(clientConnector);
             }
             case H2C:
             case H2:
             {
-                HTTP2Client http2Client = newHTTP2Client();
+                HTTP2Client http2Client = newHTTP2Client(sslContextFactory);
                 return new HttpClientTransportOverHTTP2(http2Client);
             }
             case FCGI:
             {
-                return new HttpClientTransportOverFCGI(1, false, "");
+                return new HttpClientTransportOverFCGI(1, "");
             }
             case UNIX_SOCKET:
             {
@@ -313,8 +295,8 @@ public class TransportScenario
         QueuedThreadPool clientThreads = new QueuedThreadPool();
         clientThreads.setName("client");
         clientThreads.setDetailedDump(true);
-        SslContextFactory sslContextFactory = newClientSslContextFactory();
-        client = newHttpClient(provideClientTransport(transport), sslContextFactory);
+        SslContextFactory.Client sslContextFactory = newClientSslContextFactory();
+        client = newHttpClient(provideClientTransport(transport, sslContextFactory));
         client.setExecutor(clientThreads);
         client.setSocketAddressResolver(new SocketAddressResolver.Sync());
 
@@ -383,10 +365,8 @@ public class TransportScenario
 
     private void configureSslContextFactory(SslContextFactory sslContextFactory)
     {
-        sslContextFactory.setKeyStorePath("src/test/resources/keystore.jks");
+        sslContextFactory.setKeyStorePath("src/test/resources/keystore.p12");
         sslContextFactory.setKeyStorePassword("storepwd");
-        sslContextFactory.setTrustStorePath("src/test/resources/truststore.jks");
-        sslContextFactory.setTrustStorePassword("storepwd");
         sslContextFactory.setUseCipherSuitesOrder(true);
         sslContextFactory.setCipherComparator(HTTP2Cipher.COMPARATOR);
     }
@@ -411,7 +391,7 @@ public class TransportScenario
         }
         catch (Exception x)
         {
-            LOG.ignore(x);
+            LOG.trace("IGNORED", x);
         }
 
         try
@@ -420,7 +400,7 @@ public class TransportScenario
         }
         catch (Exception x)
         {
-            LOG.ignore(x);
+            LOG.trace("IGNORED", x);
         }
 
         if (sockFile != null)
@@ -431,7 +411,7 @@ public class TransportScenario
             }
             catch (IOException e)
             {
-                LOG.warn(e);
+                LOG.warn("Unable to delete sockFile: {}", sockFile, e);
             }
         }
     }

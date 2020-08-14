@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.osgi.boot.utils.internal;
@@ -23,9 +23,9 @@ import java.lang.reflect.Method;
 import java.util.List;
 
 import org.eclipse.jetty.osgi.boot.utils.BundleClassLoaderHelper;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
 import org.osgi.framework.Bundle;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * DefaultBundleClassLoaderHelper
@@ -35,13 +35,14 @@ import org.osgi.framework.Bundle;
  */
 public class DefaultBundleClassLoaderHelper implements BundleClassLoaderHelper
 {
-    private static final Logger LOG = Log.getLogger(BundleClassLoaderHelper.class);
+    private static final Logger LOG = LoggerFactory.getLogger(BundleClassLoaderHelper.class);
 
-    private enum OSGiContainerType
+    private static enum OSGiContainerType
     {
         EquinoxOld, EquinoxLuna, FelixOld, Felix403, Concierge
     }
 
+    ;
     private static OSGiContainerType osgiContainer;
     private static Class<?> Equinox_BundleHost_Class;
     private static Class<?> Equinox_EquinoxBundle_Class;
@@ -79,7 +80,7 @@ public class DefaultBundleClassLoaderHelper implements BundleClassLoaderHelper
         }
         catch (ClassNotFoundException e)
         {
-            LOG.ignore(e);
+            LOG.trace("IGNORED", e);
         }
 
         try
@@ -90,7 +91,7 @@ public class DefaultBundleClassLoaderHelper implements BundleClassLoaderHelper
         }
         catch (ClassNotFoundException e)
         {
-            LOG.ignore(e);
+            LOG.trace("IGNORED", e);
         }
 
         try
@@ -99,7 +100,7 @@ public class DefaultBundleClassLoaderHelper implements BundleClassLoaderHelper
             Felix_BundleImpl_Class = bundle.getClass().getClassLoader().loadClass("org.apache.felix.framework.BundleImpl");
             try
             {
-                Felix_BundleImpl_Adapt_Method = Felix_BundleImpl_Class.getDeclaredMethod("adapt", Class.class);
+                Felix_BundleImpl_Adapt_Method = Felix_BundleImpl_Class.getDeclaredMethod("adapt", new Class[]{Class.class});
                 osgiContainer = OSGiContainerType.Felix403;
                 return;
             }
@@ -111,7 +112,7 @@ public class DefaultBundleClassLoaderHelper implements BundleClassLoaderHelper
         }
         catch (ClassNotFoundException e)
         {
-            LOG.ignore(e);
+            LOG.trace("IGNORED", e);
         }
 
         try
@@ -122,7 +123,7 @@ public class DefaultBundleClassLoaderHelper implements BundleClassLoaderHelper
         }
         catch (ClassNotFoundException e)
         {
-            LOG.ignore(e);
+            LOG.trace("IGNORED", e);
         }
 
         LOG.warn("Unknown OSGi container type");
@@ -152,7 +153,7 @@ public class DefaultBundleClassLoaderHelper implements BundleClassLoaderHelper
             }
             catch (ClassNotFoundException e)
             {
-                LOG.warn(e);
+                LOG.warn("Unable to load bundle activator {}", bundleActivator, e);
             }
         }
 
@@ -206,31 +207,27 @@ public class DefaultBundleClassLoaderHelper implements BundleClassLoaderHelper
     {
         if (osgiContainer == OSGiContainerType.EquinoxOld)
         {
+            String bundleLoaderName = "org.eclipse.osgi.internal.loader.BundleLoader";
             try
             {
                 if (Equinox_BundleHost_getBundleLoader_method == null)
                 {
                     Equinox_BundleHost_getBundleLoader_method =
-                        Equinox_BundleHost_Class.getDeclaredMethod("getBundleLoader");
+                        Equinox_BundleHost_Class.getDeclaredMethod("getBundleLoader", new Class[]{});
                     Equinox_BundleHost_getBundleLoader_method.setAccessible(true);
                 }
-                Object bundleLoader = Equinox_BundleHost_getBundleLoader_method.invoke(bundle);
+                Object bundleLoader = Equinox_BundleHost_getBundleLoader_method.invoke(bundle, new Object[]{});
                 if (Equinox_BundleLoader_createClassLoader_method == null && bundleLoader != null)
                 {
                     Equinox_BundleLoader_createClassLoader_method =
-                        bundleLoader.getClass().getClassLoader().loadClass("org.eclipse.osgi.internal.loader.BundleLoader").getDeclaredMethod("createClassLoader");
+                        bundleLoader.getClass().getClassLoader().loadClass(bundleLoaderName).getDeclaredMethod("createClassLoader", new Class[]{});
                     Equinox_BundleLoader_createClassLoader_method.setAccessible(true);
                 }
                 return (ClassLoader)Equinox_BundleLoader_createClassLoader_method.invoke(bundleLoader, new Object[]{});
             }
-            catch (ClassNotFoundException t)
-            {
-                LOG.warn(t);
-                return null;
-            }
             catch (Throwable t)
             {
-                LOG.warn(t);
+                LOG.warn("Unable to get equinox bundle classloader", t);
                 return null;
             }
         }
@@ -240,7 +237,9 @@ public class DefaultBundleClassLoaderHelper implements BundleClassLoaderHelper
             try
             {
                 if (Equinox_EquinoxBundle_getModuleClassLoader_Method == null)
-                    Equinox_EquinoxBundle_getModuleClassLoader_Method = Equinox_EquinoxBundle_Class.getDeclaredMethod("getModuleClassLoader", Boolean.TYPE);
+                    Equinox_EquinoxBundle_getModuleClassLoader_Method = Equinox_EquinoxBundle_Class.getDeclaredMethod("getModuleClassLoader", new Class[]{
+                        Boolean.TYPE
+                    });
 
                 Equinox_EquinoxBundle_getModuleClassLoader_Method.setAccessible(true);
                 return (ClassLoader)Equinox_EquinoxBundle_getModuleClassLoader_Method.invoke(bundle, new Object[]{
@@ -249,7 +248,7 @@ public class DefaultBundleClassLoaderHelper implements BundleClassLoaderHelper
             }
             catch (Exception e)
             {
-                LOG.warn(e);
+                LOG.warn("Unable to get equinox luna bundle classloader", e);
                 return null;
             }
         }
@@ -280,12 +279,12 @@ public class DefaultBundleClassLoaderHelper implements BundleClassLoaderHelper
                     Felix_BundleWiring_getClassLoader_Method.setAccessible(true);
                 }
 
-                Object wiring = Felix_BundleImpl_Adapt_Method.invoke(bundle, Felix_BundleWiring_Class);
+                Object wiring = Felix_BundleImpl_Adapt_Method.invoke(bundle, new Object[]{Felix_BundleWiring_Class});
                 return (ClassLoader)Felix_BundleWiring_getClassLoader_Method.invoke(wiring);
             }
             catch (Exception e)
             {
-                LOG.warn(e);
+                LOG.warn("Unable to get felix bundle classloader", e);
                 return null;
             }
         }
@@ -317,21 +316,23 @@ public class DefaultBundleClassLoaderHelper implements BundleClassLoaderHelper
                     }
                     catch (Exception e)
                     {
-                        LOG.warn(e);
+                        LOG.warn("Unable to get field {}", Felix_BundleImpl_m_Modules_Field, e);
                         return null;
                     }
                 }
 
                 if (Felix_ModuleImpl_m_ClassLoader_Field == null && currentModuleImpl != null)
                 {
+                    String felixFrameworkModuleImplClassName = "org.apache.felix.framework.ModuleImpl";
+                    String felixFrameworkModuleImplClassLoaderField = "m_classLoader";
                     try
                     {
-                        Felix_ModuleImpl_m_ClassLoader_Field = bundle.getClass().getClassLoader().loadClass("org.apache.felix.framework.ModuleImpl").getDeclaredField("m_classLoader");
+                        Felix_ModuleImpl_m_ClassLoader_Field = bundle.getClass().getClassLoader().loadClass(felixFrameworkModuleImplClassName).getDeclaredField(felixFrameworkModuleImplClassLoaderField);
                         Felix_ModuleImpl_m_ClassLoader_Field.setAccessible(true);
                     }
                     catch (Exception e)
                     {
-                        LOG.warn(e);
+                        LOG.warn("Unable to find field {}.{}", felixFrameworkModuleImplClassName, felixFrameworkModuleImplClassLoaderField, e);
                         return null;
                     }
                 }
@@ -348,7 +349,7 @@ public class DefaultBundleClassLoaderHelper implements BundleClassLoaderHelper
                 }
                 catch (Exception e)
                 {
-                    LOG.warn(e);
+                    LOG.warn("Unable to get field {}", Felix_ModuleImpl_m_ClassLoader_Field, e);
                     return null;
                 }
 
@@ -364,13 +365,13 @@ public class DefaultBundleClassLoaderHelper implements BundleClassLoaderHelper
                 }
                 catch (Exception e)
                 {
-                    LOG.warn(e);
+                    LOG.warn("Unable to get field {}", Felix_ModuleImpl_m_ClassLoader_Field, e);
                     return null;
                 }
             }
             catch (Exception e)
             {
-                LOG.warn(e);
+                LOG.warn("Unable to load old felix container", e);
                 return null;
             }
         }
@@ -409,19 +410,19 @@ public class DefaultBundleClassLoaderHelper implements BundleClassLoaderHelper
                 if (Concierge_BundleWiring_Class == null)
                 {
                     Concierge_BundleWiring_Class = bundle.getClass().getClassLoader().loadClass("org.osgi.framework.wiring.BundleWiring");
-                    Concierge_BundleImpl_Adapt_Method = Concierge_BundleImpl_Class.getMethod("adapt", Class.class);
+                    Concierge_BundleImpl_Adapt_Method = Concierge_BundleImpl_Class.getMethod("adapt", new Class[]{Class.class});
                     Concierge_BundleImpl_Adapt_Method.setAccessible(true);
                     Concierge_BundleWiring_getClassLoader_Method = Concierge_BundleWiring_Class.getMethod("getClassLoader");
                     Concierge_BundleWiring_getClassLoader_Method.setAccessible(true);
                 }
 
-                Object wiring = Concierge_BundleImpl_Adapt_Method.invoke(bundle, Concierge_BundleWiring_Class);
+                Object wiring = Concierge_BundleImpl_Adapt_Method.invoke(bundle, new Object[]{Concierge_BundleWiring_Class});
                 ClassLoader cl = (ClassLoader)Concierge_BundleWiring_getClassLoader_Method.invoke(wiring);
                 return cl;
             }
             catch (Exception e)
             {
-                LOG.warn(e);
+                LOG.warn("Unable to load Concierge platform", e);
                 return null;
             }
         }

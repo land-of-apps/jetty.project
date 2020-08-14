@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.servlet;
@@ -24,7 +24,6 @@ import java.io.OutputStream;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
@@ -42,6 +41,8 @@ import javax.servlet.FilterConfig;
 import javax.servlet.ServletException;
 import javax.servlet.ServletRequest;
 import javax.servlet.ServletResponse;
+import javax.servlet.http.HttpServlet;
+import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
 import org.eclipse.jetty.http.DateGenerator;
@@ -49,7 +50,8 @@ import org.eclipse.jetty.http.HttpContent;
 import org.eclipse.jetty.http.HttpField;
 import org.eclipse.jetty.http.HttpHeader;
 import org.eclipse.jetty.http.HttpStatus;
-import org.eclipse.jetty.http.HttpTester;
+import org.eclipse.jetty.http.tools.HttpTester;
+import org.eclipse.jetty.logging.StacklessLogging;
 import org.eclipse.jetty.server.HttpConfiguration;
 import org.eclipse.jetty.server.LocalConnector;
 import org.eclipse.jetty.server.ResourceContentFactory;
@@ -62,7 +64,6 @@ import org.eclipse.jetty.toolchain.test.MavenTestingUtils;
 import org.eclipse.jetty.toolchain.test.jupiter.WorkDir;
 import org.eclipse.jetty.toolchain.test.jupiter.WorkDirExtension;
 import org.eclipse.jetty.util.TypeUtil;
-import org.eclipse.jetty.util.log.StacklessLogging;
 import org.eclipse.jetty.util.resource.PathResource;
 import org.eclipse.jetty.util.resource.Resource;
 import org.junit.jupiter.api.AfterEach;
@@ -76,8 +77,8 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
-import static org.eclipse.jetty.http.HttpFieldsMatchers.containsHeader;
-import static org.eclipse.jetty.http.HttpFieldsMatchers.containsHeaderValue;
+import static org.eclipse.jetty.http.tools.matchers.HttpFieldsMatchers.containsHeader;
+import static org.eclipse.jetty.http.tools.matchers.HttpFieldsMatchers.containsHeaderValue;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.anyOf;
 import static org.hamcrest.Matchers.containsString;
@@ -812,6 +813,48 @@ public class DefaultServletTest
                 assertThat(response.toString(), response.getStatus(), is(HttpStatus.FORBIDDEN_403));
             }
         }
+    }
+
+    @Test
+    public void testIncludedWelcomeDifferentBase() throws Exception
+    {
+        Path altRoot = workDir.getPath().resolve("altroot");
+        FS.ensureDirExists(altRoot);
+        Path altIndex = altRoot.resolve("index.html");
+
+        ServletHolder defholder = context.addServlet(DefaultServlet.class, "/alt/*");
+        defholder.setInitParameter("resourceBase", altRoot.toUri().toASCIIString());
+        defholder.setInitParameter("dirAllowed", "false");
+        defholder.setInitParameter("redirectWelcome", "false");
+        defholder.setInitParameter("welcomeServlets", "true");
+        defholder.setInitParameter("pathInfoOnly", "true");
+
+        ServletHolder gwholder = new ServletHolder("gateway", new HttpServlet()
+        {
+            @Override
+            protected void doGet(HttpServletRequest req, HttpServletResponse resp)
+                    throws ServletException, IOException
+            {
+                req.getRequestDispatcher("/alt/").include(req, resp);
+            }
+        });
+        context.addServlet(gwholder, "/gateway");
+
+        String rawResponse;
+        HttpTester.Response response;
+
+        // Test included alt default
+        rawResponse = connector.getResponse("GET /context/gateway HTTP/1.0\r\n\r\n");
+        response = HttpTester.parseResponse(rawResponse);
+        // 9.3 "The Include Method" - when include() is used, FileNotFoundException (and HTTP 500)
+        // should be used
+        assertThat(response.toString(), response.getStatus(), is(HttpStatus.INTERNAL_SERVER_ERROR_500));
+
+        createFile(altIndex, "<h1>Alt Index</h1>");
+        rawResponse = connector.getResponse("GET /context/gateway HTTP/1.0\r\n\r\n");
+        response = HttpTester.parseResponse(rawResponse);
+        assertThat(response.toString(), response.getStatus(), is(HttpStatus.OK_200));
+        assertThat(response.getContent(), containsString("<h1>Alt Index</h1>"));
     }
 
     @Test
@@ -2012,7 +2055,7 @@ public class DefaultServletTest
         response = HttpTester.parseResponse(rawResponse);
         assertThat(response.toString(), response.getStatus(), is(HttpStatus.PRECONDITION_FAILED_412));
     }
-    
+
     @Test
     public void testGetUtf8NfcFile() throws Exception
     {
@@ -2128,7 +2171,7 @@ public class DefaultServletTest
     {
         try (OutputStream out = Files.newOutputStream(path))
         {
-            out.write(str.getBytes(StandardCharsets.UTF_8));
+            out.write(str.getBytes(UTF_8));
             out.flush();
         }
     }

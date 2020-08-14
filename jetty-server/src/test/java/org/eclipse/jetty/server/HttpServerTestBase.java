@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.server;
@@ -41,21 +41,21 @@ import javax.servlet.ServletOutputStream;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
-import org.eclipse.jetty.http.HttpTester;
+import org.eclipse.jetty.http.tools.HttpTester;
 import org.eclipse.jetty.io.EndPoint;
 import org.eclipse.jetty.io.EofException;
+import org.eclipse.jetty.logging.StacklessLogging;
 import org.eclipse.jetty.server.handler.AbstractHandler;
 import org.eclipse.jetty.util.BufferUtil;
 import org.eclipse.jetty.util.Callback;
 import org.eclipse.jetty.util.IO;
-import org.eclipse.jetty.util.log.AbstractLogger;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.StacklessLogging;
 import org.hamcrest.Matchers;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.DisabledIfSystemProperty;
 import org.junit.jupiter.api.condition.DisabledOnJre;
 import org.junit.jupiter.api.condition.JRE;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
@@ -70,6 +70,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public abstract class HttpServerTestBase extends HttpServerTestFixture
 {
+    private static final Logger LOG = LoggerFactory.getLogger(HttpServerTestBase.class);
+
     private static final String REQUEST1_HEADER = "POST / HTTP/1.0\n" +
         "Host: localhost\n" +
         "Content-Type: text/xml; charset=utf-8\n" +
@@ -201,10 +203,10 @@ public abstract class HttpServerTestBase extends HttpServerTestFixture
         configureServer(new HelloWorldHandler());
 
         try (Socket client = newSocket(_serverURI.getHost(), _serverURI.getPort());
-             StacklessLogging stackless = new StacklessLogging(HttpConnection.class))
+             StacklessLogging ignored = new StacklessLogging(HttpConnection.class))
         {
             client.setSoTimeout(10000);
-            Log.getLogger(HttpConnection.class).info("expect request is too large, then ISE extra data ...");
+            LOG.info("expect request is too large, then ISE extra data ...");
             OutputStream os = client.getOutputStream();
 
             byte[] buffer = new byte[64 * 1024];
@@ -232,9 +234,9 @@ public abstract class HttpServerTestBase extends HttpServerTestFixture
         _httpConfiguration.setRequestHeaderSize(maxHeaderSize);
 
         try (Socket client = newSocket(_serverURI.getHost(), _serverURI.getPort());
-             StacklessLogging stackless = new StacklessLogging(HttpConnection.class))
+             StacklessLogging ignored = new StacklessLogging(HttpConnection.class))
         {
-            Log.getLogger(HttpConnection.class).info("expect URI is too large");
+            LOG.info("expect URI is too large");
             OutputStream os = client.getOutputStream();
 
             // Take into account the initial bytes for the HTTP method.
@@ -293,9 +295,9 @@ public abstract class HttpServerTestBase extends HttpServerTestFixture
         Socket client = newSocket(_serverURI.getHost(), _serverURI.getPort());
         OutputStream os = client.getOutputStream();
 
-        try (StacklessLogging stackless = new StacklessLogging(HttpChannel.class))
+        try (StacklessLogging ignored = new StacklessLogging(HttpChannel.class))
         {
-            Log.getLogger(HttpChannel.class).info("Expecting ServletException: TEST handler exception...");
+            LOG.info("Expecting ServletException: TEST handler exception...");
             os.write(request.toString().getBytes());
             os.flush();
 
@@ -322,9 +324,9 @@ public abstract class HttpServerTestBase extends HttpServerTestFixture
         Socket client = newSocket(_serverURI.getHost(), _serverURI.getPort());
         OutputStream os = client.getOutputStream();
 
-        try (StacklessLogging stackless = new StacklessLogging(HttpChannel.class))
+        try (StacklessLogging ignored = new StacklessLogging(HttpChannel.class))
         {
-            Log.getLogger(HttpChannel.class).info("Expecting ServletException: TEST handler exception...");
+            LOG.info("Expecting ServletException: TEST handler exception...");
             os.write(request.toString().getBytes());
             os.flush();
 
@@ -392,9 +394,9 @@ public abstract class HttpServerTestBase extends HttpServerTestFixture
         configureServer(new HelloWorldHandler());
 
         try (Socket client = newSocket(_serverURI.getHost(), _serverURI.getPort());
-             StacklessLogging stackless = new StacklessLogging(HttpConnection.class))
+             StacklessLogging ignored = new StacklessLogging(HttpConnection.class))
         {
-            Log.getLogger(HttpConnection.class).info("expect header is too large ...");
+            LOG.info("expect header is too large ...");
             OutputStream os = client.getOutputStream();
 
             byte[] buffer = new byte[64 * 1024];
@@ -435,7 +437,7 @@ public abstract class HttpServerTestBase extends HttpServerTestFixture
             }
             catch (Exception e)
             {
-                Log.getLogger(HttpServerTestBase.class).warn("TODO Early close???");
+                LOG.warn("TODO Early close???");
                 // TODO #1832 evaluate why we sometimes get an early close on this test
             }
         }
@@ -1306,9 +1308,9 @@ public abstract class HttpServerTestBase extends HttpServerTestFixture
         configureServer(handler);
 
         try (Socket client = newSocket(_serverURI.getHost(), _serverURI.getPort());
-             StacklessLogging stackless = new StacklessLogging(HttpChannel.class))
+             StacklessLogging ignored = new StacklessLogging(HttpChannel.class))
         {
-            ((AbstractLogger)Log.getLogger(HttpChannel.class)).info("Expecting exception after commit then could not send 500....");
+            LOG.info("Expecting exception after commit then could not send 500....");
             OutputStream os = client.getOutputStream();
             InputStream is = client.getInputStream();
 

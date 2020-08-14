@@ -1,26 +1,24 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.http2.client.http;
 
-import java.io.IOException;
 import java.util.concurrent.TimeUnit;
-import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
@@ -31,6 +29,7 @@ import org.eclipse.jetty.http.HttpStatus;
 import org.eclipse.jetty.http2.HTTP2Cipher;
 import org.eclipse.jetty.http2.client.HTTP2Client;
 import org.eclipse.jetty.http2.server.HTTP2ServerConnectionFactory;
+import org.eclipse.jetty.io.ClientConnector;
 import org.eclipse.jetty.server.ConnectionFactory;
 import org.eclipse.jetty.server.Handler;
 import org.eclipse.jetty.server.HttpConfiguration;
@@ -76,13 +75,14 @@ public class DirectHTTP2OverTLSTest
 
     private void startClient() throws Exception
     {
+        ClientConnector clientConnector = new ClientConnector();
         QueuedThreadPool clientThreads = new QueuedThreadPool();
         clientThreads.setName("client");
-        HttpClientTransportOverHTTP2 transport = new HttpClientTransportOverHTTP2(new HTTP2Client());
+        clientConnector.setExecutor(clientThreads);
+        clientConnector.setSslContextFactory(newClientSslContextFactory());
+        HttpClientTransportOverHTTP2 transport = new HttpClientTransportOverHTTP2(new HTTP2Client(clientConnector));
         transport.setUseALPN(false);
-        SslContextFactory sslContextFactory = newClientSslContextFactory();
-        client = new HttpClient(transport, sslContextFactory);
-        client.setExecutor(clientThreads);
+        client = new HttpClient(transport);
         client.start();
     }
 
@@ -112,7 +112,7 @@ public class DirectHTTP2OverTLSTest
 
     private void configureSslContextFactory(SslContextFactory sslContextFactory)
     {
-        sslContextFactory.setKeyStorePath("src/test/resources/keystore.jks");
+        sslContextFactory.setKeyStorePath("src/test/resources/keystore.p12");
         sslContextFactory.setKeyStorePassword("storepwd");
         sslContextFactory.setUseCipherSuitesOrder(true);
         sslContextFactory.setCipherComparator(HTTP2Cipher.COMPARATOR);
@@ -126,7 +126,7 @@ public class DirectHTTP2OverTLSTest
         start(new AbstractHandler()
         {
             @Override
-            public void handle(String target, Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException
+            public void handle(String target, Request baseRequest, HttpServletRequest request, HttpServletResponse response)
             {
                 baseRequest.setHandled(true);
             }

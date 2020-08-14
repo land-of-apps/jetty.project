@@ -1,25 +1,26 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.io;
 
 import java.io.Closeable;
 import java.nio.ByteBuffer;
+import java.util.EventListener;
 
 import org.eclipse.jetty.util.component.Container;
 
@@ -38,31 +39,33 @@ public interface Connection extends Closeable
      *
      * @param listener the listener to add
      */
-    void addListener(Listener listener);
+    public void addEventListener(EventListener listener);
 
     /**
      * <p>Removes a listener of connection events.</p>
      *
      * @param listener the listener to remove
      */
-    void removeListener(Listener listener);
+    public void removeEventListener(EventListener listener);
 
     /**
      * <p>Callback method invoked when this connection is opened.</p>
      * <p>Creators of the connection implementation are responsible for calling this method.</p>
      */
-    void onOpen();
+    public void onOpen();
 
     /**
      * <p>Callback method invoked when this connection is closed.</p>
      * <p>Creators of the connection implementation are responsible for calling this method.</p>
+     *
+     * @param cause The cause of the close or null for a normal close
      */
-    void onClose();
+    public void onClose(Throwable cause);
 
     /**
      * @return the {@link EndPoint} associated with this Connection.
      */
-    EndPoint getEndPoint();
+    public EndPoint getEndPoint();
 
     /**
      * <p>Performs a logical close of this connection.</p>
@@ -71,7 +74,7 @@ public interface Connection extends Closeable
      * before closing the associated {@link EndPoint}.</p>
      */
     @Override
-    void close();
+    public void close();
 
     /**
      * <p>Callback method invoked upon an idle timeout event.</p>
@@ -84,43 +87,61 @@ public interface Connection extends Closeable
      * @return true to let the EndPoint handle the idle timeout,
      * false to tell the EndPoint to halt the handling of the idle timeout.
      */
-    boolean onIdleExpired();
+    public boolean onIdleExpired();
 
-    long getMessagesIn();
+    public long getMessagesIn();
 
-    long getMessagesOut();
+    public long getMessagesOut();
 
-    long getBytesIn();
+    public long getBytesIn();
 
-    long getBytesOut();
+    public long getBytesOut();
 
-    long getCreatedTimeStamp();
+    public long getCreatedTimeStamp();
 
-    interface UpgradeFrom
+    /**
+     * <p>{@link Connection} implementations implement this interface when they
+     * can upgrade from the protocol they speak (for example HTTP/1.1)
+     * to a different protocol (e.g. HTTP/2).</p>
+     *
+     * @see EndPoint#upgrade(Connection)
+     * @see UpgradeTo
+     */
+    public interface UpgradeFrom
     {
         /**
-         * <p>Takes the input buffer from the connection on upgrade.</p>
-         * <p>This method is used to take any unconsumed input from
-         * a connection during an upgrade.</p>
+         * <p>Invoked during an {@link EndPoint#upgrade(Connection) upgrade}
+         * to produce a buffer containing bytes that have not been consumed by
+         * this connection, and that must be consumed by the upgrade-to
+         * connection.</p>
          *
-         * @return A buffer of unconsumed input. The caller must return the buffer
-         * to the bufferpool when consumed and this connection must not.
+         * @return a buffer of unconsumed bytes to pass to the upgrade-to connection.
+         * The buffer does not belong to any pool and should be discarded after
+         * having consumed its bytes.
+         * The returned buffer may be null if there are no unconsumed bytes.
          */
-        ByteBuffer onUpgradeFrom();
+        public ByteBuffer onUpgradeFrom();
     }
 
-    interface UpgradeTo
+    /**
+     * <p>{@link Connection} implementations implement this interface when they
+     * can be upgraded to the protocol they speak (e.g. HTTP/2)
+     * from a different protocol (e.g. HTTP/1.1).</p>
+     */
+    public interface UpgradeTo
     {
         /**
-         * <p>Callback method invoked when this connection is upgraded.</p>
-         * <p>This must be called before {@link #onOpen()}.</p>
+         * <p>Invoked during an {@link EndPoint#upgrade(Connection) upgrade}
+         * to receive a buffer containing bytes that have not been consumed by
+         * the upgrade-from connection, and that must be consumed by this
+         * connection.</p>
          *
-         * @param prefilled An optional buffer that can contain prefilled data. Typically this
-         * results from an upgrade of one protocol to the other where the old connection has buffered
-         * data destined for the new connection.  The new connection must take ownership of the buffer
-         * and is responsible for returning it to the buffer pool
+         * @param buffer a non-null buffer of unconsumed bytes received from
+         * the upgrade-from connection.
+         * The buffer does not belong to any pool and should be discarded after
+         * having consumed its bytes.
          */
-        void onUpgradeTo(ByteBuffer prefilled);
+        public void onUpgradeTo(ByteBuffer buffer);
     }
 
     /**
@@ -131,13 +152,13 @@ public interface Connection extends Closeable
      * the Connector or ConnectionFactory are added as listeners to all new connections
      * </p>
      */
-    interface Listener
+    public interface Listener extends EventListener
     {
-        void onOpened(Connection connection);
+        public void onOpened(Connection connection);
 
-        void onClosed(Connection connection);
+        public void onClosed(Connection connection);
 
-        class Adapter implements Listener
+        public static class Adapter implements Listener
         {
             @Override
             public void onOpened(Connection connection)

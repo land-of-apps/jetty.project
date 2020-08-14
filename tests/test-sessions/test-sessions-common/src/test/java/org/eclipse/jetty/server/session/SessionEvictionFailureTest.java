@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.server.session;
@@ -30,10 +30,9 @@ import javax.servlet.http.HttpSession;
 import org.eclipse.jetty.client.HttpClient;
 import org.eclipse.jetty.client.api.ContentResponse;
 import org.eclipse.jetty.client.api.Request;
+import org.eclipse.jetty.logging.StacklessLogging;
 import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.eclipse.jetty.servlet.ServletHolder;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.StacklessLogging;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -112,9 +111,6 @@ public class SessionEvictionFailureTest
             _nextStoreResults = storeResults;
         }
 
-        /**
-         * @see org.eclipse.jetty.server.session.SessionDataStoreFactory#getSessionDataStore(org.eclipse.jetty.server.session.SessionHandler)
-         */
         @Override
         public SessionDataStore getSessionDataStore(SessionHandler handler) throws Exception
         {
@@ -131,7 +127,7 @@ public class SessionEvictionFailureTest
             if ("init".equals(action))
             {
                 HttpSession session = request.getSession(true);
-                session.setAttribute("aaa", new Integer(0));
+                session.setAttribute("aaa", 0);
             }
             else if ("test".equals(action))
             {
@@ -139,7 +135,7 @@ public class SessionEvictionFailureTest
                 assertNotNull(session);
                 Integer count = (Integer)session.getAttribute("aaa");
                 assertNotNull(count);
-                session.setAttribute("aaa", new Integer(count.intValue() + 1));
+                session.setAttribute("aaa", (count.intValue() + 1));
             }
         }
     }
@@ -179,7 +175,7 @@ public class SessionEvictionFailureTest
             int port1 = server.getPort();
             HttpClient client = new HttpClient();
             client.start();
-            try (StacklessLogging stackless = new StacklessLogging(Log.getLogger("org.eclipse.jetty.server.session")))
+            try (StacklessLogging stackless = new StacklessLogging(SessionEvictionFailureTest.class.getPackage()))
             {
                 String url = "http://localhost:" + port1 + contextPath + servletMapping;
 

@@ -6,4 +6,3 @@
     <Arg><Property name="jetty.cdi.mode" default="CdiSpiDecorator"/></Arg>
   </Call>
 </Configure>
-

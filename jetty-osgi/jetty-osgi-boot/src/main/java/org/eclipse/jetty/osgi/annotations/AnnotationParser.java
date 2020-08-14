@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.osgi.annotations;
@@ -50,7 +50,7 @@ public class AnnotationParser extends org.eclipse.jetty.annotations.AnnotationPa
 
     public AnnotationParser(int javaPlatform)
     {
-        super(javaPlatform, Opcodes.ASM7);
+        super(javaPlatform);
     }
 
     /**
@@ -60,7 +60,7 @@ public class AnnotationParser extends org.eclipse.jetty.annotations.AnnotationPa
      * @return the resource for the bundle
      * @throws Exception if unable to create the resource reference
      */
-    protected Resource indexBundle(Bundle bundle) throws Exception
+    public Resource indexBundle(Bundle bundle) throws Exception
     {
         File bundleFile = BundleFileLocatorHelperFactory.getFactory().getHelper().getBundleInstallLocation(bundle);
         Resource resource = Resource.newResource(bundleFile.toURI());
@@ -114,7 +114,7 @@ public class AnnotationParser extends org.eclipse.jetty.annotations.AnnotationPa
         }
     }
 
-    protected void parse(Set<? extends Handler> handlers, Bundle bundle)
+    public void parse(Set<? extends Handler> handlers, Bundle bundle)
         throws Exception
     {
         URI uri = _bundleToUri.get(bundle);
@@ -211,10 +211,17 @@ public class AnnotationParser extends org.eclipse.jetty.annotations.AnnotationPa
                 //or the bundle classpath wasn't simply ".", so skip it
                 continue;
             }
+
+            if (!isValidClassFileName(name))
+            {
+                continue; //eg skip module-info.class 
+            }
+            
             //transform into a classname to pass to the resolver
             String shortName = StringUtil.replace(name, '/', '.').substring(0, name.length() - 6);
 
             addParsedClass(shortName, getResource(bundle));
+
             try (InputStream classInputStream = classUrl.openStream())
             {
                 scanClass(handlers, getResource(bundle), classInputStream);

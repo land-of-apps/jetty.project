@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.session.infinispan;
@@ -108,20 +108,20 @@ public class SessionDataMarshaller
     @Override
     public InfinispanSessionData readFrom(ProtoStreamReader in) throws IOException
     {
-        int version = in.readInt("version");// version of serialized session
-        String id = in.readString("id"); // session id
-        String cpath = in.readString("contextPath"); // context path
-        String vhost = in.readString("vhost"); // first vhost
+        final int version = in.readInt("version");// version of serialized session
+        final String id = in.readString("id"); // session id
+        final String cpath = in.readString("contextPath"); // context path
+        final String vhost = in.readString("vhost"); // first vhost
 
-        long accessed = in.readLong("accessed");// accessTime
-        long lastAccessed = in.readLong("lastAccessed"); // lastAccessTime
-        long created = in.readLong("created"); // time created
-        long cookieSet = in.readLong("cookieSet");// time cookie was set
-        String lastNode = in.readString("lastNode"); // name of last node
+        final long accessed = in.readLong("accessed");// accessTime
+        final long lastAccessed = in.readLong("lastAccessed"); // lastAccessTime
+        final long created = in.readLong("created"); // time created
+        final long cookieSet = in.readLong("cookieSet");// time cookie was set
+        final String lastNode = in.readString("lastNode"); // name of last node
         // managing
 
-        long expiry = in.readLong("expiry");
-        long maxInactiveMs = in.readLong("maxInactiveMs");
+        final long expiry = in.readLong("expiry");
+        final long maxInactiveMs = in.readLong("maxInactiveMs");
 
         InfinispanSessionData sd = new InfinispanSessionData(id, cpath, vhost, created, accessed, lastAccessed,
                 maxInactiveMs);

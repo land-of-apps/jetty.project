@@ -4,7 +4,7 @@
   <parent>
     <groupId>org.eclipse.jetty.tests</groupId>
     <artifactId>test-servlet-spec-parent</artifactId>
-    <version>9.4.29.v20200521</version>
+    <version>10.0.0-SNAPSHOT</version>
   </parent>
   <name>Jetty Tests :: Webapps :: Spec Webapp</name>
   <artifactId>test-spec-webapp</artifactId>
@@ -73,8 +73,9 @@
           <instructions>
             <Bundle-SymbolicName>org.eclipse.jetty.tests.test-spec-webapp</Bundle-SymbolicName>
             <Bundle-Description>Test Webapp for Servlet 3.1 Features</Bundle-Description>
+            <!-- TODO Add 'org.eclipse.jetty.util;version="[9.4.19,9.4.20)",' below, once 9.4.19 is released with a fix for #3726 -->
             <Import-Package>
-              javax.transaction*;version="[1.1,1.3)", com.acme;version="${parsedVersion.majorVersion}.${parsedVersion.minorVersion}.${parsedVersion.incrementalVersion}", *
+              javax.transaction*;version="[1.1,1.3)", javax.servlet*;version="[2.6,4.1)", org.eclipse.jetty*;version="[$(version;===;${parsedVersion.osgiVersion}),$(version;==+;${parsedVersion.osgiVersion}))", org.eclipse.jetty.webapp;version="[$(version;===;${parsedVersion.osgiVersion}),$(version;==+;${parsedVersion.osgiVersion}))";resolution:="optional", org.eclipse.jetty.plus.jndi;version="[$(version;===;${parsedVersion.osgiVersion}),$(version;==+;${parsedVersion.osgiVersion}))";resolution:="optional", com.acme;version="${parsedVersion.majorVersion}.${parsedVersion.minorVersion}.${parsedVersion.incrementalVersion}", *
             </Import-Package>
             <_nouses />
             <Export-Package>com.acme.test;version="${parsedVersion.majorVersion}.${parsedVersion.minorVersion}.${parsedVersion.incrementalVersion}";-noimport:=true</Export-Package>
@@ -137,17 +138,17 @@
         <artifactId>jetty-maven-plugin</artifactId>
         <version>${project.version}</version>
         <configuration>
-          <scanIntervalSeconds>10</scanIntervalSeconds>
+          <scan>10</scan>
           <useTestClasspath>true</useTestClasspath>
-          <webAppXml>${project.build.directory}/plugin-context.xml</webAppXml>
-          <webAppConfig>
+          <contextXml>${project.build.directory}/plugin-context.xml</contextXml>
+          <webApp>
             <war>src/main/webapp</war>
             <descriptor>src/main/webapp/WEB-INF/web.xml</descriptor>
             <contextPath>/test-spec</contextPath>
-            <containerIncludeJarPattern>.*/javax.servlet-[^/]*\.jar$</containerIncludeJarPattern>
+            <containerIncludeJarPattern>.*/jetty-servlet-api-[^/]*\.jar$</containerIncludeJarPattern>
             <configurationDiscovered>true</configurationDiscovered>
             <jettyEnvXml>${basedir}/src/main/webapp/WEB-INF/jetty-env.xml</jettyEnvXml>
-          </webAppConfig>
+          </webApp>
           <loginServices>
             <loginService implementation="org.eclipse.jetty.security.HashLoginService">
               <name>Test Realm</name>
@@ -189,24 +190,18 @@
 
   <dependencies>
     <dependency>
-      <groupId>javax.transaction</groupId>
-      <artifactId>javax.transaction-api</artifactId>
+      <groupId>jakarta.transaction</groupId>
+      <artifactId>jakarta.transaction-api</artifactId>
       <scope>provided</scope>
     </dependency>
     <dependency>
-      <groupId>org.eclipse.jetty</groupId>
-      <artifactId>jetty-server</artifactId>
-      <version>${project.version}</version>
+      <groupId>org.eclipse.jetty.toolchain</groupId>
+      <artifactId>jetty-servlet-api</artifactId>
       <scope>provided</scope>
     </dependency>
     <dependency>
-      <groupId>javax.servlet</groupId>
-      <artifactId>javax.servlet-api</artifactId>
-      <scope>provided</scope>
-    </dependency>
-    <dependency>
-      <groupId>javax.annotation</groupId>
-      <artifactId>javax.annotation-api</artifactId>
+      <groupId>jakarta.annotation</groupId>
+      <artifactId>jakarta.annotation-api</artifactId>
       <scope>provided</scope>
     </dependency>
     <dependency>
@@ -219,5 +214,20 @@
       <artifactId>test-container-initializer</artifactId>
       <version>${project.version}</version>
     </dependency>
+
+    <!-- deliberately old version to test classloading -->
+    <!-- TODO uncomment and update the following once 9.4.19 is released with a fix for #3726
+    <dependency>
+      <groupId>org.eclipse.jetty</groupId>
+      <artifactId>jetty-util</artifactId>
+      <version>9.4.19.vXXXXXXXX</version>
+      <exclusions>
+        <exclusion>
+          <groupId>javax.servlet</groupId>
+          <artifactId>javax.servlet-api</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+ -->
   </dependencies>
 </project>

@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.server.handler;
@@ -48,20 +48,20 @@ import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.util.BufferUtil;
 import org.eclipse.jetty.util.QuotedStringTokenizer;
 import org.eclipse.jetty.util.StringUtil;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Handler for Error pages
  * An ErrorHandler is registered with {@link ContextHandler#setErrorHandler(ErrorHandler)} or
  * {@link Server#setErrorHandler(ErrorHandler)}.
  * It is called by the HttpResponse.sendError method to write an error page via {@link #handle(String, Request, HttpServletRequest, HttpServletResponse)}
- * or via {@link #badMessageError(int, String, HttpFields)} for bad requests for which a dispatch cannot be done.
+ * or via {@link #badMessageError(int, String, HttpFields.Mutable)} for bad requests for which a dispatch cannot be done.
  */
 public class ErrorHandler extends AbstractHandler
 {
     // TODO This classes API needs to be majorly refactored/cleanup in jetty-10
-    private static final Logger LOG = Log.getLogger(ErrorHandler.class);
+    private static final Logger LOG = LoggerFactory.getLogger(ErrorHandler.class);
     public static final String ERROR_PAGE = "org.eclipse.jetty.server.error_page";
     public static final String ERROR_CONTEXT = "org.eclipse.jetty.server.error_context";
 
@@ -90,13 +90,6 @@ public class ErrorHandler extends AbstractHandler
 
     public void handle(String target, Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException
     {
-        // TODO inline this and remove method in jetty-10
-        doError(target, baseRequest, request, response);
-    }
-
-    @Override
-    public void doError(String target, Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException
-    {
         String cacheControl = getCacheControl();
         if (cacheControl != null)
             response.setHeader(HttpHeader.CACHE_CONTROL.asString(), cacheControl);
@@ -120,7 +113,7 @@ public class ErrorHandler extends AbstractHandler
                 }
                 catch (ServletException e)
                 {
-                    LOG.debug(e);
+                    LOG.debug("Unable to call error dispatcher", e);
                     if (response.isCommitted())
                         return;
                 }
@@ -213,7 +206,7 @@ public class ErrorHandler extends AbstractHandler
             }
             catch (Exception e)
             {
-                LOG.ignore(e);
+                LOG.trace("IGNORED", e);
             }
         }
         return null;
@@ -261,7 +254,7 @@ public class ErrorHandler extends AbstractHandler
                 }
                 catch (Exception e)
                 {
-                    LOG.ignore(e);
+                    LOG.trace("IGNORED", e);
                 }
             }
             if (charset == null)
@@ -334,9 +327,10 @@ public class ErrorHandler extends AbstractHandler
             }
             catch (BufferOverflowException e)
             {
-                LOG.warn("Error page too large: {} {} {}", code, message, request);
                 if (LOG.isDebugEnabled())
-                    LOG.warn(e);
+                    LOG.warn("Error page too large: {} {} {}", code, message, request, e);
+                else
+                    LOG.warn("Error page too large: {} {} {}", code, message, request);
                 baseRequest.getResponse().resetContent();
                 if (!_disableStacks)
                 {
@@ -527,10 +521,12 @@ public class ErrorHandler extends AbstractHandler
      * @param fields The header fields that will be sent with the response.
      * @return The content as a ByteBuffer, or null for no body.
      */
-    public ByteBuffer badMessageError(int status, String reason, HttpFields fields)
+    public ByteBuffer badMessageError(int status, String reason, HttpFields.Mutable fields)
     {
         if (reason == null)
             reason = HttpStatus.getMessage(status);
+        if (HttpStatus.hasNoBody(status))
+            return BufferUtil.EMPTY_BUFFER;
         fields.put(HttpHeader.CONTENT_TYPE, MimeTypes.Type.TEXT_HTML_8859_1.asString());
         return BufferUtil.toBuffer("<h1>Bad Message " + status + "</h1><pre>reason: " + reason + "</pre>");
     }

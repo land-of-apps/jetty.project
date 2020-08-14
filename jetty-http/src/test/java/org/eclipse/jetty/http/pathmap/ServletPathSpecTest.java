@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.http.pathmap;
@@ -21,7 +21,9 @@ package org.eclipse.jetty.http.pathmap;
 import org.junit.jupiter.api.Test;
 
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.not;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -187,4 +189,17 @@ public class ServletPathSpecTest
 
         assertEquals(null, spec.getPathInfo("/downloads/distribution.tar.gz"), "Spec.pathInfo");
     }
+
+    @Test
+    public void testEquals()
+    {
+        assertThat(new ServletPathSpec("*.gz"), equalTo(new ServletPathSpec("*.gz")));
+        assertThat(new ServletPathSpec("/foo"), equalTo(new ServletPathSpec("/foo")));
+        assertThat(new ServletPathSpec("/foo/bar"), equalTo(new ServletPathSpec("/foo/bar")));
+        assertThat(new ServletPathSpec("*.gz"), not(equalTo(new ServletPathSpec("*.do"))));
+        assertThat(new ServletPathSpec("/foo"), not(equalTo(new ServletPathSpec("/bar"))));
+        assertThat(new ServletPathSpec("/bar/foo"), not(equalTo(new ServletPathSpec("/foo/bar"))));
+        assertThat(new ServletPathSpec("/foo"), not(equalTo(new RegexPathSpec("/foo"))));
+    }
+
 }

@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.test;
@@ -42,11 +42,13 @@ import org.eclipse.jetty.client.HttpClientTransport;
 import org.eclipse.jetty.client.api.ContentResponse;
 import org.eclipse.jetty.client.http.HttpClientTransportOverHTTP;
 import org.eclipse.jetty.http.HttpHeader;
+import org.eclipse.jetty.http.HttpHeaderValue;
 import org.eclipse.jetty.http.HttpMethod;
 import org.eclipse.jetty.http.HttpStatus;
 import org.eclipse.jetty.io.EndPoint;
 import org.eclipse.jetty.io.ManagedSelector;
 import org.eclipse.jetty.io.SelectorManager;
+import org.eclipse.jetty.logging.StacklessLogging;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
 import org.eclipse.jetty.server.handler.DefaultHandler;
@@ -54,14 +56,13 @@ import org.eclipse.jetty.server.handler.HandlerList;
 import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.eclipse.jetty.servlet.ServletHolder;
 import org.eclipse.jetty.util.IO;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
-import org.eclipse.jetty.util.log.StacklessLogging;
 import org.eclipse.jetty.util.thread.QueuedThreadPool;
 import org.eclipse.jetty.util.thread.Scheduler;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
@@ -70,7 +71,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class FailedSelectorTest
 {
-    private static final Logger LOG = Log.getLogger(FailedSelectorTest.class);
+    private static final Logger LOG = LoggerFactory.getLogger(FailedSelectorTest.class);
     private HttpClient client;
     private Server server;
     private StacklessLogging stacklessManagedSelector;
@@ -89,8 +90,7 @@ public class FailedSelectorTest
         HttpClientTransport transport = new HttpClientTransportOverHTTP(1);
         QueuedThreadPool qtp = new QueuedThreadPool();
         qtp.setName("Client");
-        qtp.setStopTimeout(1000);
-        client = new HttpClient(transport, null);
+        client = new HttpClient(transport);
         client.setExecutor(qtp);
 
         client.setIdleTimeout(1000);
@@ -117,11 +117,7 @@ public class FailedSelectorTest
         ServletHolder closeHolder = new ServletHolder(new CloseSelectorServlet(connector));
         context.addServlet(closeHolder, "/selector/close");
 
-        HandlerList handlers = new HandlerList();
-        handlers.addHandler(context);
-        handlers.addHandler(new DefaultHandler());
-
-        server.setHandler(handlers);
+        server.setHandler(new HandlerList(context, new DefaultHandler()));
 
         server.start();
     }
@@ -185,7 +181,7 @@ public class FailedSelectorTest
 
         ContentResponse response = client.newRequest(dest)
             .method(HttpMethod.GET)
-            .header(HttpHeader.CONNECTION, "close")
+            .headers(headers -> headers.put(HttpHeader.CONNECTION, HttpHeaderValue.CLOSE))
             .send();
 
         assertThat(dest + " status", response.getStatus(), is(HttpStatus.OK_200));
@@ -198,7 +194,7 @@ public class FailedSelectorTest
         LOG.info("Requesting GET on {}", dest);
         ContentResponse response = client.newRequest(dest)
             .method(HttpMethod.GET)
-            .header(HttpHeader.CONNECTION, "close")
+            .headers(headers -> headers.put(HttpHeader.CONNECTION, HttpHeaderValue.CLOSE))
             .send();
 
         assertThat(dest + " status", response.getStatus(), is(HttpStatus.OK_200));
@@ -307,7 +303,7 @@ public class FailedSelectorTest
 
     private static class RestartSelectorTask implements Consumer<CustomManagedSelector>
     {
-        private static final Logger LOG = Log.getLogger(RestartSelectorTask.class);
+        private static final Logger LOG = LoggerFactory.getLogger(RestartSelectorTask.class);
         private final CountDownLatch latch;
 
         public RestartSelectorTask(CountDownLatch latch)
@@ -325,7 +321,7 @@ public class FailedSelectorTest
             }
             catch (Exception e)
             {
-                LOG.warn(e);
+                LOG.warn("Unable to restart selector: {}", customManagedSelector, e);
             }
             finally
             {
@@ -336,7 +332,7 @@ public class FailedSelectorTest
 
     private static class RestartServerTask implements Consumer<CustomManagedSelector>
     {
-        private static final Logger LOG = Log.getLogger(RestartServerTask.class);
+        private static final Logger LOG = LoggerFactory.getLogger(RestartServerTask.class);
         private final Server server;
         private final CountDownLatch latch;
 
@@ -356,7 +352,7 @@ public class FailedSelectorTest
             }
             catch (Exception e)
             {
-                LOG.warn(e);
+                LOG.warn("Unable to restart server {}", server, e);
             }
             finally
             {
@@ -367,7 +363,7 @@ public class FailedSelectorTest
 
     private static class ForceCloseSelectorTask implements Runnable
     {
-        private static final Logger LOG = Log.getLogger(ForceCloseSelectorTask.class);
+        private static final Logger LOG = LoggerFactory.getLogger(ForceCloseSelectorTask.class);
         private final ServerConnector connector;
 
         public ForceCloseSelectorTask(ServerConnector connector)

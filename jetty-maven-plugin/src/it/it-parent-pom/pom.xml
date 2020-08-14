@@ -20,15 +20,15 @@
         <version>2.6</version>
       </dependency>
       <dependency>
+        <groupId>org.eclipse.jetty.toolchain</groupId>
+        <artifactId>jetty-servlet-api</artifactId>
+        <version>@servlet.api.version@</version>
+        <scope>provided</scope>
+      </dependency>
+      <dependency>
         <groupId>org.apache.commons</groupId>
         <artifactId>commons-lang3</artifactId>
         <version>3.8.1</version>
-      </dependency>
-      <dependency>
-        <groupId>javax.servlet</groupId>
-        <artifactId>javax.servlet-api</artifactId>
-        <version>@javax.servlet.api.version@</version>
-        <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>org.eclipse.jetty.toolchain</groupId>
@@ -38,7 +38,7 @@
       <dependency>
         <groupId>com.fasterxml.jackson.core</groupId>
         <artifactId>jackson-databind</artifactId>
-        <version>2.9.8</version>
+        <version>@jackson-databind.version@</version>
       </dependency>
       <dependency>
         <groupId>org.slf4j</groupId>
@@ -100,8 +100,9 @@
           <artifactId>maven-compiler-plugin</artifactId>
           <version>@maven.compiler.plugin.version@</version>
           <configuration>
-            <target>1.8</target>
-            <source>1.8</source>
+            <target>11</target>
+            <source>11</source>
+            <release>11</release>
           </configuration>
         </plugin>
         <plugin>

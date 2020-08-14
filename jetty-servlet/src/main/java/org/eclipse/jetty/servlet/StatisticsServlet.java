@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.servlet;
@@ -33,18 +33,17 @@ import javax.servlet.http.HttpServletResponse;
 import org.eclipse.jetty.io.ConnectionStatistics;
 import org.eclipse.jetty.server.AbstractConnector;
 import org.eclipse.jetty.server.Connector;
-import org.eclipse.jetty.server.ConnectorStatistics;
 import org.eclipse.jetty.server.Handler;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.handler.ContextHandler;
 import org.eclipse.jetty.server.handler.StatisticsHandler;
 import org.eclipse.jetty.util.component.Container;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class StatisticsServlet extends HttpServlet
 {
-    private static final Logger LOG = Log.getLogger(StatisticsServlet.class);
+    private static final Logger LOG = LoggerFactory.getLogger(StatisticsServlet.class);
 
     boolean _restrictToLocalhost = true; // defaults to true
     private StatisticsHandler _statsHandler;
@@ -192,7 +191,7 @@ public class StatisticsServlet extends HttpServlet
 
             ConnectionStatistics connectionStats = null;
             if (connector instanceof AbstractConnector)
-                connectionStats = connector.getBean(ConnectionStatistics.class);
+                connectionStats = ((AbstractConnector)connector).getBean(ConnectionStatistics.class);
             if (connectionStats != null)
             {
                 sb.append("      <statsOn>true</statsOn>\n");
@@ -209,26 +208,7 @@ public class StatisticsServlet extends HttpServlet
             }
             else
             {
-                ConnectorStatistics connectorStats = null;
-                if (connector instanceof AbstractConnector)
-                    connectorStats = connector.getBean(ConnectorStatistics.class);
-                if (connectorStats != null)
-                {
-                    sb.append("      <statsOn>true</statsOn>\n");
-                    sb.append("      <connections>").append(connectorStats.getConnections()).append("</connections>\n");
-                    sb.append("      <connectionsOpen>").append(connectorStats.getConnectionsOpen()).append("</connectionsOpen>\n");
-                    sb.append("      <connectionsOpenMax>").append(connectorStats.getConnectionsOpenMax()).append("</connectionsOpenMax>\n");
-                    sb.append("      <connectionsDurationMean>").append(connectorStats.getConnectionDurationMean()).append("</connectionsDurationMean>\n");
-                    sb.append("      <connectionsDurationMax>").append(connectorStats.getConnectionDurationMax()).append("</connectionsDurationMax>\n");
-                    sb.append("      <connectionsDurationStdDev>").append(connectorStats.getConnectionDurationStdDev()).append("</connectionsDurationStdDev>\n");
-                    sb.append("      <messagesIn>").append(connectorStats.getMessagesIn()).append("</messagesIn>\n");
-                    sb.append("      <messagesOut>").append(connectorStats.getMessagesIn()).append("</messagesOut>\n");
-                    sb.append("      <elapsedMs>").append(connectorStats.getStartedMillis()).append("</elapsedMs>\n");
-                }
-                else
-                {
-                    sb.append("      <statsOn>false</statsOn>\n");
-                }
+                sb.append("      <statsOn>false</statsOn>\n");
             }
             sb.append("    </connector>\n");
         }
@@ -264,7 +244,7 @@ public class StatisticsServlet extends HttpServlet
 
             ConnectionStatistics connectionStats = null;
             if (connector instanceof Container)
-                connectionStats = connector.getBean(ConnectionStatistics.class);
+                connectionStats = ((Container)connector).getBean(ConnectionStatistics.class);
             if (connectionStats != null)
             {
                 sb.append("Total connections: ").append(connectionStats.getConnectionsTotal()).append("<br />\n");
@@ -280,25 +260,7 @@ public class StatisticsServlet extends HttpServlet
             }
             else
             {
-                ConnectorStatistics connectorStats = null;
-                if (connector instanceof AbstractConnector)
-                    connectorStats = connector.getBean(ConnectorStatistics.class);
-                if (connectorStats != null)
-                {
-                    sb.append("Statistics gathering started ").append(connectorStats.getStartedMillis()).append("ms ago").append("<br />\n");
-                    sb.append("Total connections: ").append(connectorStats.getConnections()).append("<br />\n");
-                    sb.append("Current connections open: ").append(connectorStats.getConnectionsOpen()).append("<br />\n");
-                    sb.append("Max concurrent connections open: ").append(connectorStats.getConnectionsOpenMax()).append("<br />\n");
-                    sb.append("Mean connection duration: ").append(connectorStats.getConnectionDurationMean()).append("<br />\n");
-                    sb.append("Max connection duration: ").append(connectorStats.getConnectionDurationMax()).append("<br />\n");
-                    sb.append("Connection duration standard deviation: ").append(connectorStats.getConnectionDurationStdDev()).append("<br />\n");
-                    sb.append("Total messages in: ").append(connectorStats.getMessagesIn()).append("<br />\n");
-                    sb.append("Total messages out: ").append(connectorStats.getMessagesOut()).append("<br />\n");
-                }
-                else
-                {
-                    sb.append("Statistics gathering off.\n");
-                }
+                sb.append("Statistics gathering off.\n");
             }
         }
 

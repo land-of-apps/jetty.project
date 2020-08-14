@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.deploy.providers;
@@ -107,7 +107,11 @@ public class WebAppProvider extends ScanningAppProvider
                     return false;
 
                 //is it a sccs dir?
-                return !"cvs".equals(lowername) && !"cvsroot".equals(lowername);// OK to deploy it then
+                if ("cvs".equals(lowername) || "cvsroot".equals(lowername))
+                    return false;
+
+                // OK to deploy it then
+                return true;
             }
 
             // else is it a war file
@@ -118,7 +122,10 @@ public class WebAppProvider extends ScanningAppProvider
             }
 
             // else is it a context XML file 
-            return lowername.endsWith(".xml");
+            if (lowername.endsWith(".xml"))
+                return true;
+
+            return false;
         }
     }
 
@@ -204,6 +211,7 @@ public class WebAppProvider extends ScanningAppProvider
      */
     public void setConfigurationManager(ConfigurationManager configurationManager)
     {
+        updateBean(_configurationManager, configurationManager);
         _configurationManager = configurationManager;
     }
 
@@ -212,7 +220,7 @@ public class WebAppProvider extends ScanningAppProvider
      */
     public void setConfigurationClasses(String[] configurations)
     {
-        _configurationClasses = configurations == null ? null : configurations.clone();
+        _configurationClasses = configurations == null ? null : (String[])configurations.clone();
     }
 
     @ManagedAttribute("configuration classes for webapps to be processed through")
@@ -277,7 +285,7 @@ public class WebAppProvider extends ScanningAppProvider
 
         if (resource.exists() && FileID.isXmlFile(file))
         {
-            XmlConfiguration xmlc = new XmlConfiguration(resource.getURI().toURL())
+            XmlConfiguration xmlc = new XmlConfiguration(resource)
             {
                 @Override
                 public void initializeDefaults(Object context)
@@ -341,7 +349,7 @@ public class WebAppProvider extends ScanningAppProvider
             context = "/" + context;
         }
 
-        webAppContext.setContextPath(context);
+        webAppContext.setDefaultContextPath(context);
         webAppContext.setWar(file.getAbsolutePath());
         initializeWebAppContextDefaults(webAppContext);
 

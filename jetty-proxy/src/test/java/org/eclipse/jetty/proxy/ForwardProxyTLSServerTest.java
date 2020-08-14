@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.proxy;
@@ -23,6 +23,7 @@ import java.net.ConnectException;
 import java.net.Socket;
 import java.net.URI;
 import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.security.KeyStore;
 import java.security.Principal;
 import java.util.concurrent.CountDownLatch;
@@ -44,14 +45,16 @@ import org.eclipse.jetty.client.Origin;
 import org.eclipse.jetty.client.api.Connection;
 import org.eclipse.jetty.client.api.ContentResponse;
 import org.eclipse.jetty.client.api.Destination;
+import org.eclipse.jetty.client.http.HttpClientTransportOverHTTP;
 import org.eclipse.jetty.client.util.BasicAuthentication;
 import org.eclipse.jetty.client.util.FutureResponseListener;
-import org.eclipse.jetty.client.util.StringContentProvider;
+import org.eclipse.jetty.client.util.StringRequestContent;
 import org.eclipse.jetty.http.HttpHeader;
 import org.eclipse.jetty.http.HttpMethod;
 import org.eclipse.jetty.http.HttpScheme;
 import org.eclipse.jetty.http.HttpStatus;
 import org.eclipse.jetty.http.MimeTypes;
+import org.eclipse.jetty.io.ClientConnector;
 import org.eclipse.jetty.server.Handler;
 import org.eclipse.jetty.server.HttpConnection;
 import org.eclipse.jetty.server.Request;
@@ -131,6 +134,14 @@ public class ForwardProxyTLSServerTest
         return new HttpProxy(new Origin.Address("localhost", proxyConnector.getLocalPort()), proxySslContextFactory != null);
     }
 
+    private HttpClient newHttpClient()
+    {
+        ClientConnector clientConnector = new ClientConnector();
+        clientConnector.setSelectors(1);
+        clientConnector.setSslContextFactory(newClientSslContextFactory());
+        return new HttpClient(new HttpClientTransportOverHTTP(clientConnector));
+    }
+
     private static SslContextFactory.Server newServerSslContextFactory()
     {
         SslContextFactory.Server sslContextFactory = new SslContextFactory.Server();
@@ -186,7 +197,7 @@ public class ForwardProxyTLSServerTest
         startTLSServer(new ServerHandler());
         startProxy(proxyTLS);
 
-        HttpClient httpClient = new HttpClient(newClientSslContextFactory());
+        HttpClient httpClient = newHttpClient();
         httpClient.getProxyConfiguration().getProxies().add(newHttpProxy());
         httpClient.start();
 
@@ -200,7 +211,7 @@ public class ForwardProxyTLSServerTest
             ContentResponse response = httpClient.newRequest(host, serverConnector.getLocalPort())
                 .scheme(HttpScheme.HTTPS.asString())
                 .method(HttpMethod.GET)
-                .path("/echo?body=" + URLEncoder.encode(body, "UTF-8"))
+                .path("/echo?body=" + URLEncoder.encode(body, StandardCharsets.UTF_8))
                 .timeout(5, TimeUnit.SECONDS)
                 .send();
 
@@ -221,7 +232,7 @@ public class ForwardProxyTLSServerTest
         startTLSServer(new ServerHandler());
         startProxy(proxyTLS);
 
-        HttpClient httpClient = new HttpClient(newClientSslContextFactory());
+        HttpClient httpClient = newHttpClient();
         httpClient.getProxyConfiguration().getProxies().add(newHttpProxy());
         httpClient.start();
 
@@ -231,7 +242,7 @@ public class ForwardProxyTLSServerTest
             ContentResponse response1 = httpClient.newRequest("localhost", serverConnector.getLocalPort())
                 .scheme(HttpScheme.HTTPS.asString())
                 .method(HttpMethod.GET)
-                .path("/echo?body=" + URLEncoder.encode(body, "UTF-8"))
+                .path("/echo?body=" + URLEncoder.encode(body, StandardCharsets.UTF_8))
                 .timeout(5, TimeUnit.SECONDS)
                 .send();
 
@@ -240,13 +251,14 @@ public class ForwardProxyTLSServerTest
             assertEquals(body, content);
 
             content = "body=" + body;
+            int contentLength = content.length();
             ContentResponse response2 = httpClient.newRequest("localhost", serverConnector.getLocalPort())
                 .scheme(HttpScheme.HTTPS.asString())
                 .method(HttpMethod.POST)
                 .path("/echo")
-                .header(HttpHeader.CONTENT_TYPE, MimeTypes.Type.FORM_ENCODED.asString())
-                .header(HttpHeader.CONTENT_LENGTH, String.valueOf(content.length()))
-                .content(new StringContentProvider(content))
+                .headers(headers -> headers.put(HttpHeader.CONTENT_TYPE, MimeTypes.Type.FORM_ENCODED.asString()))
+                .headers(headers -> headers.put(HttpHeader.CONTENT_LENGTH, String.valueOf(contentLength)))
+                .body(new StringRequestContent(content))
                 .timeout(5, TimeUnit.SECONDS)
                 .send();
 
@@ -267,7 +279,7 @@ public class ForwardProxyTLSServerTest
         startTLSServer(new ServerHandler());
         startProxy(proxyTLS);
 
-        HttpClient httpClient = new HttpClient(newClientSslContextFactory());
+        HttpClient httpClient = newHttpClient();
         httpClient.getProxyConfiguration().getProxies().add(newHttpProxy());
         httpClient.start();
 
@@ -279,11 +291,11 @@ public class ForwardProxyTLSServerTest
             ContentResponse response1 = httpClient.newRequest("localhost", serverConnector.getLocalPort())
                 .scheme(HttpScheme.HTTPS.asString())
                 .method(HttpMethod.GET)
-                .path("/echo?body=" + URLEncoder.encode(content1, "UTF-8"))
+                .path("/echo?body=" + URLEncoder.encode(content1, StandardCharsets.UTF_8))
                 .onRequestCommit(request ->
                 {
-                    Destination destination = httpClient.getDestination(HttpScheme.HTTPS.asString(), "localhost", serverConnector.getLocalPort());
-                    destination.newConnection(new Promise.Adapter<Connection>()
+                    Destination destination = httpClient.resolveDestination(request);
+                    destination.newConnection(new Promise.Adapter<>()
                     {
                         @Override
                         public void succeeded(Connection result)
@@ -307,9 +319,9 @@ public class ForwardProxyTLSServerTest
                 .scheme(HttpScheme.HTTPS.asString())
                 .method(HttpMethod.POST)
                 .path("/echo")
-                .header(HttpHeader.CONTENT_TYPE, MimeTypes.Type.FORM_ENCODED.asString())
-                .header(HttpHeader.CONTENT_LENGTH, String.valueOf(body2.length()))
-                .content(new StringContentProvider(body2));
+                .headers(headers -> headers.put(HttpHeader.CONTENT_TYPE, MimeTypes.Type.FORM_ENCODED.asString()))
+                .headers(headers -> headers.put(HttpHeader.CONTENT_LENGTH, String.valueOf(body2.length())))
+                .body(new StringRequestContent(body2));
 
             // Make sure the second connection can send the exchange via the tunnel
             FutureResponseListener listener2 = new FutureResponseListener(request2);
@@ -352,7 +364,7 @@ public class ForwardProxyTLSServerTest
             }
         });
 
-        HttpClient httpClient = new HttpClient(newClientSslContextFactory());
+        HttpClient httpClient = newHttpClient();
         httpClient.getProxyConfiguration().getProxies().add(newHttpProxy());
         // Short idle timeout for HttpClient.
         httpClient.setIdleTimeout(idleTimeout);
@@ -365,7 +377,7 @@ public class ForwardProxyTLSServerTest
             ContentResponse response = httpClient.newRequest(host, serverConnector.getLocalPort())
                 .scheme(HttpScheme.HTTPS.asString())
                 .method(HttpMethod.GET)
-                .path("/echo?body=" + URLEncoder.encode(body, "UTF-8"))
+                .path("/echo?body=" + URLEncoder.encode(body, StandardCharsets.UTF_8))
                 // Long idle timeout for the request.
                 .idleTimeout(10 * idleTimeout, TimeUnit.MILLISECONDS)
                 .timeout(5, TimeUnit.SECONDS)
@@ -390,7 +402,7 @@ public class ForwardProxyTLSServerTest
         int proxyPort = proxyConnector.getLocalPort();
         stopProxy();
 
-        HttpClient httpClient = new HttpClient(newClientSslContextFactory());
+        HttpClient httpClient = newHttpClient();
         httpClient.getProxyConfiguration().getProxies().add(new HttpProxy(new Origin.Address("localhost", proxyPort), proxySslContextFactory != null));
         httpClient.start();
 
@@ -400,7 +412,7 @@ public class ForwardProxyTLSServerTest
             httpClient.newRequest("localhost", serverConnector.getLocalPort())
                 .scheme(HttpScheme.HTTPS.asString())
                 .method(HttpMethod.GET)
-                .path("/echo?body=" + URLEncoder.encode(body, "UTF-8"))
+                .path("/echo?body=" + URLEncoder.encode(body, StandardCharsets.UTF_8))
                 .timeout(5, TimeUnit.SECONDS)
                 .send();
         });
@@ -418,7 +430,7 @@ public class ForwardProxyTLSServerTest
         stopServer();
         startProxy(proxyTLS);
 
-        HttpClient httpClient = new HttpClient(newClientSslContextFactory());
+        HttpClient httpClient = newHttpClient();
         httpClient.getProxyConfiguration().getProxies().add(newHttpProxy());
         httpClient.start();
 
@@ -428,7 +440,7 @@ public class ForwardProxyTLSServerTest
             httpClient.newRequest("localhost", serverPort)
                 .scheme(HttpScheme.HTTPS.asString())
                 .method(HttpMethod.GET)
-                .path("/echo?body=" + URLEncoder.encode(body, "UTF-8"))
+                .path("/echo?body=" + URLEncoder.encode(body, StandardCharsets.UTF_8))
                 .timeout(5, TimeUnit.SECONDS)
                 .send();
         });
@@ -450,7 +462,7 @@ public class ForwardProxyTLSServerTest
             }
         });
 
-        HttpClient httpClient = new HttpClient(newClientSslContextFactory());
+        HttpClient httpClient = newHttpClient();
         httpClient.getProxyConfiguration().getProxies().add(newHttpProxy());
         httpClient.start();
 
@@ -569,7 +581,7 @@ public class ForwardProxyTLSServerTest
         startTLSServer(new ServerHandler());
         startProxy(proxyTLS, connectHandler);
 
-        HttpClient httpClient = new HttpClient(newClientSslContextFactory());
+        HttpClient httpClient = newHttpClient();
         HttpProxy httpProxy = newHttpProxy();
         if (includeAddress)
             httpProxy.getIncludedAddresses().add("localhost:" + serverConnector.getLocalPort());
@@ -585,7 +597,7 @@ public class ForwardProxyTLSServerTest
             ContentResponse response = httpClient.newRequest(host, serverConnector.getLocalPort())
                 .scheme(HttpScheme.HTTPS.asString())
                 .method(HttpMethod.GET)
-                .path("/echo?body=" + URLEncoder.encode(body, "UTF-8"))
+                .path("/echo?body=" + URLEncoder.encode(body, StandardCharsets.UTF_8))
                 .timeout(5, TimeUnit.SECONDS)
                 .send();
 
@@ -665,7 +677,10 @@ public class ForwardProxyTLSServerTest
         clientSslContextFactory.setKeyStorePath(MavenTestingUtils.getTestResourceFile("client_keystore.p12").getAbsolutePath());
         clientSslContextFactory.setKeyStorePassword("storepwd");
         clientSslContextFactory.setEndpointIdentificationAlgorithm(null);
-        HttpClient httpClient = new HttpClient(clientSslContextFactory);
+        ClientConnector clientConnector = new ClientConnector();
+        clientConnector.setSelectors(1);
+        clientConnector.setSslContextFactory(clientSslContextFactory);
+        HttpClient httpClient = new HttpClient(new HttpClientTransportOverHTTP(clientConnector));
         httpClient.getProxyConfiguration().getProxies().add(newHttpProxy());
         httpClient.start();
 
@@ -675,7 +690,7 @@ public class ForwardProxyTLSServerTest
             ContentResponse response = httpClient.newRequest("localhost", serverConnector.getLocalPort())
                 .scheme(HttpScheme.HTTPS.asString())
                 .method(HttpMethod.GET)
-                .path("/echo?body=" + URLEncoder.encode(body, "UTF-8"))
+                .path("/echo?body=" + URLEncoder.encode(body, StandardCharsets.UTF_8))
                 .timeout(5, TimeUnit.SECONDS)
                 .send();
 
@@ -717,7 +732,10 @@ public class ForwardProxyTLSServerTest
         clientTLS.setKeyStorePath(MavenTestingUtils.getTestResourceFile("client_server_keystore.p12").getAbsolutePath());
         clientTLS.setKeyStorePassword("storepwd");
         clientTLS.setEndpointIdentificationAlgorithm(null);
-        HttpClient httpClient = new HttpClient(clientTLS);
+        ClientConnector clientConnector = new ClientConnector();
+        clientConnector.setSelectors(1);
+        clientConnector.setSslContextFactory(clientTLS);
+        HttpClient httpClient = new HttpClient(new HttpClientTransportOverHTTP(clientConnector));
 
         SslContextFactory.Client proxyClientTLS = new SslContextFactory.Client()
         {
@@ -743,7 +761,7 @@ public class ForwardProxyTLSServerTest
             ContentResponse response = httpClient.newRequest("localhost", serverConnector.getLocalPort())
                 .scheme(HttpScheme.HTTPS.asString())
                 .method(HttpMethod.GET)
-                .path("/echo?body=" + URLEncoder.encode(body, "UTF-8"))
+                .path("/echo?body=" + URLEncoder.encode(body, StandardCharsets.UTF_8))
                 .timeout(5, TimeUnit.SECONDS)
                 .send();
 
@@ -774,7 +792,7 @@ public class ForwardProxyTLSServerTest
             assumeTrue(false, "Environment not able to connect to proxy service");
         }
 
-        HttpClient httpClient = new HttpClient(newClientSslContextFactory());
+        HttpClient httpClient = newHttpClient();
         httpClient.getProxyConfiguration().getProxies().add(new HttpProxy(proxyHost, proxyPort));
         httpClient.start();
 

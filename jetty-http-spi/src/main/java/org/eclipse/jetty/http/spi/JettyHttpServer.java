@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.http.spi;
@@ -36,17 +36,16 @@ import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
 import org.eclipse.jetty.server.handler.ContextHandler;
 import org.eclipse.jetty.server.handler.ContextHandlerCollection;
-import org.eclipse.jetty.server.handler.HandlerCollection;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
 import org.eclipse.jetty.util.thread.ThreadPool;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Jetty implementation of {@link com.sun.net.httpserver.HttpServer}.
  */
 public class JettyHttpServer extends com.sun.net.httpserver.HttpServer
 {
-    private static final Logger LOG = Log.getLogger(JettyHttpServer.class);
+    private static final Logger LOG = LoggerFactory.getLogger(JettyHttpServer.class);
 
     private final HttpConfiguration _httpConfiguration;
 
@@ -126,6 +125,8 @@ public class JettyHttpServer extends com.sun.net.httpserver.HttpServer
     @Override
     public InetSocketAddress getAddress()
     {
+        if (_addr.getPort() == 0 && _server.isStarted())
+            return new InetSocketAddress(_addr.getHostString(), _server.getBean(NetworkConnector.class).getLocalPort());
         return _addr;
     }
 
@@ -222,7 +223,7 @@ public class JettyHttpServer extends com.sun.net.httpserver.HttpServer
             }
             catch (Exception ex)
             {
-                LOG.warn(ex);
+                LOG.warn("Unable to stop connector {}", connector, ex);
             }
             _server.removeConnector(connector);
         }
@@ -237,14 +238,13 @@ public class JettyHttpServer extends com.sun.net.httpserver.HttpServer
         JettyHttpContext context = new JettyHttpContext(this, path, httpHandler);
         HttpSpiContextHandler jettyContextHandler = context.getJettyContextHandler();
 
-        ContextHandlerCollection chc = findContextHandlerCollection(_server.getHandlers());
+        ContextHandlerCollection chc = _server.getChildHandlerByClass(ContextHandlerCollection.class);
+
         if (chc == null)
             throw new RuntimeException("could not find ContextHandlerCollection, you must configure one");
 
         chc.addHandler(jettyContextHandler);
-        _contexts.put(path, context);
-
-        if (!jettyContextHandler.isStarted())
+        if (chc.isStarted())
         {
             try
             {
@@ -252,34 +252,17 @@ public class JettyHttpServer extends com.sun.net.httpserver.HttpServer
             }
             catch (Exception e)
             {
-                throw new RuntimeException(e.getMessage(), e);
+                throw new RuntimeException(e);
             }
         }
-
+        _contexts.put(path, context);
         return context;
     }
 
-    private ContextHandlerCollection findContextHandlerCollection(Handler[] handlers)
+    @Override
+    public HttpContext createContext(String path)
     {
-        if (handlers == null)
-            return null;
-
-        for (Handler handler : handlers)
-        {
-            if (handler instanceof ContextHandlerCollection)
-            {
-                return (ContextHandlerCollection)handler;
-            }
-
-            if (handler instanceof HandlerCollection)
-            {
-                HandlerCollection hc = (HandlerCollection)handler;
-                ContextHandlerCollection chc = findContextHandlerCollection(hc.getHandlers());
-                if (chc != null)
-                    return chc;
-            }
-        }
-        return null;
+        return createContext(path, null);
     }
 
     private void checkIfContextIsFree(String path)
@@ -308,18 +291,23 @@ public class JettyHttpServer extends com.sun.net.httpserver.HttpServer
     }
 
     @Override
-    public HttpContext createContext(String path)
-    {
-        return createContext(path, null);
-    }
-
-    @Override
     public void removeContext(String path) throws IllegalArgumentException
     {
         JettyHttpContext context = _contexts.remove(path);
         if (context == null)
             return;
-        _server.removeBean(context.getJettyContextHandler());
+        HttpSpiContextHandler handler = context.getJettyContextHandler();
+
+        ContextHandlerCollection chc = _server.getChildHandlerByClass(ContextHandlerCollection.class);
+        try
+        {
+            handler.stop();
+        }
+        catch (Exception e)
+        {
+            throw new RuntimeException(e);
+        }
+        chc.removeHandler(handler);
     }
 
     @Override

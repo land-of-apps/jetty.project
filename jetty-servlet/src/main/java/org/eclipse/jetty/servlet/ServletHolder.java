@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.servlet;
@@ -49,7 +49,6 @@ import javax.servlet.http.HttpServletResponse;
 
 import org.eclipse.jetty.security.IdentityService;
 import org.eclipse.jetty.security.RunAsToken;
-import org.eclipse.jetty.server.MultiPartCleanerListener;
 import org.eclipse.jetty.server.Request;
 import org.eclipse.jetty.server.UserIdentity;
 import org.eclipse.jetty.server.handler.ContextHandler;
@@ -59,8 +58,9 @@ import org.eclipse.jetty.util.annotation.ManagedAttribute;
 import org.eclipse.jetty.util.annotation.ManagedObject;
 import org.eclipse.jetty.util.component.Dumpable;
 import org.eclipse.jetty.util.component.DumpableCollection;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
+import org.eclipse.jetty.util.thread.AutoLock;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Servlet Instance and Context Holder.
@@ -73,7 +73,7 @@ import org.eclipse.jetty.util.log.Logger;
 @ManagedObject("Servlet Holder")
 public class ServletHolder extends Holder<Servlet> implements UserIdentity.Scope, Comparable<ServletHolder>
 {
-    private static final Logger LOG = Log.getLogger(ServletHolder.class);
+    private static final Logger LOG = LoggerFactory.getLogger(ServletHolder.class);
     private int _initOrder = -1;
     private boolean _initOnStartup = false;
     private Map<String, String> _roleMap;
@@ -173,11 +173,10 @@ public class ServletHolder extends Holder<Servlet> implements UserIdentity.Scope
         return null;
     }
 
-    public synchronized void setServlet(Servlet servlet)
+    public void setServlet(Servlet servlet)
     {
         if (servlet == null || servlet instanceof SingleThreadModel)
-            throw new IllegalArgumentException();
-
+            throw new IllegalArgumentException(SingleThreadModel.class.getName() + " has been deprecated since Servlet API 2.4");
         setInstance(servlet);
     }
 
@@ -255,11 +254,14 @@ public class ServletHolder extends Holder<Servlet> implements UserIdentity.Scope
      * @param name The role name as used by the servlet
      * @param link The role name as used by the container.
      */
-    public synchronized void setUserRoleLink(String name, String link)
+    public void setUserRoleLink(String name, String link)
     {
-        if (_roleMap == null)
-            _roleMap = new HashMap<>();
-        _roleMap.put(name, link);
+        try (AutoLock l = lock())
+        {
+            if (_roleMap == null)
+                _roleMap = new HashMap<>();
+            _roleMap.put(name, link);
+        }
     }
 
     /**
@@ -271,10 +273,13 @@ public class ServletHolder extends Holder<Servlet> implements UserIdentity.Scope
      */
     public String getUserRoleLink(String name)
     {
-        if (_roleMap == null)
-            return name;
-        String link = _roleMap.get(name);
-        return (link == null) ? name : link;
+        try (AutoLock l = lock())
+        {
+            if (_roleMap == null)
+                return name;
+            String link = _roleMap.get(name);
+            return (link == null) ? name : link;
+        }
     }
 
     /**
@@ -365,7 +370,7 @@ public class ServletHolder extends Holder<Servlet> implements UserIdentity.Scope
             makeUnavailable(ex);
             if (getServletHandler().isStartWithUnavailable())
             {
-                LOG.ignore(ex);
+                LOG.trace("IGNORED", ex);
                 return;
             }
             else
@@ -382,7 +387,7 @@ public class ServletHolder extends Holder<Servlet> implements UserIdentity.Scope
             makeUnavailable(ex);
             if (getServletHandler().isStartWithUnavailable())
             {
-                LOG.ignore(ex);
+                LOG.trace("IGNORED", ex);
                 return;
             }
             else
@@ -394,7 +399,7 @@ public class ServletHolder extends Holder<Servlet> implements UserIdentity.Scope
 
         _config = new Config();
 
-        synchronized (this)
+        try (AutoLock l = lock())
         {
             if (getHeldClass() != null && javax.servlet.SingleThreadModel.class.isAssignableFrom(getHeldClass()))
                 _servlet = new SingleThreadedWrapper();
@@ -405,7 +410,7 @@ public class ServletHolder extends Holder<Servlet> implements UserIdentity.Scope
     public void initialize()
         throws Exception
     {
-        synchronized (this)
+        try (AutoLock l = lock())
         {
             if (_servlet == null && (_initOnStartup || isInstance()))
             {
@@ -419,7 +424,7 @@ public class ServletHolder extends Holder<Servlet> implements UserIdentity.Scope
     public void doStop()
         throws Exception
     {
-        synchronized (this)
+        try (AutoLock l = lock())
         {
             Servlet servlet = _servlet;
             if (servlet != null)
@@ -431,7 +436,7 @@ public class ServletHolder extends Holder<Servlet> implements UserIdentity.Scope
                 }
                 catch (Exception e)
                 {
-                    LOG.warn(e);
+                    LOG.warn("Unable to destroy servlet {}", servlet, e);
                 }
             }
             _config = null;
@@ -465,7 +470,7 @@ public class ServletHolder extends Holder<Servlet> implements UserIdentity.Scope
     public Servlet getServlet()
         throws ServletException
     {
-        synchronized (this)
+        try (AutoLock l = lock())
         {
             if (_servlet == null && isRunning())
             {
@@ -526,7 +531,7 @@ public class ServletHolder extends Holder<Servlet> implements UserIdentity.Scope
 
     private Servlet makeUnavailable(UnavailableException e)
     {
-        synchronized (this)
+        try (AutoLock l = lock())
         {
             _servlet = new UnavailableServlet(e, _servlet);
             return _servlet;
@@ -554,10 +559,10 @@ public class ServletHolder extends Holder<Servlet> implements UserIdentity.Scope
         }
     }
 
-    private synchronized void initServlet()
+    private void initServlet()
         throws ServletException
     {
-        try
+        try (AutoLock l = lock())
         {
             if (_servlet == null)
                 _servlet = getInstance();
@@ -595,8 +600,6 @@ public class ServletHolder extends Holder<Servlet> implements UserIdentity.Scope
             else if (_forcedPath != null)
                 detectJspContainer();
 
-            initMultiPart();
-
             if (LOG.isDebugEnabled())
                 LOG.debug("Servlet.init {} for {}", _servlet, getName());
             _servlet.init(_config);
@@ -605,7 +608,7 @@ public class ServletHolder extends Holder<Servlet> implements UserIdentity.Scope
         {
             makeUnavailable(e);
             if (getServletHandler().isStartWithUnavailable())
-                LOG.warn(e);
+                LOG.warn("{} is marked as Unavailable", this, e);
             else
                 throw e;
         }
@@ -655,47 +658,18 @@ public class ServletHolder extends Holder<Servlet> implements UserIdentity.Scope
             scratch.mkdir();
     }
 
-    /**
-     * Register a ServletRequestListener that will ensure tmp multipart
-     * files are deleted when the request goes out of scope.
-     *
-     * @throws Exception if unable to init the multipart
-     */
-    protected void initMultiPart() throws Exception
-    {
-        //if this servlet can handle multipart requests, ensure tmp files will be
-        //cleaned up correctly
-        if (((Registration)getRegistration()).getMultipartConfig() != null)
-        {
-            if (LOG.isDebugEnabled())
-                LOG.debug("multipart cleanup listener added for {}", this);
-
-            //Register a listener to delete tmp files that are created as a result of this
-            //servlet calling Request.getPart() or Request.getParts()
-            ContextHandler ch = ContextHandler.getContextHandler(getServletHandler().getServletContext());
-            if (!Arrays.asList(ch.getEventListeners()).contains(MultiPartCleanerListener.INSTANCE))
-                ch.addEventListener(MultiPartCleanerListener.INSTANCE);
-        }
-    }
-
     @Override
     public ContextHandler getContextHandler()
     {
         return ContextHandler.getContextHandler(_config.getServletContext());
     }
 
-    /**
-     * @see org.eclipse.jetty.server.UserIdentity.Scope#getContextPath()
-     */
     @Override
     public String getContextPath()
     {
         return _config.getServletContext().getContextPath();
     }
 
-    /**
-     * @see org.eclipse.jetty.server.UserIdentity.Scope#getRoleRefMap()
-     */
     @Override
     public Map<String, String> getRoleRefMap()
     {
@@ -728,14 +702,7 @@ public class ServletHolder extends Holder<Servlet> implements UserIdentity.Scope
         getServlet();
         MultipartConfigElement mpce = ((Registration)getRegistration()).getMultipartConfig();
         if (mpce != null)
-            baseRequest.setAttribute(Request.MULTIPART_CONFIG_ELEMENT, mpce);
-    }
-
-    @Deprecated
-    public Servlet ensureInstance()
-        throws ServletException
-    {
-        return getServlet();
+            baseRequest.setAttribute(Request.__MULTIPART_CONFIG_ELEMENT, mpce);
     }
 
     /**
@@ -839,8 +806,7 @@ public class ServletHolder extends Holder<Servlet> implements UserIdentity.Scope
             String tmp = StringUtil.replace(jsp, '.', '_');
             if (LOG.isDebugEnabled())
             {
-                LOG.warn("JspUtil.makeJavaIdentifier failed for jsp " + jsp + " using " + tmp + " instead");
-                LOG.warn(e);
+                LOG.warn("JspUtil.makeJavaIdentifier failed for jsp {} using {} instead", jsp, tmp, e);
             }
             return tmp;
         }
@@ -876,8 +842,7 @@ public class ServletHolder extends Holder<Servlet> implements UserIdentity.Scope
             tmp = (".".equals(tmp) ? "" : tmp);
             if (LOG.isDebugEnabled())
             {
-                LOG.warn("JspUtil.makeJavaPackage failed for " + jsp + " using " + tmp + " instead");
-                LOG.warn(e);
+                LOG.warn("JspUtil.makeJavaPackage failed for {} using {} instead", jsp, tmp, e);
             }
             return tmp;
         }
@@ -891,7 +856,7 @@ public class ServletHolder extends Holder<Servlet> implements UserIdentity.Scope
         String jspPackageName = null;
 
         if (getServletHandler() != null && getServletHandler().getServletContext() != null)
-            jspPackageName = getServletHandler().getServletContext().getInitParameter(JSP_GENERATED_PACKAGE_NAME);
+            jspPackageName = (String)getServletHandler().getServletContext().getInitParameter(JSP_GENERATED_PACKAGE_NAME);
 
         if (jspPackageName == null)
             jspPackageName = "org.apache.jsp";
@@ -959,7 +924,7 @@ public class ServletHolder extends Holder<Servlet> implements UserIdentity.Scope
                 if (mapping != null)
                 {
                     //if the servlet mapping was from a default descriptor, then allow it to be overridden
-                    if (!mapping.isDefault())
+                    if (!mapping.isFromDefaultDescriptor())
                     {
                         if (clash == null)
                             clash = new HashSet<>();
@@ -1056,17 +1021,18 @@ public class ServletHolder extends Holder<Servlet> implements UserIdentity.Scope
         @Override
         public void destroy()
         {
-            synchronized (this)
+            try (AutoLock l = lock())
             {
                 while (_stack.size() > 0)
                 {
+                    Servlet servlet = _stack.pop();
                     try
                     {
-                        (_stack.pop()).destroy();
+                        servlet.destroy();
                     }
                     catch (Exception e)
                     {
-                        LOG.warn(e);
+                        LOG.warn("Unable to destroy servlet {}", servlet, e);
                     }
                 }
             }
@@ -1087,7 +1053,7 @@ public class ServletHolder extends Holder<Servlet> implements UserIdentity.Scope
         @Override
         public void init(ServletConfig config) throws ServletException
         {
-            synchronized (this)
+            try (AutoLock l = lock())
             {
                 if (_stack.size() == 0)
                 {
@@ -1113,10 +1079,10 @@ public class ServletHolder extends Holder<Servlet> implements UserIdentity.Scope
         public void service(ServletRequest req, ServletResponse res) throws ServletException, IOException
         {
             Servlet s;
-            synchronized (this)
+            try (AutoLock l = lock())
             {
                 if (_stack.size() > 0)
-                    s = _stack.pop();
+                    s = (Servlet)_stack.pop();
                 else
                 {
                     try
@@ -1141,7 +1107,7 @@ public class ServletHolder extends Holder<Servlet> implements UserIdentity.Scope
             }
             finally
             {
-                synchronized (this)
+                try (AutoLock l = lock())
                 {
                     _stack.push(s);
                 }
@@ -1157,29 +1123,24 @@ public class ServletHolder extends Holder<Servlet> implements UserIdentity.Scope
      * @throws NoSuchMethodException if creating new instance resulted in error
      * @throws InvocationTargetException If creating new instance throws an exception
      */
-    protected Servlet newInstance() throws ServletException, IllegalAccessException, InstantiationException,
-        NoSuchMethodException, InvocationTargetException
+    protected Servlet newInstance() throws Exception
     {
-        try
-        {
-            ServletContext ctx = getServletHandler().getServletContext();
-            if (ctx != null)
-                return ctx.createServlet(getHeldClass());
-            return getHeldClass().getDeclaredConstructor().newInstance();
+        return createInstance();
+    }
 
-        }
-        catch (ServletException ex)
+    @Override
+    protected Servlet createInstance() throws Exception
+    {
+        try (AutoLock l = lock())
         {
-            Throwable cause = ex.getRootCause();
-            if (cause instanceof InstantiationException)
-                throw (InstantiationException)cause;
-            if (cause instanceof IllegalAccessException)
-                throw (IllegalAccessException)cause;
-            if (cause instanceof NoSuchMethodException)
-                throw (NoSuchMethodException)cause;
-            if (cause instanceof InvocationTargetException)
-                throw (InvocationTargetException)cause;
-            throw ex;
+            Servlet servlet = super.createInstance();
+            if (servlet == null)
+            {
+                ServletContext ctx = getServletContext();
+                if (ctx != null)
+                    servlet = ctx.createServlet(getHeldClass());
+            }
+            return servlet;
         }
     }
 
@@ -1244,10 +1205,10 @@ public class ServletHolder extends Holder<Servlet> implements UserIdentity.Scope
                 ((HttpServletResponse)res).sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE);
             else
             {
-                synchronized (ServletHolder.this)
+                try (AutoLock l = lock())
                 {
                     ServletHolder.this._servlet = this._servlet;
-                    _servlet.service(req,res);
+                    _servlet.service(req, res);
                 }
             }
         }
@@ -1263,7 +1224,7 @@ public class ServletHolder extends Holder<Servlet> implements UserIdentity.Scope
                 }
                 catch (Throwable th)
                 {
-                    LOG.warn(th);
+                    LOG.warn("Unable to destroy {}", _servlet, th);
                 }
             }
         }

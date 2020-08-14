@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.io;
@@ -28,6 +28,8 @@ import java.util.function.Function;
 import org.eclipse.jetty.util.BufferUtil;
 import org.eclipse.jetty.util.annotation.ManagedAttribute;
 import org.eclipse.jetty.util.annotation.ManagedObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * <p>A ByteBuffer pool where ByteBuffers are held in queues that are held in a Map.</p>
@@ -38,6 +40,8 @@ import org.eclipse.jetty.util.annotation.ManagedObject;
 @ManagedObject
 public class MappedByteBufferPool extends AbstractByteBufferPool
 {
+    private static final Logger LOG = LoggerFactory.getLogger(MappedByteBufferPool.class);
+
     private final ConcurrentMap<Integer, Bucket> _directBuffers = new ConcurrentHashMap<>();
     private final ConcurrentMap<Integer, Bucket> _heapBuffers = new ConcurrentHashMap<>();
     private final Function<Integer, Bucket> _newBucket;
@@ -100,7 +104,7 @@ public class MappedByteBufferPool extends AbstractByteBufferPool
 
     private Bucket newBucket(int key)
     {
-        return new Bucket(this, key * getCapacityFactor(), getMaxQueueLength());
+        return new Bucket(key * getCapacityFactor(), getMaxQueueLength());
     }
 
     @Override
@@ -127,7 +131,12 @@ public class MappedByteBufferPool extends AbstractByteBufferPool
 
         int capacity = buffer.capacity();
         // Validate that this buffer is from this pool.
-        assert ((capacity % getCapacityFactor()) == 0);
+        if ((capacity % getCapacityFactor()) != 0)
+        {
+            if (LOG.isDebugEnabled())
+                LOG.debug("ByteBuffer {} does not belong to this pool, discarding it", BufferUtil.toDetailString(buffer));
+            return;
+        }
 
         int b = bucketFor(capacity);
         boolean direct = buffer.isDirect();

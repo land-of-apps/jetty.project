@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.util;
@@ -24,6 +24,8 @@ package org.eclipse.jetty.util;
  */
 public class JavaVersion
 {
+    // IMPORTANT NOTE: This class cannot use Logging, as this class is used by jetty-start
+
     /**
      * Context attribute that can be set to target a different version of the jvm than the current runtime.
      * Acceptable values should correspond to those returned by JavaVersion.getPlatform().
@@ -120,29 +122,6 @@ public class JavaVersion
     public int getMicro()
     {
         return micro;
-    }
-
-    /**
-     * <p>Returns the update number version, such as {@code 92} for JDK 1.8.0_92 and {@code 0} for JDK 9.2.4.</p>
-     *
-     * @return the update number version
-     */
-    @Deprecated
-    public int getUpdate()
-    {
-        return 0;
-    }
-
-    /**
-     * <p>Returns the remaining string after the version numbers, such as {@code -internal} for
-     * JDK 1.8.0_92-internal and {@code -ea} for JDK 9-ea, or {@code +13} for JDK 9.2.4+13.</p>
-     *
-     * @return the remaining string after the version numbers
-     */
-    @Deprecated
-    public String getSuffix()
-    {
-        return null;
     }
 
     @Override

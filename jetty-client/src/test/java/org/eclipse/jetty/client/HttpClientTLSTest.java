@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.client;
@@ -42,11 +42,14 @@ import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.SSLSocket;
 
 import org.eclipse.jetty.client.api.ContentResponse;
+import org.eclipse.jetty.client.http.HttpClientTransportOverHTTP;
 import org.eclipse.jetty.http.HttpHeader;
+import org.eclipse.jetty.http.HttpHeaderValue;
 import org.eclipse.jetty.http.HttpScheme;
 import org.eclipse.jetty.http.HttpStatus;
 import org.eclipse.jetty.io.ByteBufferPool;
 import org.eclipse.jetty.io.ClientConnectionFactory;
+import org.eclipse.jetty.io.ClientConnector;
 import org.eclipse.jetty.io.EndPoint;
 import org.eclipse.jetty.io.ssl.SslClientConnectionFactory;
 import org.eclipse.jetty.io.ssl.SslConnection;
@@ -83,7 +86,7 @@ public class HttpClientTLSTest
     private ServerConnector connector;
     private HttpClient client;
 
-    private void startServer(SslContextFactory sslContextFactory, Handler handler) throws Exception
+    private void startServer(SslContextFactory.Server sslContextFactory, Handler handler) throws Exception
     {
         ExecutorThreadPool serverThreads = new ExecutorThreadPool();
         serverThreads.setName("server");
@@ -96,12 +99,15 @@ public class HttpClientTLSTest
         server.start();
     }
 
-    private void startClient(SslContextFactory sslContextFactory) throws Exception
+    private void startClient(SslContextFactory.Client sslContextFactory) throws Exception
     {
+        ClientConnector clientConnector = new ClientConnector();
+        clientConnector.setSelectors(1);
+        clientConnector.setSslContextFactory(sslContextFactory);
         QueuedThreadPool clientThreads = new QueuedThreadPool();
         clientThreads.setName("client");
-        client = new HttpClient(sslContextFactory);
-        client.setExecutor(clientThreads);
+        clientConnector.setExecutor(clientThreads);
+        client = new HttpClient(new HttpClientTransportOverHTTP(clientConnector));
         client.start();
     }
 
@@ -138,7 +144,7 @@ public class HttpClientTLSTest
     @Test
     public void testNoCommonTLSProtocol() throws Exception
     {
-        SslContextFactory serverTLSFactory = createServerSslContextFactory();
+        SslContextFactory.Server serverTLSFactory = createServerSslContextFactory();
         serverTLSFactory.setIncludeProtocols("TLSv1.3");
         startServer(serverTLSFactory, new EmptyServerHandler());
 
@@ -152,7 +158,7 @@ public class HttpClientTLSTest
             }
         });
 
-        SslContextFactory clientTLSFactory = createClientSslContextFactory();
+        SslContextFactory.Client clientTLSFactory = createClientSslContextFactory();
         clientTLSFactory.setIncludeProtocols("TLSv1.2");
         startClient(clientTLSFactory);
 
@@ -179,7 +185,7 @@ public class HttpClientTLSTest
     @Test
     public void testNoCommonTLSCiphers() throws Exception
     {
-        SslContextFactory serverTLSFactory = createServerSslContextFactory();
+        SslContextFactory.Server serverTLSFactory = createServerSslContextFactory();
         serverTLSFactory.setIncludeCipherSuites("TLS_RSA_WITH_AES_128_CBC_SHA");
         startServer(serverTLSFactory, new EmptyServerHandler());
 
@@ -193,7 +199,7 @@ public class HttpClientTLSTest
             }
         });
 
-        SslContextFactory clientTLSFactory = createClientSslContextFactory();
+        SslContextFactory.Client clientTLSFactory = createClientSslContextFactory();
         clientTLSFactory.setExcludeCipherSuites(".*_SHA$");
         startClient(clientTLSFactory);
 
@@ -220,7 +226,7 @@ public class HttpClientTLSTest
     @Test
     public void testMismatchBetweenTLSProtocolAndTLSCiphersOnServer() throws Exception
     {
-        SslContextFactory serverTLSFactory = createServerSslContextFactory();
+        SslContextFactory.Server serverTLSFactory = createServerSslContextFactory();
         // TLS 1.1 protocol, but only TLS 1.2 ciphers.
         serverTLSFactory.setIncludeProtocols("TLSv1.1");
         serverTLSFactory.setIncludeCipherSuites("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256");
@@ -236,7 +242,7 @@ public class HttpClientTLSTest
             }
         });
 
-        SslContextFactory clientTLSFactory = createClientSslContextFactory();
+        SslContextFactory.Client clientTLSFactory = createClientSslContextFactory();
         startClient(clientTLSFactory);
 
         CountDownLatch clientLatch = new CountDownLatch(1);
@@ -265,7 +271,7 @@ public class HttpClientTLSTest
     @Test
     public void testMismatchBetweenTLSProtocolAndTLSCiphersOnClient() throws Exception
     {
-        SslContextFactory serverTLSFactory = createServerSslContextFactory();
+        SslContextFactory.Server serverTLSFactory = createServerSslContextFactory();
         startServer(serverTLSFactory, new EmptyServerHandler());
 
         CountDownLatch serverLatch = new CountDownLatch(1);
@@ -278,7 +284,7 @@ public class HttpClientTLSTest
             }
         });
 
-        SslContextFactory clientTLSFactory = createClientSslContextFactory();
+        SslContextFactory.Client clientTLSFactory = createClientSslContextFactory();
         // TLS 1.1 protocol, but only TLS 1.2 ciphers.
         clientTLSFactory.setIncludeProtocols("TLSv1.1");
         clientTLSFactory.setIncludeCipherSuites("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256");
@@ -307,7 +313,7 @@ public class HttpClientTLSTest
     @Test
     public void testHandshakeSucceeded() throws Exception
     {
-        SslContextFactory serverTLSFactory = createServerSslContextFactory();
+        SslContextFactory.Server serverTLSFactory = createServerSslContextFactory();
         startServer(serverTLSFactory, new EmptyServerHandler());
 
         CountDownLatch serverLatch = new CountDownLatch(1);
@@ -320,7 +326,7 @@ public class HttpClientTLSTest
             }
         });
 
-        SslContextFactory clientTLSFactory = createClientSslContextFactory();
+        SslContextFactory.Client clientTLSFactory = createClientSslContextFactory();
         startClient(clientTLSFactory);
 
         CountDownLatch clientLatch = new CountDownLatch(1);
@@ -346,7 +352,7 @@ public class HttpClientTLSTest
     @Test
     public void testHandshakeSucceededWithSessionResumption() throws Exception
     {
-        SslContextFactory serverTLSFactory = createServerSslContextFactory();
+        SslContextFactory.Server serverTLSFactory = createServerSslContextFactory();
         startServer(serverTLSFactory, new EmptyServerHandler());
 
         AtomicReference<byte[]> serverSession = new AtomicReference<>();
@@ -359,7 +365,7 @@ public class HttpClientTLSTest
             }
         });
 
-        SslContextFactory clientTLSFactory = createClientSslContextFactory();
+        SslContextFactory.Client clientTLSFactory = createClientSslContextFactory();
         startClient(clientTLSFactory);
 
         AtomicReference<byte[]> clientSession = new AtomicReference<>();
@@ -375,7 +381,7 @@ public class HttpClientTLSTest
         // First request primes the TLS session.
         ContentResponse response = client.newRequest("localhost", connector.getLocalPort())
             .scheme(HttpScheme.HTTPS.asString())
-            .header(HttpHeader.CONNECTION, "close")
+            .headers(headers -> headers.put(HttpHeader.CONNECTION, HttpHeaderValue.CLOSE))
             .timeout(5, TimeUnit.SECONDS)
             .send();
         assertEquals(HttpStatus.OK_200, response.getStatus());
@@ -411,7 +417,7 @@ public class HttpClientTLSTest
         // Second request should have the same session ID.
         response = client.newRequest("localhost", connector.getLocalPort())
             .scheme(HttpScheme.HTTPS.asString())
-            .header(HttpHeader.CONNECTION, "close")
+            .headers(headers -> headers.put(HttpHeader.CONNECTION, HttpHeaderValue.CLOSE))
             .timeout(5, TimeUnit.SECONDS)
             .send();
         assertEquals(HttpStatus.OK_200, response.getStatus());
@@ -426,7 +432,7 @@ public class HttpClientTLSTest
     @Test
     public void testClientRawCloseDoesNotInvalidateSession() throws Exception
     {
-        SslContextFactory serverTLSFactory = createServerSslContextFactory();
+        SslContextFactory.Server serverTLSFactory = createServerSslContextFactory();
         startServer(serverTLSFactory, new EmptyServerHandler());
 
         SslContextFactory clientTLSFactory = createClientSslContextFactory();
@@ -483,19 +489,22 @@ public class HttpClientTLSTest
         serverTLSFactory.start();
         try (ServerSocket server = new ServerSocket(0))
         {
+            ClientConnector clientConnector = new ClientConnector();
+            clientConnector.setSelectors(1);
             QueuedThreadPool clientThreads = new QueuedThreadPool();
             clientThreads.setName("client");
-            client = new HttpClient(createClientSslContextFactory())
+            clientConnector.setExecutor(clientThreads);
+            clientConnector.setSslContextFactory(createClientSslContextFactory());
+            client = new HttpClient(new HttpClientTransportOverHTTP(clientConnector))
             {
                 @Override
-                protected ClientConnectionFactory newSslClientConnectionFactory(SslContextFactory sslContextFactory, ClientConnectionFactory connectionFactory)
+                protected ClientConnectionFactory newSslClientConnectionFactory(SslContextFactory.Client sslContextFactory, ClientConnectionFactory connectionFactory)
                 {
                     SslClientConnectionFactory ssl = (SslClientConnectionFactory)super.newSslClientConnectionFactory(sslContextFactory, connectionFactory);
                     ssl.setRequireCloseMessage(true);
                     return ssl;
                 }
             };
-            client.setExecutor(clientThreads);
             client.start();
 
             CountDownLatch latch = new CountDownLatch(1);
@@ -549,10 +558,10 @@ public class HttpClientTLSTest
     @Test
     public void testHostNameVerificationFailure() throws Exception
     {
-        SslContextFactory serverTLSFactory = createServerSslContextFactory();
+        SslContextFactory.Server serverTLSFactory = createServerSslContextFactory();
         startServer(serverTLSFactory, new EmptyServerHandler());
 
-        SslContextFactory clientTLSFactory = createClientSslContextFactory();
+        SslContextFactory.Client clientTLSFactory = createClientSslContextFactory();
         // Make sure the host name is not verified at the TLS level.
         clientTLSFactory.setEndpointIdentificationAlgorithm(null);
         // Add host name verification after the TLS handshake.
@@ -577,7 +586,7 @@ public class HttpClientTLSTest
     {
         long idleTimeout = 2000;
 
-        SslContextFactory serverTLSFactory = createServerSslContextFactory();
+        SslContextFactory.Server serverTLSFactory = createServerSslContextFactory();
         QueuedThreadPool serverThreads = new QueuedThreadPool();
         serverThreads.setName("server");
         server = new Server(serverThreads);
@@ -609,14 +618,18 @@ public class HttpClientTLSTest
         server.setHandler(new EmptyServerHandler());
         server.start();
 
-        SslContextFactory clientTLSFactory = createClientSslContextFactory();
+        SslContextFactory.Client clientTLSFactory = createClientSslContextFactory();
+        ClientConnector clientConnector = new ClientConnector();
+        clientConnector.setSelectors(1);
+        clientConnector.setSslContextFactory(clientTLSFactory);
         QueuedThreadPool clientThreads = new QueuedThreadPool();
         clientThreads.setName("client");
+        clientConnector.setExecutor(clientThreads);
         AtomicLong clientBytes = new AtomicLong();
-        client = new HttpClient(clientTLSFactory)
+        client = new HttpClient(new HttpClientTransportOverHTTP(clientConnector))
         {
             @Override
-            protected ClientConnectionFactory newSslClientConnectionFactory(SslContextFactory sslContextFactory, ClientConnectionFactory connectionFactory)
+            protected ClientConnectionFactory newSslClientConnectionFactory(SslContextFactory.Client sslContextFactory, ClientConnectionFactory connectionFactory)
             {
                 if (sslContextFactory == null)
                     sslContextFactory = getSslContextFactory();
@@ -644,13 +657,11 @@ public class HttpClientTLSTest
         client.start();
 
         // Create a connection but don't use it.
-        String scheme = HttpScheme.HTTPS.asString();
-        String host = "localhost";
-        int port = connector.getLocalPort();
-        HttpDestination destination = (HttpDestination)client.getDestination(scheme, host, port);
+        Origin origin = new Origin(HttpScheme.HTTPS.asString(), "localhost", connector.getLocalPort());
+        HttpDestination destination = client.resolveDestination(origin);
         DuplexConnectionPool connectionPool = (DuplexConnectionPool)destination.getConnectionPool();
         // Trigger the creation of a new connection, but don't use it.
-        connectionPool.tryCreate(-1);
+        ConnectionPoolHelper.tryCreate(connectionPool, -1);
         // Verify that the connection has been created.
         while (true)
         {
@@ -671,7 +682,7 @@ public class HttpClientTLSTest
     @Test
     public void testNeverUsedConnectionThenClientIdleTimeout() throws Exception
     {
-        SslContextFactory serverTLSFactory = createServerSslContextFactory();
+        SslContextFactory.Server serverTLSFactory = createServerSslContextFactory();
         QueuedThreadPool serverThreads = new QueuedThreadPool();
         serverThreads.setName("server");
         server = new Server(serverThreads);
@@ -704,14 +715,18 @@ public class HttpClientTLSTest
 
         long idleTimeout = 2000;
 
-        SslContextFactory clientTLSFactory = createClientSslContextFactory();
+        SslContextFactory.Client clientTLSFactory = createClientSslContextFactory();
+        ClientConnector clientConnector = new ClientConnector();
+        clientConnector.setSelectors(1);
+        clientConnector.setSslContextFactory(clientTLSFactory);
         QueuedThreadPool clientThreads = new QueuedThreadPool();
         clientThreads.setName("client");
+        clientConnector.setExecutor(clientThreads);
         AtomicLong clientBytes = new AtomicLong();
-        client = new HttpClient(clientTLSFactory)
+        client = new HttpClient(new HttpClientTransportOverHTTP(clientConnector))
         {
             @Override
-            protected ClientConnectionFactory newSslClientConnectionFactory(SslContextFactory sslContextFactory, ClientConnectionFactory connectionFactory)
+            protected ClientConnectionFactory newSslClientConnectionFactory(SslContextFactory.Client sslContextFactory, ClientConnectionFactory connectionFactory)
             {
                 if (sslContextFactory == null)
                     sslContextFactory = getSslContextFactory();
@@ -740,13 +755,11 @@ public class HttpClientTLSTest
         client.start();
 
         // Create a connection but don't use it.
-        String scheme = HttpScheme.HTTPS.asString();
-        String host = "localhost";
-        int port = connector.getLocalPort();
-        HttpDestination destination = (HttpDestination)client.getDestination(scheme, host, port);
+        Origin origin = new Origin(HttpScheme.HTTPS.asString(), "localhost", connector.getLocalPort());
+        HttpDestination destination = client.resolveDestination(origin);
         DuplexConnectionPool connectionPool = (DuplexConnectionPool)destination.getConnectionPool();
         // Trigger the creation of a new connection, but don't use it.
-        connectionPool.tryCreate(-1);
+        ConnectionPoolHelper.tryCreate(connectionPool, -1);
         // Verify that the connection has been created.
         while (true)
         {
@@ -767,16 +780,20 @@ public class HttpClientTLSTest
     @Test
     public void testSSLEngineClosedDuringHandshake() throws Exception
     {
-        SslContextFactory serverTLSFactory = createServerSslContextFactory();
+        SslContextFactory.Server serverTLSFactory = createServerSslContextFactory();
         startServer(serverTLSFactory, new EmptyServerHandler());
 
-        SslContextFactory clientTLSFactory = createClientSslContextFactory();
+        SslContextFactory.Client clientTLSFactory = createClientSslContextFactory();
+        ClientConnector clientConnector = new ClientConnector();
+        clientConnector.setSelectors(1);
+        clientConnector.setSslContextFactory(clientTLSFactory);
         QueuedThreadPool clientThreads = new QueuedThreadPool();
         clientThreads.setName("client");
-        client = new HttpClient(clientTLSFactory)
+        clientConnector.setExecutor(clientThreads);
+        client = new HttpClient(new HttpClientTransportOverHTTP(clientConnector))
         {
             @Override
-            protected ClientConnectionFactory newSslClientConnectionFactory(SslContextFactory sslContextFactory, ClientConnectionFactory connectionFactory)
+            protected ClientConnectionFactory newSslClientConnectionFactory(SslContextFactory.Client sslContextFactory, ClientConnectionFactory connectionFactory)
             {
                 if (sslContextFactory == null)
                     sslContextFactory = getSslContextFactory();
@@ -812,7 +829,7 @@ public class HttpClientTLSTest
     public void testTLSLargeFragments() throws Exception
     {
         CountDownLatch serverLatch = new CountDownLatch(1);
-        SslContextFactory serverTLSFactory = createServerSslContextFactory();
+        SslContextFactory.Server serverTLSFactory = createServerSslContextFactory();
         QueuedThreadPool serverThreads = new QueuedThreadPool();
         serverThreads.setName("server");
         server = new Server(serverThreads);
@@ -846,13 +863,17 @@ public class HttpClientTLSTest
         long idleTimeout = 2000;
 
         CountDownLatch clientLatch = new CountDownLatch(1);
-        SslContextFactory clientTLSFactory = createClientSslContextFactory();
+        SslContextFactory.Client clientTLSFactory = createClientSslContextFactory();
+        ClientConnector clientConnector = new ClientConnector();
+        clientConnector.setSelectors(1);
+        clientConnector.setSslContextFactory(clientTLSFactory);
         QueuedThreadPool clientThreads = new QueuedThreadPool();
         clientThreads.setName("client");
-        client = new HttpClient(clientTLSFactory)
+        clientConnector.setExecutor(clientThreads);
+        client = new HttpClient(new HttpClientTransportOverHTTP(clientConnector))
         {
             @Override
-            protected ClientConnectionFactory newSslClientConnectionFactory(SslContextFactory sslContextFactory, ClientConnectionFactory connectionFactory)
+            protected ClientConnectionFactory newSslClientConnectionFactory(SslContextFactory.Client sslContextFactory, ClientConnectionFactory connectionFactory)
             {
                 if (sslContextFactory == null)
                     sslContextFactory = getSslContextFactory();

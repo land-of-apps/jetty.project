@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.fcgi.parser;
@@ -25,14 +25,15 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import org.eclipse.jetty.fcgi.FCGI;
 import org.eclipse.jetty.http.BadMessageException;
+import org.eclipse.jetty.http.HttpCompliance;
 import org.eclipse.jetty.http.HttpField;
 import org.eclipse.jetty.http.HttpFields;
 import org.eclipse.jetty.http.HttpHeader;
 import org.eclipse.jetty.http.HttpParser;
 import org.eclipse.jetty.http.HttpStatus;
 import org.eclipse.jetty.http.HttpVersion;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * <p>The parser for STDOUT type frame bodies.</p>
@@ -44,7 +45,7 @@ import org.eclipse.jetty.util.log.Logger;
  */
 public class ResponseContentParser extends StreamContentParser
 {
-    private static final Logger LOG = Log.getLogger(ResponseContentParser.class);
+    private static final Logger LOG = LoggerFactory.getLogger(ResponseContentParser.class);
 
     private final Map<Integer, ResponseParser> parsers = new ConcurrentHashMap<>();
     private final ClientParser.Listener listener;
@@ -83,7 +84,7 @@ public class ResponseContentParser extends StreamContentParser
 
     private static class ResponseParser implements HttpParser.ResponseHandler
     {
-        private final HttpFields fields = new HttpFields();
+        private final HttpFields.Mutable fields = HttpFields.build();
         private ClientParser.Listener listener;
         private final int request;
         private final FCGIHttpParser httpParser;
@@ -155,14 +156,7 @@ public class ResponseContentParser extends StreamContentParser
         }
 
         @Override
-        public int getHeaderCacheSize()
-        {
-            // TODO: configure this
-            return 1024;
-        }
-
-        @Override
-        public boolean startResponse(HttpVersion version, int status, String reason)
+        public void startResponse(HttpVersion version, int status, String reason)
         {
             // The HTTP request line does not exist in FCGI responses
             throw new IllegalStateException();
@@ -339,7 +333,7 @@ public class ResponseContentParser extends StreamContentParser
     {
         private FCGIHttpParser(ResponseHandler handler)
         {
-            super(handler, 65 * 1024, true);
+            super(handler, 65 * 1024, HttpCompliance.RFC7230);
             reset();
         }
 

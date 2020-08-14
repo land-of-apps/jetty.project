@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.servlet;
@@ -29,8 +29,8 @@ import javax.servlet.http.HttpServletResponse;
 
 import org.eclipse.jetty.client.HttpClient;
 import org.eclipse.jetty.client.api.ContentResponse;
-import org.eclipse.jetty.client.util.DeferredContentProvider;
-import org.eclipse.jetty.client.util.FormContentProvider;
+import org.eclipse.jetty.client.util.AsyncRequestContent;
+import org.eclipse.jetty.client.util.FormRequestContent;
 import org.eclipse.jetty.http.HttpHeader;
 import org.eclipse.jetty.http.HttpMethod;
 import org.eclipse.jetty.http.HttpStatus;
@@ -131,13 +131,13 @@ public class FormTest
         length = length + 1;
         byte[] value = new byte[length];
         Arrays.fill(value, (byte)'x');
-        DeferredContentProvider content = new DeferredContentProvider(ByteBuffer.wrap(key), ByteBuffer.wrap(value));
+        AsyncRequestContent content = new AsyncRequestContent(ByteBuffer.wrap(key), ByteBuffer.wrap(value));
 
         ContentResponse response = client.newRequest("localhost", connector.getLocalPort())
             .method(HttpMethod.POST)
             .path(contextPath + servletPath)
-            .header(HttpHeader.CONTENT_TYPE, MimeTypes.Type.FORM_ENCODED.asString())
-            .content(content)
+            .headers(headers -> headers.put(HttpHeader.CONTENT_TYPE, MimeTypes.Type.FORM_ENCODED.asString()))
+            .body(content)
             .onRequestBegin(request ->
             {
                 if (withContentLength)
@@ -192,7 +192,7 @@ public class FormTest
         ContentResponse response = client.newRequest("localhost", connector.getLocalPort())
             .method(HttpMethod.POST)
             .path(contextPath + servletPath)
-            .content(new FormContentProvider(formParams))
+            .body(new FormRequestContent(formParams))
             .send();
 
         int expected = (maxFormKeys != null && maxFormKeys < 0)

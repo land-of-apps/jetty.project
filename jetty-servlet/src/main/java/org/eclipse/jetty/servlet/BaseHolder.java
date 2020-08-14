@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.servlet;
@@ -23,12 +23,14 @@ import javax.servlet.ServletContext;
 import javax.servlet.UnavailableException;
 
 import org.eclipse.jetty.server.handler.ContextHandler;
+import org.eclipse.jetty.server.handler.ContextHandler.Context;
 import org.eclipse.jetty.util.Loader;
 import org.eclipse.jetty.util.annotation.ManagedAttribute;
 import org.eclipse.jetty.util.component.AbstractLifeCycle;
 import org.eclipse.jetty.util.component.Dumpable;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
+import org.eclipse.jetty.util.thread.AutoLock;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * AbstractHolder
@@ -41,8 +43,9 @@ import org.eclipse.jetty.util.log.Logger;
  */
 public abstract class BaseHolder<T> extends AbstractLifeCycle implements Dumpable
 {
-    private static final Logger LOG = Log.getLogger(BaseHolder.class);
+    private static final Logger LOG = LoggerFactory.getLogger(BaseHolder.class);
 
+    private final AutoLock _lock = new AutoLock();
     private final Source _source;
     private Class<? extends T> _class;
     private String _className;
@@ -57,6 +60,11 @@ public abstract class BaseHolder<T> extends AbstractLifeCycle implements Dumpabl
     public Source getSource()
     {
         return _source;
+    }
+
+    AutoLock lock()
+    {
+        return _lock.lock();
     }
 
     /**
@@ -91,7 +99,7 @@ public abstract class BaseHolder<T> extends AbstractLifeCycle implements Dumpabl
             }
             catch (Exception e)
             {
-                LOG.warn(e);
+                LOG.warn("Unable to load class {}", _className, e);
                 throw new UnavailableException("Class loading error for holder " + toString());
             }
         }
@@ -163,26 +171,72 @@ public abstract class BaseHolder<T> extends AbstractLifeCycle implements Dumpabl
         }
     }
 
-    protected synchronized void setInstance(T instance)
+    protected void setInstance(T instance)
     {
-        _instance = instance;
-        if (instance == null)
-            setHeldClass(null);
-        else
-            setHeldClass((Class<T>)instance.getClass());
+        try (AutoLock l = lock())
+        {
+            _instance = instance;
+            if (instance == null)
+                setHeldClass(null);
+            else
+                setHeldClass((Class<T>)instance.getClass());
+        }
     }
 
-    protected synchronized T getInstance()
+    protected T getInstance()
     {
-        return _instance;
+        try (AutoLock l = lock())
+        {
+            return _instance;
+        }
+    }
+
+    protected T createInstance() throws Exception
+    {
+        try (AutoLock l = lock())
+        {
+            ServletContext ctx = getServletContext();
+            if (ctx == null)
+                return getHeldClass().getDeclaredConstructor().newInstance();
+
+            if (ServletContextHandler.Context.class.isAssignableFrom(ctx.getClass()))
+                return ((ServletContextHandler.Context)ctx).createInstance(this);
+
+            return null;
+        }
+    }
+
+    public ServletContext getServletContext()
+    {
+        ServletContext scontext = null;
+
+        //try the ServletHandler first
+        if (getServletHandler() != null)
+            scontext = getServletHandler().getServletContext();
+
+        if (scontext != null)
+            return scontext;
+
+        //try the ContextHandler next
+        Context ctx = ContextHandler.getCurrentContext();
+        if (ctx != null)
+        {
+            ContextHandler contextHandler = ctx.getContextHandler();
+            if (contextHandler != null)
+                return contextHandler.getServletContext();
+        }
+        return null;
     }
 
     /**
      * @return True if this holder was created for a specific instance.
      */
-    public synchronized boolean isInstance()
+    public boolean isInstance()
     {
-        return _instance != null;
+        try (AutoLock l = lock())
+        {
+            return _instance != null;
+        }
     }
 
     @Override

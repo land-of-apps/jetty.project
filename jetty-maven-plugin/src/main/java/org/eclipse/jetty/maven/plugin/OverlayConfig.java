@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.maven.plugin;
@@ -28,6 +28,9 @@ import org.eclipse.jetty.util.StringUtil;
 
 /**
  * OverlayConfig
+ * 
+ * The configuration of a war overlay in a pom. Used to help determine which resources
+ * from a project's dependent war should be included.
  */
 public class OverlayConfig
 {
@@ -112,6 +115,8 @@ public class OverlayConfig
                         excludes = Arrays.asList(exs);
                     break;
                 }
+                default:
+                    break;
             }
         }
     }
@@ -257,7 +262,9 @@ public class OverlayConfig
 
     public boolean isCurrentProject()
     {
-        return this.groupId == null && this.artifactId == null;
+        if (this.groupId == null && this.artifactId == null)
+            return true;
+        return false;
     }
 
     /**
@@ -270,9 +277,12 @@ public class OverlayConfig
      */
     public boolean matchesArtifact(String gid, String aid, String cls)
     {
-        return ((getGroupId() == null && gid == null) || (getGroupId() != null && getGroupId().equals(gid))) &&
+        if (((getGroupId() == null && gid == null) || (getGroupId() != null && getGroupId().equals(gid))) &&
             ((getArtifactId() == null && aid == null) || (getArtifactId() != null && getArtifactId().equals(aid))) &&
-            ((getClassifier() == null) || (getClassifier().equals(cls)));
+            ((getClassifier() == null) || (getClassifier().equals(cls))))
+            return true;
+
+        return false;
     }
 
     /**
@@ -284,8 +294,11 @@ public class OverlayConfig
      */
     public boolean matchesArtifact(String gid, String aid)
     {
-        return ((getGroupId() == null && gid == null) || (getGroupId() != null && getGroupId().equals(gid))) &&
-            ((getArtifactId() == null && aid == null) || (getArtifactId() != null && getArtifactId().equals(aid)));
+        if (((getGroupId() == null && gid == null) || (getGroupId() != null && getGroupId().equals(gid))) &&
+            ((getArtifactId() == null && aid == null) || (getArtifactId() != null && getArtifactId().equals(aid))))
+            return true;
+
+        return false;
     }
 
     @Override

@@ -30,7 +30,6 @@ import org.eclipse.jetty.ant.types.ContextHandlers;
 import org.eclipse.jetty.ant.utils.ServerProxy;
 import org.eclipse.jetty.ant.utils.TaskLog;
 import org.eclipse.jetty.security.LoginService;
-import org.eclipse.jetty.server.Handler;
 import org.eclipse.jetty.server.RequestLog;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
@@ -39,7 +38,9 @@ import org.eclipse.jetty.server.handler.ContextHandler;
 import org.eclipse.jetty.server.handler.ContextHandlerCollection;
 import org.eclipse.jetty.server.handler.DefaultHandler;
 import org.eclipse.jetty.server.handler.HandlerCollection;
+import org.eclipse.jetty.server.handler.HandlerList;
 import org.eclipse.jetty.util.Scanner;
+import org.eclipse.jetty.util.resource.PathResource;
 import org.eclipse.jetty.util.resource.Resource;
 import org.eclipse.jetty.xml.XmlConfiguration;
 import org.xml.sax.SAXException;
@@ -253,9 +254,6 @@ public class ServerProxyImpl implements ServerProxy
         this.tempDirectory = tempDirectory;
     }
 
-    /**
-     * @see org.eclipse.jetty.ant.utils.ServerProxy#start()
-     */
     @Override
     public void start()
     {
@@ -298,9 +296,6 @@ public class ServerProxyImpl implements ServerProxy
         }
     }
 
-    /**
-     * @see org.eclipse.jetty.ant.utils.ServerProxy#getProxiedObject()
-     */
     @Override
     public Object getProxiedObject()
     {
@@ -411,23 +406,15 @@ public class ServerProxyImpl implements ServerProxy
         if (requestLog != null)
             server.setRequestLog(requestLog);
 
-        contexts = server
-            .getChildHandlerByClass(ContextHandlerCollection.class);
+        contexts = server.getChildHandlerByClass(ContextHandlerCollection.class);
         if (contexts == null)
         {
             contexts = new ContextHandlerCollection();
-            HandlerCollection handlers = server
-                .getChildHandlerByClass(HandlerCollection.class);
+            HandlerCollection handlers = server.getChildHandlerByClass(HandlerCollection.class);
             if (handlers == null)
-            {
-                handlers = new HandlerCollection();
-                server.setHandler(handlers);
-                handlers.setHandlers(new Handler[]{contexts, new DefaultHandler()});
-            }
+                server.setHandler(new HandlerList(contexts, new DefaultHandler()));
             else
-            {
                 handlers.addHandler(contexts);
-            }
         }
 
         //if there are any extra contexts to deploy
@@ -451,7 +438,7 @@ public class ServerProxyImpl implements ServerProxy
             XmlConfiguration configuration;
             try
             {
-                configuration = new XmlConfiguration(Resource.toURL(jettyXml));
+                configuration = new XmlConfiguration(new PathResource(jettyXml));
                 configuration.configure(server);
             }
             catch (MalformedURLException e)
@@ -483,14 +470,12 @@ public class ServerProxyImpl implements ServerProxy
             if (scanIntervalSecs <= 0)
                 return;
 
-            List<File> scanList = awc.getScanFiles();
-
             TaskLog.log("Web application '" + awc + "': starting scanner at interval of " + scanIntervalSecs + " seconds.");
             Scanner.Listener changeListener = new WebAppScannerListener(awc);
             Scanner scanner = new Scanner();
             scanner.setScanInterval(scanIntervalSecs);
             scanner.addListener(changeListener);
-            scanner.setScanDirs(scanList);
+            scanner.setScanDirs(awc.getScanFiles());
             scanner.setReportExistingFilesOnStartup(false);
             scanner.start();
         }

@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.plus.webapp;
@@ -30,6 +30,7 @@ import org.eclipse.jetty.plus.annotation.InjectionCollection;
 import org.eclipse.jetty.plus.jndi.EnvEntry;
 import org.eclipse.jetty.plus.jndi.NamingEntryUtil;
 import org.eclipse.jetty.util.IntrospectionUtil;
+import org.eclipse.jetty.webapp.Configuration;
 import org.eclipse.jetty.webapp.Descriptor;
 import org.eclipse.jetty.webapp.FragmentDescriptor;
 import org.eclipse.jetty.webapp.Origin;
@@ -127,8 +128,10 @@ public class PlusDescriptorProcessorTest
     public void setUp() throws Exception
     {
         context = new WebAppContext();
+        context.setConfigurations(new Configuration[]{new PlusConfiguration(), new EnvConfiguration()});
+        context.preConfigure();
         context.setClassLoader(new WebAppClassLoader(Thread.currentThread().getContextClassLoader(), context));
-        context.getServerClasspathPattern().add("-org.eclipse.jetty.plus.webapp."); //need visbility of the TestInjections class
+        context.getServerClassMatcher().exclude("org.eclipse.jetty.plus.webapp."); //need visbility of the TestInjections class
         ClassLoader oldLoader = Thread.currentThread().getContextClassLoader();
         Thread.currentThread().setContextClassLoader(context.getClassLoader());
         Context icontext = new InitialContext();
@@ -156,21 +159,20 @@ public class PlusDescriptorProcessorTest
 
         URL webXml = Thread.currentThread().getContextClassLoader().getResource("web.xml");
         webDescriptor = new WebDescriptor(org.eclipse.jetty.util.resource.Resource.newResource(webXml));
-        webDescriptor.parse();
+        webDescriptor.parse(WebDescriptor.getParser(false));
 
         URL frag1Xml = Thread.currentThread().getContextClassLoader().getResource("web-fragment-1.xml");
         fragDescriptor1 = new FragmentDescriptor(org.eclipse.jetty.util.resource.Resource.newResource(frag1Xml));
-        fragDescriptor1.parse();
+        fragDescriptor1.parse(WebDescriptor.getParser(false));
         URL frag2Xml = Thread.currentThread().getContextClassLoader().getResource("web-fragment-2.xml");
         fragDescriptor2 = new FragmentDescriptor(org.eclipse.jetty.util.resource.Resource.newResource(frag2Xml));
-        fragDescriptor2.parse();
+        fragDescriptor2.parse(WebDescriptor.getParser(false));
         URL frag3Xml = Thread.currentThread().getContextClassLoader().getResource("web-fragment-3.xml");
         fragDescriptor3 = new FragmentDescriptor(org.eclipse.jetty.util.resource.Resource.newResource(frag3Xml));
-        fragDescriptor3.parse();
+        fragDescriptor3.parse(WebDescriptor.getParser(false));
         URL frag4Xml = Thread.currentThread().getContextClassLoader().getResource("web-fragment-4.xml");
         fragDescriptor4 = new FragmentDescriptor(org.eclipse.jetty.util.resource.Resource.newResource(frag4Xml));
-        fragDescriptor4.parse();
-        
+        fragDescriptor4.parse(WebDescriptor.getParser(false));
         Thread.currentThread().setContextClassLoader(oldLoader);
     }
     

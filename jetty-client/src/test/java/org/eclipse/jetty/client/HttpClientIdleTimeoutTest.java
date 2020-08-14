@@ -1,43 +1,39 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.client;
 
-import java.io.IOException;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
-import javax.servlet.ServletException;
 import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
-import org.eclipse.jetty.client.api.Connection;
 import org.eclipse.jetty.client.api.ContentResponse;
 import org.eclipse.jetty.client.http.HttpClientTransportOverHTTP;
 import org.eclipse.jetty.client.http.HttpConnectionOverHTTP;
-import org.eclipse.jetty.client.http.HttpDestinationOverHTTP;
 import org.eclipse.jetty.http.HttpStatus;
 import org.eclipse.jetty.io.EndPoint;
 import org.eclipse.jetty.server.Handler;
 import org.eclipse.jetty.server.Request;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
-import org.eclipse.jetty.util.Promise;
 import org.eclipse.jetty.util.thread.QueuedThreadPool;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -77,7 +73,7 @@ public class HttpClientIdleTimeoutTest
         start(new EmptyServerHandler()
         {
             @Override
-            protected void service(String target, Request jettyRequest, HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException
+            protected void service(String target, Request jettyRequest, HttpServletRequest request, HttpServletResponse response)
             {
                 Cookie[] cookies = request.getCookies();
                 if (cookies == null || cookies.length == 0)
@@ -104,10 +100,10 @@ public class HttpClientIdleTimeoutTest
             @Override
             public HttpDestination newHttpDestination(Origin origin)
             {
-                return new HttpDestinationOverHTTP(getHttpClient(), origin)
+                return new DuplexHttpDestination(getHttpClient(), origin)
                 {
                     @Override
-                    protected SendFailure send(Connection connection, HttpExchange exchange)
+                    protected SendFailure send(IConnection connection, HttpExchange exchange)
                     {
                         SendFailure result = super.send(connection, exchange);
                         if (result != null && result.retry)
@@ -118,9 +114,9 @@ public class HttpClientIdleTimeoutTest
             }
 
             @Override
-            protected HttpConnectionOverHTTP newHttpConnection(EndPoint endPoint, HttpDestination destination, Promise<Connection> promise)
+            public org.eclipse.jetty.io.Connection newConnection(EndPoint endPoint, Map<String, Object> context)
             {
-                return new HttpConnectionOverHTTP(endPoint, destination, promise)
+                return new HttpConnectionOverHTTP(endPoint, context)
                 {
                     @Override
                     protected boolean onIdleTimeout(long idleTimeout)
@@ -133,7 +129,7 @@ public class HttpClientIdleTimeoutTest
                     }
                 };
             }
-        }, null);
+        });
         client.setExecutor(clientThreads);
         client.start();
 

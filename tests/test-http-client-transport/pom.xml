@@ -3,7 +3,7 @@
   <parent>
     <groupId>org.eclipse.jetty.tests</groupId>
     <artifactId>tests-parent</artifactId>
-    <version>9.4.29.v20200521</version>
+    <version>10.0.0-SNAPSHOT</version>
   </parent>
 
   <modelVersion>4.0.0</modelVersion>
@@ -15,83 +15,6 @@
     <bundle-symbolic-name>${project.groupId}.client.http</bundle-symbolic-name>
     <org.eclipse.jetty.http.client.AbstractTest.Transports></org.eclipse.jetty.http.client.AbstractTest.Transports>
   </properties>
-
-  <profiles>
-    <profile>
-      <id>jdk8</id>
-      <activation>
-        <jdk>[1.8,9)</jdk>
-      </activation>
-      <build>
-        <plugins>
-          <plugin>
-            <artifactId>maven-dependency-plugin</artifactId>
-            <executions>
-              <execution>
-                <id>copy-alpn-agent</id>
-                <phase>generate-resources</phase>
-                <goals>
-                  <goal>copy</goal>
-                </goals>
-                <configuration>
-                  <artifactItems>
-                    <artifactItem>
-                      <groupId>org.mortbay.jetty.alpn</groupId>
-                      <artifactId>jetty-alpn-agent</artifactId>
-                      <version>${alpn.agent.version}</version>
-                      <type>jar</type>
-                      <overWrite>false</overWrite>
-                      <outputDirectory>${project.build.directory}/alpn</outputDirectory>
-                    </artifactItem>
-                  </artifactItems>
-                </configuration>
-              </execution>
-            </executions>
-          </plugin>
-          <plugin>
-            <artifactId>maven-surefire-plugin</artifactId>
-            <configuration>
-              <argLine>-javaagent:${project.build.directory}/alpn/jetty-alpn-agent-${alpn.agent.version}.jar=debug=true</argLine>
-            </configuration>
-          </plugin>
-        </plugins>
-      </build>
-      <dependencies>
-        <dependency>
-          <groupId>org.eclipse.jetty</groupId>
-          <artifactId>jetty-alpn-openjdk8-client</artifactId>
-          <version>${project.version}</version>
-          <scope>test</scope>
-        </dependency>
-        <dependency>
-          <groupId>org.eclipse.jetty</groupId>
-          <artifactId>jetty-alpn-openjdk8-server</artifactId>
-          <version>${project.version}</version>
-          <scope>test</scope>
-        </dependency>
-      </dependencies>
-    </profile>
-    <profile>
-      <id>jdk9</id>
-      <activation>
-        <jdk>[9,)</jdk>
-      </activation>
-      <dependencies>
-        <dependency>
-          <groupId>org.eclipse.jetty</groupId>
-          <artifactId>jetty-alpn-java-client</artifactId>
-          <version>${project.version}</version>
-          <scope>test</scope>
-        </dependency>
-        <dependency>
-          <groupId>org.eclipse.jetty</groupId>
-          <artifactId>jetty-alpn-java-server</artifactId>
-          <version>${project.version}</version>
-          <scope>test</scope>
-        </dependency>
-      </dependencies>
-    </profile>
-  </profiles>
 
   <build>
     <plugins>
@@ -108,7 +31,9 @@
         <artifactId>maven-surefire-plugin</artifactId>
         <configuration>
           <systemPropertyVariables>
-            <org.eclipse.jetty.http.client.AbstractTest.Transports>${org.eclipse.jetty.http.client.AbstractTest.Transports}</org.eclipse.jetty.http.client.AbstractTest.Transports>
+            <org.eclipse.jetty.http.client.AbstractTest.Transports>
+              ${org.eclipse.jetty.http.client.AbstractTest.Transports}
+            </org.eclipse.jetty.http.client.AbstractTest.Transports>
           </systemPropertyVariables>
         </configuration>
       </plugin>
@@ -116,6 +41,23 @@
   </build>
 
   <dependencies>
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-api</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.jetty</groupId>
+      <artifactId>jetty-alpn-java-client</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.jetty</groupId>
+      <artifactId>jetty-alpn-java-server</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
+    </dependency>
     <dependency>
       <groupId>org.eclipse.jetty</groupId>
       <artifactId>jetty-jmx</artifactId>
@@ -148,7 +90,13 @@
     </dependency>
     <dependency>
       <groupId>org.eclipse.jetty</groupId>
-      <artifactId>jetty-unixsocket</artifactId>
+      <artifactId>jetty-unixsocket-client</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.jetty</groupId>
+      <artifactId>jetty-unixsocket-server</artifactId>
       <version>${project.version}</version>
       <scope>test</scope>
     </dependency>
@@ -159,9 +107,13 @@
       <scope>test</scope>
     </dependency>
     <dependency>
+      <groupId>org.eclipse.jetty</groupId>
+      <artifactId>jetty-slf4j-impl</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
       <groupId>org.eclipse.jetty.toolchain</groupId>
       <artifactId>jetty-test-helper</artifactId>
-      <scope>test</scope>
     </dependency>
   </dependencies>
 

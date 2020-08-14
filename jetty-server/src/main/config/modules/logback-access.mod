@@ -1,4 +1,4 @@
-DO NOT EDIT - See: https://www.eclipse.org/jetty/documentation/current/startup-modules.html
+# DO NOT EDIT - See: https://www.eclipse.org/jetty/documentation/current/startup-modules.html
 
 [description]
 Enables logback request log.
@@ -14,7 +14,7 @@ logback-impl
 resources
 
 [provide]
-requestlog
+requestlog-impl
 
 [xml]
 etc/jetty-logback-access.xml

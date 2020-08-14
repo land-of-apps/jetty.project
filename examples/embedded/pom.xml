@@ -2,7 +2,7 @@
   <parent>
     <groupId>org.eclipse.jetty.examples</groupId>
     <artifactId>examples-parent</artifactId>
-    <version>9.4.29.v20200521</version>
+    <version>10.0.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
   <modelVersion>4.0.0</modelVersion>
@@ -15,6 +15,15 @@
     <bundle-symbolic-name>${project.groupId}.embedded</bundle-symbolic-name>
   </properties>
   <dependencies>
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-api</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.jetty</groupId>
+      <artifactId>jetty-slf4j-impl</artifactId>
+      <scope>runtime</scope>
+    </dependency>
     <dependency>
       <groupId>org.eclipse.jetty</groupId>
       <artifactId>jetty-util-ajax</artifactId>
@@ -52,12 +61,17 @@
     </dependency>
     <dependency>
       <groupId>org.eclipse.jetty.websocket</groupId>
-      <artifactId>javax-websocket-server-impl</artifactId>
+      <artifactId>websocket-javax-server</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.eclipse.jetty.websocket</groupId>
-      <artifactId>websocket-server</artifactId>
+      <artifactId>websocket-util-server</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.jetty.websocket</groupId>
+      <artifactId>websocket-jetty-server</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
@@ -66,18 +80,13 @@
       <version>${project.version}</version>
     </dependency>
     <dependency>
-      <groupId>org.eclipse.jetty.alpn</groupId>
-      <artifactId>alpn-api</artifactId>
-      <version>${alpn.api.version}</version>
-    </dependency>
-    <dependency>
       <groupId>org.eclipse.jetty</groupId>
       <artifactId>jetty-alpn-server</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.eclipse.jetty</groupId>
-      <artifactId>jetty-alpn-openjdk8-server</artifactId>
+      <artifactId>jetty-alpn-java-server</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
@@ -125,8 +134,8 @@
       <artifactId>javax.mail.glassfish</artifactId>
     </dependency>
     <dependency>
-      <groupId>javax.transaction</groupId>
-      <artifactId>javax.transaction-api</artifactId>
+      <groupId>jakarta.transaction</groupId>
+      <artifactId>jakarta.transaction-api</artifactId>
       <scope>compile</scope>
     </dependency>
     <dependency>
@@ -136,14 +145,8 @@
     </dependency>
     <dependency>
       <groupId>org.eclipse.jetty.websocket</groupId>
-      <artifactId>websocket-client</artifactId>
+      <artifactId>websocket-jetty-client</artifactId>
       <version>${project.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.eclipse.jetty</groupId>
-      <artifactId>jetty-http</artifactId>
-      <version>${project.version}</version>
-      <classifier>tests</classifier>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -166,20 +169,4 @@
       </plugin>
     </plugins>
   </build>
-
-  <profiles>
-    <profile>
-      <id>jdk9</id>
-      <activation>
-        <jdk>[9,)</jdk>
-      </activation>
-      <dependencies>
-        <dependency>
-          <groupId>org.eclipse.jetty</groupId>
-          <artifactId>jetty-alpn-java-server</artifactId>
-          <version>${project.version}</version>
-        </dependency>
-      </dependencies>
-    </profile>
-  </profiles>
 </project>
