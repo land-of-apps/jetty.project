@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.server.handler;
@@ -31,8 +31,8 @@ import org.eclipse.jetty.server.Connector;
 import org.eclipse.jetty.server.NetworkConnector;
 import org.eclipse.jetty.server.Request;
 import org.eclipse.jetty.server.Server;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * A handler that shuts the server down on a valid request. Used to do "soft" restarts from Java.
@@ -74,7 +74,7 @@ import org.eclipse.jetty.util.log.Logger;
  */
 public class ShutdownHandler extends HandlerWrapper
 {
-    private static final Logger LOG = Log.getLogger(ShutdownHandler.class);
+    private static final Logger LOG = LoggerFactory.getLogger(ShutdownHandler.class);
 
     private final String _shutdownToken;
     private boolean _sendShutdownAtStart;
@@ -83,15 +83,8 @@ public class ShutdownHandler extends HandlerWrapper
     /**
      * Creates a listener that lets the server be shut down remotely (but only from localhost).
      *
-     * @param server the Jetty instance that should be shut down
      * @param shutdownToken a secret password to avoid unauthorized shutdown attempts
      */
-    @Deprecated
-    public ShutdownHandler(Server server, String shutdownToken)
-    {
-        this(shutdownToken);
-    }
-
     public ShutdownHandler(String shutdownToken)
     {
         this(shutdownToken, false, false);
@@ -213,7 +206,7 @@ public class ShutdownHandler extends HandlerWrapper
                 }
                 catch (InterruptedException e)
                 {
-                    LOG.ignore(e);
+                    LOG.trace("IGNORED", e);
                 }
                 catch (Exception e)
                 {

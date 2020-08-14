@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.client;
@@ -29,9 +29,8 @@ import javax.servlet.http.HttpServletResponse;
 
 import org.eclipse.jetty.client.api.ContentResponse;
 import org.eclipse.jetty.client.http.HttpConnectionOverHTTP;
-import org.eclipse.jetty.client.http.HttpDestinationOverHTTP;
-import org.eclipse.jetty.client.util.DeferredContentProvider;
-import org.eclipse.jetty.client.util.StringContentProvider;
+import org.eclipse.jetty.client.util.AsyncRequestContent;
+import org.eclipse.jetty.client.util.StringRequestContent;
 import org.eclipse.jetty.http.HttpHeader;
 import org.eclipse.jetty.http.HttpHeaderValue;
 import org.eclipse.jetty.http.HttpStatus;
@@ -85,22 +84,23 @@ public class ClientConnectionCloseTest extends AbstractHttpClientServerTest
         String host = "localhost";
         int port = connector.getLocalPort();
 
-        HttpDestinationOverHTTP destination = (HttpDestinationOverHTTP)client.getDestination(scenario.getScheme(), host, port);
-        DuplexConnectionPool connectionPool = (DuplexConnectionPool)destination.getConnectionPool();
-
-        ContentResponse response = client.newRequest(host, port)
+        var request = client.newRequest(host, port)
             .scheme(scenario.getScheme())
-            .header(HttpHeader.CONNECTION, HttpHeaderValue.CLOSE.asString())
-            .content(new StringContentProvider("0"))
-            .onRequestSuccess(request ->
+            .headers(headers -> headers.put(HttpHeader.CONNECTION, HttpHeaderValue.CLOSE))
+            .body(new StringRequestContent("0"))
+            .onRequestSuccess(r ->
             {
+                HttpDestination destination = (HttpDestination)client.resolveDestination(r);
+                DuplexConnectionPool connectionPool = (DuplexConnectionPool)destination.getConnectionPool();
                 HttpConnectionOverHTTP connection = (HttpConnectionOverHTTP)connectionPool.getActiveConnections().iterator().next();
                 assertFalse(connection.getEndPoint().isOutputShutdown());
-            })
-            .send();
+            });
+        ContentResponse response = request.send();
 
         assertEquals(HttpStatus.OK_200, response.getStatus());
         assertArrayEquals(data, response.getContent());
+        HttpDestination destination = (HttpDestination)client.resolveDestination(request);
+        DuplexConnectionPool connectionPool = (DuplexConnectionPool)destination.getConnectionPool();
         assertEquals(0, connectionPool.getConnectionCount());
     }
 
@@ -122,27 +122,28 @@ public class ClientConnectionCloseTest extends AbstractHttpClientServerTest
         String host = "localhost";
         int port = connector.getLocalPort();
 
-        HttpDestinationOverHTTP destination = (HttpDestinationOverHTTP)client.getDestination(scenario.getScheme(), host, port);
-        DuplexConnectionPool connectionPool = (DuplexConnectionPool)destination.getConnectionPool();
-
         CountDownLatch resultLatch = new CountDownLatch(1);
         long idleTimeout = 1000;
-        client.newRequest(host, port)
+        var request = client.newRequest(host, port)
             .scheme(scenario.getScheme())
-            .header(HttpHeader.CONNECTION, HttpHeaderValue.CLOSE.asString())
+            .headers(headers -> headers.put(HttpHeader.CONNECTION, HttpHeaderValue.CLOSE))
             .idleTimeout(idleTimeout, TimeUnit.MILLISECONDS)
-            .onRequestSuccess(request ->
+            .onRequestSuccess(r ->
             {
+                HttpDestination destination = (HttpDestination)client.resolveDestination(r);
+                DuplexConnectionPool connectionPool = (DuplexConnectionPool)destination.getConnectionPool();
                 HttpConnectionOverHTTP connection = (HttpConnectionOverHTTP)connectionPool.getActiveConnections().iterator().next();
                 assertFalse(connection.getEndPoint().isOutputShutdown());
-            })
-            .send(result ->
-            {
-                if (result.isFailed())
-                    resultLatch.countDown();
             });
+        request.send(result ->
+        {
+            if (result.isFailed())
+                resultLatch.countDown();
+        });
 
         assertTrue(resultLatch.await(2 * idleTimeout, TimeUnit.MILLISECONDS));
+        HttpDestination destination = (HttpDestination)client.resolveDestination(request);
+        DuplexConnectionPool connectionPool = (DuplexConnectionPool)destination.getConnectionPool();
         assertEquals(0, connectionPool.getConnectionCount());
     }
 
@@ -183,30 +184,31 @@ public class ClientConnectionCloseTest extends AbstractHttpClientServerTest
         String host = "localhost";
         int port = connector.getLocalPort();
 
-        HttpDestinationOverHTTP destination = (HttpDestinationOverHTTP)client.getDestination(scenario.getScheme(), host, port);
-        DuplexConnectionPool connectionPool = (DuplexConnectionPool)destination.getConnectionPool();
-
-        DeferredContentProvider content = new DeferredContentProvider(ByteBuffer.allocate(8));
+        AsyncRequestContent content = new AsyncRequestContent(ByteBuffer.allocate(8));
         CountDownLatch resultLatch = new CountDownLatch(1);
-        client.newRequest(host, port)
+        var request = client.newRequest(host, port)
             .scheme(scenario.getScheme())
-            .header(HttpHeader.CONNECTION, HttpHeaderValue.CLOSE.asString())
-            .content(content)
+            .headers(headers -> headers.put(HttpHeader.CONNECTION, HttpHeaderValue.CLOSE))
+            .body(content)
             .idleTimeout(idleTimeout, TimeUnit.MILLISECONDS)
-            .onRequestSuccess(request ->
+            .onRequestSuccess(r ->
             {
+                HttpDestination destination = (HttpDestination)client.resolveDestination(r);
+                DuplexConnectionPool connectionPool = (DuplexConnectionPool)destination.getConnectionPool();
                 HttpConnectionOverHTTP connection = (HttpConnectionOverHTTP)connectionPool.getActiveConnections().iterator().next();
                 assertFalse(connection.getEndPoint().isOutputShutdown());
-            })
-            .send(result ->
-            {
-                if (result.isFailed())
-                    resultLatch.countDown();
             });
+        request.send(result ->
+        {
+            if (result.isFailed())
+                resultLatch.countDown();
+        });
         content.offer(ByteBuffer.allocate(8));
         content.close();
 
         assertTrue(resultLatch.await(2 * idleTimeout, TimeUnit.MILLISECONDS));
+        HttpDestination destination = (HttpDestination)client.resolveDestination(request);
+        DuplexConnectionPool connectionPool = (DuplexConnectionPool)destination.getConnectionPool();
         assertEquals(0, connectionPool.getConnectionCount());
     }
 
@@ -238,21 +240,22 @@ public class ClientConnectionCloseTest extends AbstractHttpClientServerTest
         String host = "localhost";
         int port = connector.getLocalPort();
 
-        HttpDestinationOverHTTP destination = (HttpDestinationOverHTTP)client.getDestination(scenario.getScheme(), host, port);
-        DuplexConnectionPool connectionPool = (DuplexConnectionPool)destination.getConnectionPool();
-
-        ContentResponse response = client.newRequest(host, port)
+        var request = client.newRequest(host, port)
             .scheme(scenario.getScheme())
-            .header(HttpHeader.CONNECTION, HttpHeaderValue.CLOSE.asString())
-            .onRequestSuccess(request ->
+            .headers(headers -> headers.put(HttpHeader.CONNECTION, HttpHeaderValue.CLOSE))
+            .onRequestSuccess(r ->
             {
+                HttpDestination destination = (HttpDestination)client.resolveDestination(r);
+                DuplexConnectionPool connectionPool = (DuplexConnectionPool)destination.getConnectionPool();
                 HttpConnectionOverHTTP connection = (HttpConnectionOverHTTP)connectionPool.getActiveConnections().iterator().next();
                 assertFalse(connection.getEndPoint().isOutputShutdown());
             })
-            .onResponseHeaders(r -> r.getHeaders().remove(HttpHeader.CONNECTION))
-            .send();
+            .onResponseHeaders(r -> ((HttpResponse)r).headers(headers -> headers.remove(HttpHeader.CONNECTION)));
+        ContentResponse response = request.send();
 
         assertEquals(HttpStatus.OK_200, response.getStatus());
+        HttpDestination destination = (HttpDestination)client.resolveDestination(request);
+        DuplexConnectionPool connectionPool = (DuplexConnectionPool)destination.getConnectionPool();
         assertEquals(0, connectionPool.getConnectionCount());
     }
 }

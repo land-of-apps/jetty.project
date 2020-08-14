@@ -1,24 +1,25 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.http2;
 
 import java.io.IOException;
+import java.util.concurrent.CompletableFuture;
 
 import org.eclipse.jetty.http2.api.Session;
 import org.eclipse.jetty.http2.api.Stream;
@@ -37,14 +38,14 @@ import org.eclipse.jetty.util.Promise;
 public interface ISession extends Session
 {
     @Override
-    IStream getStream(int streamId);
+    public IStream getStream(int streamId);
 
     /**
      * <p>Removes the given {@code stream}.</p>
      *
      * @param stream the stream to remove
      */
-    void removeStream(IStream stream);
+    public void removeStream(IStream stream);
 
     /**
      * <p>Enqueues the given frames to be written to the connection.</p>
@@ -54,7 +55,7 @@ public interface ISession extends Session
      * @param frame the first frame to enqueue
      * @param frames additional frames to enqueue
      */
-    void frames(IStream stream, Callback callback, Frame frame, Frame... frames);
+    public void frames(IStream stream, Callback callback, Frame frame, Frame... frames);
 
     /**
      * <p>Enqueues the given PUSH_PROMISE frame to be written to the connection.</p>
@@ -66,7 +67,7 @@ public interface ISession extends Session
      * @param frame the PUSH_PROMISE frame to enqueue
      * @param listener the listener that gets notified of pushed stream events
      */
-    void push(IStream stream, Promise<Stream> promise, PushPromiseFrame frame, Stream.Listener listener);
+    public void push(IStream stream, Promise<Stream> promise, PushPromiseFrame frame, Stream.Listener listener);
 
     /**
      * <p>Enqueues the given DATA frame to be written to the connection.</p>
@@ -75,7 +76,7 @@ public interface ISession extends Session
      * @param callback the callback that gets notified when the frame has been sent
      * @param frame the DATA frame to send
      */
-    void data(IStream stream, Callback callback, DataFrame frame);
+    public void data(IStream stream, Callback callback, DataFrame frame);
 
     /**
      * <p>Updates the session send window by the given {@code delta}.</p>
@@ -83,7 +84,7 @@ public interface ISession extends Session
      * @param delta the delta value (positive or negative) to add to the session send window
      * @return the previous value of the session send window
      */
-    int updateSendWindow(int delta);
+    public int updateSendWindow(int delta);
 
     /**
      * <p>Updates the session receive window by the given {@code delta}.</p>
@@ -91,7 +92,7 @@ public interface ISession extends Session
      * @param delta the delta value (positive or negative) to add to the session receive window
      * @return the previous value of the session receive window
      */
-    int updateRecvWindow(int delta);
+    public int updateRecvWindow(int delta);
 
     /**
      * <p>Callback method invoked when a WINDOW_UPDATE frame has been received.</p>
@@ -99,12 +100,12 @@ public interface ISession extends Session
      * @param stream the stream the window update belongs to, or null if the window update belongs to the session
      * @param frame the WINDOW_UPDATE frame received
      */
-    void onWindowUpdate(IStream stream, WindowUpdateFrame frame);
+    public void onWindowUpdate(IStream stream, WindowUpdateFrame frame);
 
     /**
      * @return whether the push functionality is enabled
      */
-    boolean isPushEnabled();
+    public boolean isPushEnabled();
 
     /**
      * <p>Callback invoked when the connection reads -1.</p>
@@ -112,7 +113,7 @@ public interface ISession extends Session
      * @see #onIdleTimeout()
      * @see #close(int, String, Callback)
      */
-    void onShutdown();
+    public void onShutdown();
 
     /**
      * <p>Callback invoked when the idle timeout expires.</p>
@@ -121,7 +122,7 @@ public interface ISession extends Session
      * @see #onShutdown()
      * @see #close(int, String, Callback)
      */
-    boolean onIdleTimeout();
+    public boolean onIdleTimeout();
 
     /**
      * <p>Callback method invoked during an HTTP/1.1 to HTTP/2 upgrade requests
@@ -129,7 +130,7 @@ public interface ISession extends Session
      *
      * @param frame the synthetic frame to process
      */
-    void onFrame(Frame frame);
+    public void onFrame(Frame frame);
 
     /**
      * <p>Callback method invoked when bytes are flushed to the network.</p>
@@ -137,12 +138,12 @@ public interface ISession extends Session
      * @param bytes the number of bytes flushed to the network
      * @throws IOException if the flush should fail
      */
-    void onFlushed(long bytes) throws IOException;
+    public void onFlushed(long bytes) throws IOException;
 
     /**
      * @return the number of bytes written by this session
      */
-    long getBytesWritten();
+    public long getBytesWritten();
 
     /**
      * <p>Callback method invoked when a DATA frame is received.</p>
@@ -150,5 +151,15 @@ public interface ISession extends Session
      * @param frame the DATA frame received
      * @param callback the callback to notify when the frame has been processed
      */
-    void onData(DataFrame frame, Callback callback);
+    public void onData(DataFrame frame, Callback callback);
+
+    /**
+     * <p>Gracefully closes the session, returning a {@code CompletableFuture} that
+     * is completed when all the streams currently being processed are completed.</p>
+     * <p>Implementation is idempotent, i.e. calling this method a second time
+     * or concurrently results in a no-operation.</p>
+     *
+     * @return a {@code CompletableFuture} that is completed when all the streams are completed
+     */
+    public CompletableFuture<Void> shutdown();
 }

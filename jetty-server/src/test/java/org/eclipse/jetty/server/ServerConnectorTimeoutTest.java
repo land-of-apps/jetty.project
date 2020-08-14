@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.server;
@@ -31,10 +31,10 @@ import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
+import org.eclipse.jetty.logging.StacklessLogging;
 import org.eclipse.jetty.server.handler.AbstractHandler;
 import org.eclipse.jetty.server.session.SessionHandler;
 import org.eclipse.jetty.util.IO;
-import org.eclipse.jetty.util.log.StacklessLogging;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -122,15 +122,18 @@ public class ServerConnectorTimeoutTest extends ConnectorTimeoutTest
         });
     }
 
-    private synchronized String process(String content) throws IOException, InterruptedException
+    private String process(String content) throws IOException, InterruptedException
     {
-        String request = "GET / HTTP/1.1\r\n" + "Host: localhost\r\n";
+        synchronized (this)
+        {
+            String request = "GET / HTTP/1.1\r\n" + "Host: localhost\r\n";
 
-        if (content == null)
-            request += "\r\n";
-        else
-            request += "Content-Length: " + content.length() + "\r\n" + "\r\n" + content;
-        return getResponse(request);
+            if (content == null)
+                request += "\r\n";
+            else
+                request += "Content-Length: " + content.length() + "\r\n" + "\r\n" + content;
+            return getResponse(request);
+        }
     }
 
     private String getResponse(String request) throws IOException, InterruptedException

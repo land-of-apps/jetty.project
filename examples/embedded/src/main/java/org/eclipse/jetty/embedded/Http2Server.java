@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.embedded;
@@ -24,8 +24,11 @@ import java.lang.management.ManagementFactory;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.EnumSet;
+import java.util.Optional;
+import java.util.stream.Collectors;
 import javax.servlet.DispatcherType;
 import javax.servlet.Filter;
 import javax.servlet.FilterChain;
@@ -40,7 +43,6 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
 
-import org.eclipse.jetty.alpn.ALPN;
 import org.eclipse.jetty.alpn.server.ALPNServerConnectionFactory;
 import org.eclipse.jetty.http2.HTTP2Cipher;
 import org.eclipse.jetty.http2.server.HTTP2CServerConnectionFactory;
@@ -59,10 +61,8 @@ import org.eclipse.jetty.servlet.ServletHolder;
 import org.eclipse.jetty.servlets.PushCacheFilter;
 import org.eclipse.jetty.util.resource.PathResource;
 import org.eclipse.jetty.util.ssl.SslContextFactory;
+import org.slf4j.LoggerFactory;
 
-/**
- *
- */
 public class Http2Server
 {
     public static void main(String... args) throws Exception
@@ -74,6 +74,8 @@ public class Http2Server
         MBeanContainer mbContainer = new MBeanContainer(
             ManagementFactory.getPlatformMBeanServer());
         server.addBean(mbContainer);
+
+        server.addBean(LoggerFactory.getILoggerFactory());
 
         ServletContextHandler context = new ServletContextHandler(server, "/", ServletContextHandler.SESSIONS);
         Path docroot = Paths.get("src/main/resources/docroot");
@@ -101,13 +103,12 @@ public class Http2Server
         server.addConnector(http);
 
         // SSL Context Factory for HTTPS and HTTP/2
-        Path keystorePath = Paths.get("src/main/resources/etc/keystore").toAbsolutePath();
+        Path keystorePath = Paths.get("src/main/resources/etc/keystore.p12").toAbsolutePath();
         if (!Files.exists(keystorePath))
             throw new FileNotFoundException(keystorePath.toString());
-        SslContextFactory sslContextFactory = new SslContextFactory.Server();
+        SslContextFactory.Server sslContextFactory = new SslContextFactory.Server();
         sslContextFactory.setKeyStorePath(keystorePath.toString());
-        sslContextFactory.setKeyStorePassword("OBF:1vny1zlo1x8e1vnw1vn61x8g1zlu1vn4");
-        sslContextFactory.setKeyManagerPassword("OBF:1u2u1wml1z7s1z7a1wnl1u2g");
+        sslContextFactory.setKeyStorePassword("storepwd");
         sslContextFactory.setCipherComparator(HTTP2Cipher.COMPARATOR);
         // sslContextFactory.setProvider("Conscrypt");
 
@@ -130,8 +131,6 @@ public class Http2Server
         http2Connector.setPort(securePort);
         server.addConnector(http2Connector);
 
-        ALPN.debug = false;
-
         server.start();
         server.join();
     }
@@ -139,7 +138,7 @@ public class Http2Server
     public static class PushedTilesFilter implements Filter
     {
         @Override
-        public void init(FilterConfig filterConfig) throws ServletException
+        public void init(FilterConfig filterConfig)
         {
         }
 
@@ -169,7 +168,7 @@ public class Http2Server
         private static final long serialVersionUID = 1L;
 
         @Override
-        protected void service(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException
+        protected void service(HttpServletRequest request, HttpServletResponse response) throws IOException
         {
             String code = request.getParameter("code");
             if (code != null)
@@ -186,12 +185,11 @@ public class Http2Server
             content += "session=" + session.getId() + (session.isNew() ? "(New)\n" : "\n");
             content += "date=" + new Date() + "\n";
 
-            Cookie[] cookies = request.getCookies();
-            if (cookies != null && cookies.length > 0)
-                for (Cookie c : cookies)
-                {
-                    content += "cookie " + c.getName() + "=" + c.getValue() + "\n";
-                }
+            content += Optional.ofNullable(request.getCookies())
+                .stream()
+                .flatMap(Arrays::stream)
+                .map(cookie -> String.format("cookie %s=%s", cookie.getName(), cookie.getValue()))
+                .collect(Collectors.joining(System.lineSeparator()));
 
             response.setContentLength(content.length());
             response.getOutputStream().print(content);

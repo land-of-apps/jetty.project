@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.embedded;
@@ -23,6 +23,7 @@ import java.util.Map;
 
 import org.eclipse.jetty.client.api.ContentResponse;
 import org.eclipse.jetty.http.HttpHeader;
+import org.eclipse.jetty.http.HttpHeaderValue;
 import org.eclipse.jetty.http.HttpMethod;
 import org.eclipse.jetty.http.HttpStatus;
 import org.eclipse.jetty.server.Server;
@@ -59,7 +60,7 @@ public class ManyHandlersTest extends AbstractEmbeddedTest
 
         ContentResponse response = client.newRequest(uri)
             .method(HttpMethod.GET)
-            .header(HttpHeader.ACCEPT_ENCODING, "gzip")
+            .headers(headers -> headers.put(HttpHeader.ACCEPT_ENCODING, HttpHeaderValue.GZIP))
             .send();
         assertThat("HTTP Response Status", response.getStatus(), is(HttpStatus.OK_200));
 
@@ -72,8 +73,9 @@ public class ManyHandlersTest extends AbstractEmbeddedTest
 
         // test response content
         String responseBody = response.getContentAsString();
-        Object jsonObj = JSON.parse(responseBody);
-        Map jsonMap = (Map)jsonObj;
+        Object jsonObj = new JSON().fromJSON(responseBody);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> jsonMap = (Map<String, Object>)jsonObj;
         assertThat("Response JSON keys.size", jsonMap.keySet().size(), is(2));
     }
 
@@ -83,7 +85,7 @@ public class ManyHandlersTest extends AbstractEmbeddedTest
         URI uri = server.getURI().resolve("/hello");
         ContentResponse response = client.newRequest(uri)
             .method(HttpMethod.GET)
-            .header(HttpHeader.ACCEPT_ENCODING, "gzip")
+            .headers(headers -> headers.put(HttpHeader.ACCEPT_ENCODING, HttpHeaderValue.GZIP))
             .send();
         assertThat("HTTP Response Status", response.getStatus(), is(HttpStatus.OK_200));
 

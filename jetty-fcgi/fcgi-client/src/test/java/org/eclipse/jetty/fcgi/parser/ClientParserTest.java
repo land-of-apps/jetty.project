@@ -1,24 +1,25 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.fcgi.parser;
 
 import java.nio.ByteBuffer;
+import java.util.Locale;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -41,7 +42,7 @@ public class ClientParserTest
     public void testParseResponseHeaders() throws Exception
     {
         final int id = 13;
-        HttpFields fields = new HttpFields();
+        HttpFields.Mutable fields = HttpFields.build();
 
         final int statusCode = 200;
         final String statusMessage = "OK";
@@ -81,7 +82,7 @@ public class ClientParserTest
                 switch (field.getName())
                 {
                     case contentTypeName:
-                        assertEquals(contentTypeValue, field.getValue());
+                        assertEquals(contentTypeValue, field.getValue().toLowerCase(Locale.ENGLISH));
                         params.set(params.get() * primes[1]);
                         break;
                     default:
@@ -111,8 +112,8 @@ public class ClientParserTest
     public void testParseNoResponseContent() throws Exception
     {
         final int id = 13;
-        HttpFields fields = new HttpFields();
-        fields.put("Content-Length", "0");
+        HttpFields fields = HttpFields.build()
+            .put("Content-Length", "0");
 
         ByteBufferPool byteBufferPool = new MappedByteBufferPool();
         ServerGenerator generator = new ServerGenerator(byteBufferPool);
@@ -156,7 +157,7 @@ public class ClientParserTest
     public void testParseSmallResponseContent() throws Exception
     {
         final int id = 13;
-        HttpFields fields = new HttpFields();
+        HttpFields.Mutable fields = HttpFields.build();
 
         ByteBuffer content = ByteBuffer.wrap(new byte[1024]);
         final int contentLength = content.remaining();
@@ -209,7 +210,7 @@ public class ClientParserTest
     public void testParseLargeResponseContent() throws Exception
     {
         final int id = 13;
-        HttpFields fields = new HttpFields();
+        HttpFields.Mutable fields = HttpFields.build();
 
         ByteBuffer content = ByteBuffer.wrap(new byte[128 * 1024]);
         final int contentLength = content.remaining();

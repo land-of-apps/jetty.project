@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.server;
@@ -39,11 +39,11 @@ import javax.servlet.http.HttpServletResponse;
 
 import org.eclipse.jetty.io.EndPoint;
 import org.eclipse.jetty.io.SocketChannelEndPoint;
+import org.eclipse.jetty.logging.StacklessLogging;
 import org.eclipse.jetty.server.handler.AbstractHandler;
 import org.eclipse.jetty.server.handler.DefaultHandler;
 import org.eclipse.jetty.server.handler.HandlerList;
 import org.eclipse.jetty.util.IO;
-import org.eclipse.jetty.util.log.StacklessLogging;
 import org.hamcrest.Matchers;
 import org.junit.jupiter.api.Test;
 
@@ -71,7 +71,7 @@ public class ServerConnectorTest
             EndPoint endPoint = baseRequest.getHttpChannel().getEndPoint();
             assertThat("Endpoint", endPoint, instanceOf(SocketChannelEndPoint.class));
             SocketChannelEndPoint channelEndPoint = (SocketChannelEndPoint)endPoint;
-            Socket socket = channelEndPoint.getSocket();
+            Socket socket = channelEndPoint.getChannel().socket();
             ServerConnector connector = (ServerConnector)baseRequest.getHttpChannel().getConnector();
 
             PrintWriter out = response.getWriter();
@@ -126,11 +126,7 @@ public class ServerConnectorTest
         connector.setPort(0);
         server.addConnector(connector);
 
-        HandlerList handlers = new HandlerList();
-        handlers.addHandler(new ReuseInfoHandler());
-        handlers.addHandler(new DefaultHandler());
-
-        server.setHandler(handlers);
+        server.setHandler(new HandlerList(new ReuseInfoHandler(), new DefaultHandler()));
 
         try
         {
@@ -162,11 +158,7 @@ public class ServerConnectorTest
         connector.setReuseAddress(true);
         server.addConnector(connector);
 
-        HandlerList handlers = new HandlerList();
-        handlers.addHandler(new ReuseInfoHandler());
-        handlers.addHandler(new DefaultHandler());
-
-        server.setHandler(handlers);
+        server.setHandler(new HandlerList(new ReuseInfoHandler(), new DefaultHandler()));
 
         try
         {
@@ -198,11 +190,7 @@ public class ServerConnectorTest
         connector.setReuseAddress(false);
         server.addConnector(connector);
 
-        HandlerList handlers = new HandlerList();
-        handlers.addHandler(new ReuseInfoHandler());
-        handlers.addHandler(new DefaultHandler());
-
-        server.setHandler(handlers);
+        server.setHandler(new HandlerList(new ReuseInfoHandler(), new DefaultHandler()));
 
         try
         {
@@ -226,7 +214,7 @@ public class ServerConnectorTest
     }
 
     @Test
-    public void testAddFirstConnectionFactory() throws Exception
+    public void testAddFirstConnectionFactory()
     {
         Server server = new Server();
         ServerConnector connector = new ServerConnector(server);
@@ -248,7 +236,7 @@ public class ServerConnectorTest
     public void testExceptionWhileAccepting() throws Exception
     {
         Server server = new Server();
-        try (StacklessLogging stackless = new StacklessLogging(AbstractConnector.class))
+        try (StacklessLogging ignored = new StacklessLogging(AbstractConnector.class))
         {
             AtomicLong spins = new AtomicLong();
             ServerConnector connector = new ServerConnector(server, 1, 1)
@@ -312,12 +300,9 @@ public class ServerConnectorTest
             connector.setPort(port);
             server.addConnector(connector);
 
-            HandlerList handlers = new HandlerList();
-            handlers.addHandler(new DefaultHandler());
+            server.setHandler(new HandlerList(new DefaultHandler()));
 
-            server.setHandler(handlers);
-
-            IOException x = assertThrows(IOException.class, () -> server.start());
+            IOException x = assertThrows(IOException.class, server::start);
             assertThat(x.getCause(), instanceOf(BindException.class));
             assertThat(x.getMessage(), containsString("0.0.0.0:" + port));
         }

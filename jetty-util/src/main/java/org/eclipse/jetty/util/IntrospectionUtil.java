@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.util;
@@ -42,7 +42,10 @@ public class IntrospectionUtil
         if (!method.getName().startsWith("set"))
             return false;
 
-        return method.getParameterCount() == 1;
+        if (method.getParameterCount() != 1)
+            return false;
+
+        return true;
     }
 
     public static Method findMethod(Class<?> clazz, String methodName, Class<?>[] args, boolean checkInheritance, boolean strictArgs)
@@ -118,7 +121,10 @@ public class IntrospectionUtil
             return true;
         if (Modifier.isProtected(modifiers))
             return true;
-        return !Modifier.isPrivate(modifiers) && pack.equals(member.getDeclaringClass().getPackage());
+        if (!Modifier.isPrivate(modifiers) && pack.equals(member.getDeclaringClass().getPackage()))
+            return true;
+
+        return false;
     }
 
     public static boolean checkParams(Class<?>[] formalParams, Class<?>[] actualParams, boolean strict)
@@ -150,7 +156,12 @@ public class IntrospectionUtil
             }
         }
 
-        return j == formalParams.length;
+        if (j != formalParams.length)
+        {
+            return false;
+        }
+
+        return true;
     }
 
     public static boolean isSameSignature(Method methodA, Method methodB)
@@ -163,7 +174,11 @@ public class IntrospectionUtil
         List<Class<?>> parameterTypesA = Arrays.asList(methodA.getParameterTypes());
         List<Class<?>> parameterTypesB = Arrays.asList(methodB.getParameterTypes());
 
-        return methodA.getName().equals(methodB.getName()) && parameterTypesA.containsAll(parameterTypesB);
+        if (methodA.getName().equals(methodB.getName()) &&
+            parameterTypesA.containsAll(parameterTypesB))
+            return true;
+
+        return false;
     }
 
     public static boolean isTypeCompatible(Class<?> formalType, Class<?> actualType, boolean strict)

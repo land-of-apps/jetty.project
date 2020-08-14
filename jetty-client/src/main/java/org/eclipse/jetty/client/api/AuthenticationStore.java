@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.client.api;
@@ -28,17 +28,17 @@ public interface AuthenticationStore
     /**
      * @param authentication the {@link Authentication} to add
      */
-    void addAuthentication(Authentication authentication);
+    public void addAuthentication(Authentication authentication);
 
     /**
      * @param authentication the {@link Authentication} to remove
      */
-    void removeAuthentication(Authentication authentication);
+    public void removeAuthentication(Authentication authentication);
 
     /**
      * Removes all {@link Authentication}s stored
      */
-    void clearAuthentications();
+    public void clearAuthentications();
 
     /**
      * Returns the authentication that matches the given type (for example, "Basic" or "Digest"),
@@ -50,22 +50,22 @@ public interface AuthenticationStore
      * @param realm the authentication realm
      * @return the authentication that matches the given parameters, or null
      */
-    Authentication findAuthentication(String type, URI uri, String realm);
+    public Authentication findAuthentication(String type, URI uri, String realm);
 
     /**
      * @param result the {@link Authentication.Result} to add
      */
-    void addAuthenticationResult(Authentication.Result result);
+    public void addAuthenticationResult(Authentication.Result result);
 
     /**
      * @param result the {@link Authentication.Result} to remove
      */
-    void removeAuthenticationResult(Authentication.Result result);
+    public void removeAuthenticationResult(Authentication.Result result);
 
     /**
      * Removes all authentication results stored
      */
-    void clearAuthenticationResults();
+    public void clearAuthenticationResults();
 
     /**
      * Returns an {@link Authentication.Result} that matches the given URI, or null if no
@@ -74,12 +74,12 @@ public interface AuthenticationStore
      * @param uri the request URI
      * @return the {@link Authentication.Result} that matches the given URI, or null
      */
-    Authentication.Result findAuthenticationResult(URI uri);
+    public Authentication.Result findAuthenticationResult(URI uri);
 
     /**
      * @return false if there are no stored authentication results, true if there may be some.
      */
-    default boolean hasAuthenticationResults()
+    public default boolean hasAuthenticationResults()
     {
         return true;
     }

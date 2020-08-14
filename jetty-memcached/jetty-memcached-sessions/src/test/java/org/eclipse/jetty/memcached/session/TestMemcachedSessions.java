@@ -1,27 +1,25 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.memcached.session;
 
 import java.io.IOException;
 import java.io.PrintWriter;
-
-import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -30,6 +28,7 @@ import javax.servlet.http.HttpSession;
 import org.eclipse.jetty.client.HttpClient;
 import org.eclipse.jetty.client.api.ContentResponse;
 import org.eclipse.jetty.client.api.Request;
+import org.eclipse.jetty.http.HttpField;
 import org.eclipse.jetty.server.NetworkConnector;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.session.CachingSessionDataStore;
@@ -41,7 +40,6 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * TestMemcachedSessions
@@ -50,9 +48,8 @@ public class TestMemcachedSessions
 {
     public static class TestServlet extends HttpServlet
     {
-
         @Override
-        protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException
+        protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws IOException
         {
             String arg = req.getParameter("action");
             if (arg == null)
@@ -118,16 +115,17 @@ public class TestMemcachedSessions
                 ContentResponse response = client.GET("http://localhost:" + port + contextPath + "?action=set&value=" + value);
                 assertEquals(HttpServletResponse.SC_OK, response.getStatus());
                 String sessionCookie = response.getHeaders().get("Set-Cookie");
-                assertTrue(sessionCookie != null);
+                assertNotNull(sessionCookie);
                 // Mangle the cookie, replacing Path with $Path, etc.
-                sessionCookie = sessionCookie.replaceFirst("(\\W)(P|p)ath=", "$1\\$Path=");
+                sessionCookie = sessionCookie.replaceFirst("(\\W)([Pp])ath=", "$1\\$Path=");
 
                 String resp = response.getContentAsString();
                 assertEquals(resp.trim(), String.valueOf(value));
 
                 // Be sure the session value is still there
+                HttpField cookie = new HttpField("Cookie", sessionCookie);
                 Request request = client.newRequest("http://localhost:" + port + contextPath + "?action=get");
-                request.header("Cookie", sessionCookie);
+                request.headers(headers -> headers.put(cookie));
                 response = request.send();
                 assertEquals(HttpServletResponse.SC_OK, response.getStatus());
 
@@ -136,13 +134,13 @@ public class TestMemcachedSessions
 
                 //Delete the session
                 request = client.newRequest("http://localhost:" + port + contextPath + "?action=del");
-                request.header("Cookie", sessionCookie);
+                request.headers(headers -> headers.put(cookie));
                 response = request.send();
                 assertEquals(HttpServletResponse.SC_OK, response.getStatus());
 
                 //Check that the session is gone
                 request = client.newRequest("http://localhost:" + port + contextPath + "?action=get");
-                request.header("Cookie", sessionCookie);
+                request.headers(headers -> headers.put(cookie));
                 response = request.send();
                 assertEquals(HttpServletResponse.SC_OK, response.getStatus());
                 resp = response.getContentAsString();

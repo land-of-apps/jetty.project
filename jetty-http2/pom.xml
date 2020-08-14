@@ -3,7 +3,7 @@
   <parent>
     <artifactId>jetty-project</artifactId>
     <groupId>org.eclipse.jetty</groupId>
-    <version>9.4.30.v20200611</version>
+    <version>10.0.0-SNAPSHOT</version>
   </parent>
 
   <modelVersion>4.0.0</modelVersion>
@@ -19,18 +19,5 @@
     <module>http2-http-client-transport</module>
     <module>http2-server</module>
   </modules>
-
-  <profiles>
-    <profile>
-      <id>jdk8</id>
-      <activation>
-        <jdk>[1.8,9)</jdk>
-      </activation>
-      <modules>
-        <!-- These tests can only be run in Java 8 -->
-        <module>http2-alpn-tests</module>
-      </modules>
-    </profile>
-  </profiles>
 
 </project>

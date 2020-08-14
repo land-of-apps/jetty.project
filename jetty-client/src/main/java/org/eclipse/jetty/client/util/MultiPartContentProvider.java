@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.client.util;
@@ -27,7 +27,6 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
-import java.util.Random;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.eclipse.jetty.client.AsyncContentProvider;
@@ -39,8 +38,8 @@ import org.eclipse.jetty.http.HttpHeader;
 import org.eclipse.jetty.io.RuntimeIOException;
 import org.eclipse.jetty.util.Callback;
 import org.eclipse.jetty.util.IO;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * <p>A {@link ContentProvider} for form uploads with the {@code "multipart/form-data"}
@@ -63,10 +62,13 @@ import org.eclipse.jetty.util.log.Logger;
  *     &lt;input type="file" name="icon" /&gt;
  * &lt;/form&gt;
  * </pre>
+ *
+ * @deprecated use {@link MultiPartRequestContent} instead.
  */
+@Deprecated
 public class MultiPartContentProvider extends AbstractTypedContentProvider implements AsyncContentProvider, Closeable
 {
-    private static final Logger LOG = Log.getLogger(MultiPartContentProvider.class);
+    private static final Logger LOG = LoggerFactory.getLogger(MultiPartContentProvider.class);
     private static final byte[] COLON_SPACE_BYTES = new byte[]{':', ' '};
     private static final byte[] CR_LF_BYTES = new byte[]{'\r', '\n'};
 
@@ -99,15 +101,10 @@ public class MultiPartContentProvider extends AbstractTypedContentProvider imple
 
     private static String makeBoundary()
     {
-        Random random = new Random();
         StringBuilder builder = new StringBuilder("JettyHttpClientBoundary");
-        int length = builder.length();
-        while (builder.length() < length + 16)
-        {
-            long rnd = random.nextLong();
-            builder.append(Long.toString(rnd < 0 ? -rnd : rnd, 36));
-        }
-        builder.setLength(length + 16);
+        builder.append(Long.toString(System.identityHashCode(builder), 36));
+        builder.append(Long.toString(System.identityHashCode(Thread.currentThread()), 36));
+        builder.append(Long.toString(System.nanoTime(), 36));
         return builder.toString();
     }
 
@@ -372,6 +369,9 @@ public class MultiPartContentProvider extends AbstractTypedContentProvider imple
                     {
                         throw new NoSuchElementException();
                     }
+
+                    default:
+                        throw new IllegalStateException(state.toString());
                 }
             }
         }

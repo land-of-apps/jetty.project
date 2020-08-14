@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.osgi.boot.utils;
@@ -37,12 +37,12 @@ public interface BundleFileLocatorHelper
     /**
      * The name of the custom implementation for this interface in a fragment.
      */
-    String CLASS_NAME = "org.eclipse.jetty.osgi.boot.utils.FileLocatorHelperImpl";
+    public static final String CLASS_NAME = "org.eclipse.jetty.osgi.boot.utils.FileLocatorHelperImpl";
 
     /**
      * The default instance supports felix and equinox
      */
-    BundleFileLocatorHelper DEFAULT = new DefaultFileLocatorHelper();
+    public static BundleFileLocatorHelper DEFAULT = new DefaultFileLocatorHelper();
 
     /**
      * Works with equinox, felix, nuxeo and probably more. Not exactly in the
@@ -55,7 +55,7 @@ public interface BundleFileLocatorHelper
      * @return Its installation location as a file.
      * @throws Exception if unable to get the install location
      */
-    File getBundleInstallLocation(Bundle bundle) throws Exception;
+    public File getBundleInstallLocation(Bundle bundle) throws Exception;
 
     /**
      * Locate a file inside a bundle.
@@ -65,7 +65,7 @@ public interface BundleFileLocatorHelper
      * @return file the file object
      * @throws Exception if unable to get the file
      */
-    File getFileInBundle(Bundle bundle, String path) throws Exception;
+    public File getFileInBundle(Bundle bundle, String path) throws Exception;
 
     /**
      * If the bundle is a jar, returns the jar. If the bundle is a folder, look
@@ -81,7 +81,7 @@ public interface BundleFileLocatorHelper
      * embedded inside it.
      * @throws Exception if unable to locate the jars
      */
-    File[] locateJarsInsideBundle(Bundle bundle) throws Exception;
+    public File[] locateJarsInsideBundle(Bundle bundle) throws Exception;
 
     /**
      * Helper method equivalent to Bundle#getEntry(String entryPath) except that
@@ -91,7 +91,7 @@ public interface BundleFileLocatorHelper
      * @param entryPath the entry path
      * @return null or all the entries found for that path.
      */
-    Enumeration<URL> findEntries(Bundle bundle, String entryPath);
+    public Enumeration<URL> findEntries(Bundle bundle, String entryPath);
 
     /**
      * Only useful for equinox: on felix we get the <code>file://</code> or <code>jar://</code> url
@@ -104,7 +104,7 @@ public interface BundleFileLocatorHelper
      * @return a URL to the bundle entry that uses a common protocol
      * @throws Exception if unable to get the local url
      */
-    URL getLocalURL(URL url) throws Exception;
+    public URL getLocalURL(URL url) throws Exception;
 
     /**
      * Only useful for equinox: on felix we get the <code>file://</code> url already. Other
@@ -119,5 +119,5 @@ public interface BundleFileLocatorHelper
      * protocol
      * @throws Exception if unable to get the file url
      */
-    URL getFileURL(URL url) throws Exception;
+    public URL getFileURL(URL url) throws Exception;
 }

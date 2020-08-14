@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.servlet;
@@ -142,7 +142,6 @@ public class DispatcherForwardTest
         CountDownLatch latch = new CountDownLatch(1);
         final String query1 = "a=1%20one&b=2%20two";
         final String query2 = "a=3%20three";
-        final String query3 = "a=3%20three&b=2%20two";
         servlet1 = new HttpServlet()
         {
             @Override
@@ -163,7 +162,7 @@ public class DispatcherForwardTest
             @Override
             protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException
             {
-                checkThat(req.getQueryString(), Matchers.equalTo(query3));
+                checkThat(req.getQueryString(), Matchers.equalTo(query2));
                 checkThat(req.getParameter("a"), Matchers.equalTo("3 three"));
                 checkThat(req.getParameter("b"), Matchers.equalTo("2 two"));
             }
@@ -186,13 +185,12 @@ public class DispatcherForwardTest
     {
         // 1. request /one?a=1
         // 1. forward /two?b=2
-        // 2. assert query => a=1&b=2
+        // 2. assert query => b=2
         // 1. assert query => a=1
 
         CountDownLatch latch = new CountDownLatch(1);
         final String query1 = "a=1%20one";
         final String query2 = "b=2%20two";
-        final String query3 = "b=2%20two&a=1%20one";
         servlet1 = new HttpServlet()
         {
             @Override
@@ -212,7 +210,7 @@ public class DispatcherForwardTest
             @Override
             protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException
             {
-                checkThat(req.getQueryString(), Matchers.equalTo(query3));
+                checkThat(req.getQueryString(), Matchers.equalTo(query2));
                 checkThat(req.getParameter("a"), Matchers.equalTo("1 one"));
                 checkThat(req.getParameter("b"), Matchers.equalTo("2 two"));
             }
@@ -348,13 +346,12 @@ public class DispatcherForwardTest
     {
         // 1. request /one?a=1 + content b=2
         // 1. forward /two?c=3
-        // 2. assert query => a=1&c=3 + params => a=1&b=2&c=3
+        // 2. assert query => c=3 + params => a=1&b=2&c=3
         // 1. assert query => a=1 + params => a=1&b=2
 
         CountDownLatch latch = new CountDownLatch(1);
         final String query1 = "a=1%20one";
         final String query2 = "c=3%20three";
-        final String query3 = "c=3%20three&a=1%20one";
         final String form = "b=2%20two";
         servlet1 = new HttpServlet()
         {
@@ -377,7 +374,7 @@ public class DispatcherForwardTest
             @Override
             protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException
             {
-                checkThat(req.getQueryString(), Matchers.equalTo(query3));
+                checkThat(req.getQueryString(), Matchers.equalTo(query2));
                 checkThat(req.getParameter("a"), Matchers.equalTo("1 one"));
                 checkThat(req.getParameter("b"), Matchers.equalTo("2 two"));
                 checkThat(req.getParameter("c"), Matchers.equalTo("3 three"));
@@ -405,13 +402,12 @@ public class DispatcherForwardTest
         // 1. request /one?a=1 + content b=2
         // 1. assert params => a=1&b=2
         // 1. forward /two?c=3
-        // 2. assert query => a=1&c=3 + params => a=1&b=2&c=3
+        // 2. assert query => c=3 + params => a=1&b=2&c=3
         // 1. assert query => a=1 + params => a=1&b=2
 
         CountDownLatch latch = new CountDownLatch(1);
         final String query1 = "a=1%20one";
         final String query2 = "c=3%20three";
-        final String query3 = "c=3%20three&a=1%20one";
         final String form = "b=2%20two";
         servlet1 = new HttpServlet()
         {
@@ -436,7 +432,7 @@ public class DispatcherForwardTest
             @Override
             protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException
             {
-                checkThat(req.getQueryString(), Matchers.equalTo(query3));
+                checkThat(req.getQueryString(), Matchers.equalTo(query2));
                 checkThat(req.getParameter("a"), Matchers.equalTo("1 one"));
                 checkThat(req.getParameter("b"), Matchers.equalTo("2 two"));
                 checkThat(req.getParameter("c"), Matchers.equalTo("3 three"));
@@ -513,7 +509,6 @@ public class DispatcherForwardTest
         CountDownLatch latch = new CountDownLatch(1);
         final String query1 = "a=1%20one";
         final String query2 = "b=2%20two";
-        final String query3 = "b=2%20two&a=1%20one";
         final String form = "c=3%20three";
         servlet1 = new HttpServlet()
         {
@@ -534,7 +529,7 @@ public class DispatcherForwardTest
             @Override
             protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException
             {
-                checkThat(req.getQueryString(), Matchers.equalTo(query3));
+                checkThat(req.getQueryString(), Matchers.equalTo(query2));
                 ServletInputStream input = req.getInputStream();
                 for (int i = 0; i < form.length(); ++i)
                 {

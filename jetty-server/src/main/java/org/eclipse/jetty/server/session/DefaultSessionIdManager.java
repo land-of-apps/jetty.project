@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.server.session;
@@ -32,8 +32,9 @@ import org.eclipse.jetty.util.StringUtil;
 import org.eclipse.jetty.util.annotation.ManagedAttribute;
 import org.eclipse.jetty.util.annotation.ManagedObject;
 import org.eclipse.jetty.util.component.ContainerLifeCycle;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
+import org.eclipse.jetty.util.thread.AutoLock;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * DefaultSessionIdManager
@@ -50,12 +51,13 @@ import org.eclipse.jetty.util.log.Logger;
 @ManagedObject
 public class DefaultSessionIdManager extends ContainerLifeCycle implements SessionIdManager
 {
-    private static final Logger LOG = Log.getLogger("org.eclipse.jetty.server.session");
+    private static final Logger LOG = LoggerFactory.getLogger(DefaultSessionIdManager.class);
 
     public static final String __NEW_SESSION_ID = "org.eclipse.jetty.server.newSessionId";
 
     protected static final AtomicLong COUNTER = new AtomicLong();
 
+    private final AutoLock _lock = new AutoLock();
     protected Random _random;
     protected boolean _weakRandom;
     protected String _workerName;
@@ -166,7 +168,7 @@ public class DefaultSessionIdManager extends ContainerLifeCycle implements Sessi
     /**
      * @param random a random number generator for generating ids
      */
-    public synchronized void setRandom(Random random)
+    public void setRandom(Random random)
     {
         _random = random;
         _weakRandom = false;
@@ -192,8 +194,6 @@ public class DefaultSessionIdManager extends ContainerLifeCycle implements Sessi
 
     /**
      * Create a new session id if necessary.
-     *
-     * @see org.eclipse.jetty.server.SessionIdManager#newSessionId(javax.servlet.http.HttpServletRequest, long)
      */
     @Override
     public String newSessionId(HttpServletRequest request, long created)
@@ -231,7 +231,7 @@ public class DefaultSessionIdManager extends ContainerLifeCycle implements Sessi
         // pick a new unique ID!
         String id = null;
 
-        synchronized (_random)
+        try (AutoLock l = _lock.lock())
         {
             while (id == null || id.length() == 0)
             {
@@ -270,15 +270,12 @@ public class DefaultSessionIdManager extends ContainerLifeCycle implements Sessi
                 if (!StringUtil.isBlank(_workerName))
                     id = _workerName + id;
 
-                id = id + COUNTER.getAndIncrement();
+                id = id + Long.toString(COUNTER.getAndIncrement());
             }
         }
         return id;
     }
 
-    /**
-     * @see org.eclipse.jetty.server.SessionIdManager#isIdInUse(java.lang.String)
-     */
     @Override
     public boolean isIdInUse(String id)
     {
@@ -308,15 +305,11 @@ public class DefaultSessionIdManager extends ContainerLifeCycle implements Sessi
         }
         catch (Exception e)
         {
-            LOG.warn("Problem checking if id {} is in use", id);
-            LOG.warn(e);
+            LOG.warn("Problem checking if id {} is in use", id, e);
             return false;
         }
     }
 
-    /**
-     * @see org.eclipse.jetty.util.component.AbstractLifeCycle#doStart()
-     */
     @Override
     protected void doStart() throws Exception
     {
@@ -346,9 +339,6 @@ public class DefaultSessionIdManager extends ContainerLifeCycle implements Sessi
         _houseKeeper.start();
     }
 
-    /**
-     * @see org.eclipse.jetty.util.component.AbstractLifeCycle#doStop()
-     */
     @Override
     protected void doStop() throws Exception
     {
@@ -451,8 +441,6 @@ public class DefaultSessionIdManager extends ContainerLifeCycle implements Sessi
     /**
      * Generate a new id for a session and update across
      * all SessionManagers.
-     *
-     * @see org.eclipse.jetty.server.SessionIdManager#renewSessionId(java.lang.String, java.lang.String, javax.servlet.http.HttpServletRequest)
      */
     @Override
     public String renewSessionId(String oldClusterId, String oldNodeId, HttpServletRequest request)
@@ -494,9 +482,6 @@ public class DefaultSessionIdManager extends ContainerLifeCycle implements Sessi
         return handlers;
     }
 
-    /**
-     * @see java.lang.Object#toString()
-     */
     @Override
     public String toString()
     {

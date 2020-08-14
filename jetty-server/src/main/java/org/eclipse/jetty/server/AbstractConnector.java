@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.server;
@@ -30,11 +30,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
 import java.util.stream.Collectors;
 
@@ -50,13 +48,13 @@ import org.eclipse.jetty.util.component.Container;
 import org.eclipse.jetty.util.component.ContainerLifeCycle;
 import org.eclipse.jetty.util.component.Dumpable;
 import org.eclipse.jetty.util.component.Graceful;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
 import org.eclipse.jetty.util.ssl.SslContextFactory;
-import org.eclipse.jetty.util.thread.Locker;
+import org.eclipse.jetty.util.thread.AutoLock;
 import org.eclipse.jetty.util.thread.ScheduledExecutorScheduler;
 import org.eclipse.jetty.util.thread.Scheduler;
 import org.eclipse.jetty.util.thread.ThreadPoolBudget;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * <p>An abstract implementation of {@link Connector} that provides a {@link ConnectionFactory} mechanism
@@ -143,10 +141,10 @@ import org.eclipse.jetty.util.thread.ThreadPoolBudget;
 @ManagedObject("Abstract implementation of the Connector Interface")
 public abstract class AbstractConnector extends ContainerLifeCycle implements Connector, Dumpable
 {
-    protected static final Logger LOG = Log.getLogger(AbstractConnector.class);
+    protected static final Logger LOG = LoggerFactory.getLogger(AbstractConnector.class);
 
-    private final Locker _locker = new Locker();
-    private final Condition _setAccepting = _locker.newCondition();
+    private final AutoLock _lock = new AutoLock();
+    private final Condition _setAccepting = _lock.newCondition();
     private final Map<String, ConnectionFactory> _factories = new LinkedHashMap<>(); // Order is important on server side, so we use a LinkedHashMap
     private final Server _server;
     private final Executor _executor;
@@ -155,10 +153,10 @@ public abstract class AbstractConnector extends ContainerLifeCycle implements Co
     private final Thread[] _acceptors;
     private final Set<EndPoint> _endpoints = Collections.newSetFromMap(new ConcurrentHashMap<>());
     private final Set<EndPoint> _immutableEndPoints = Collections.unmodifiableSet(_endpoints);
-    private final Graceful.Shutdown _shutdown = new Graceful.Shutdown();
+    private Shutdown _shutdown;
     private HttpChannel.Listener _httpChannelListeners = HttpChannel.NOOP_LISTENER;
-    private CountDownLatch _stopping;
     private long _idleTimeout = 30000;
+    private long _shutdownIdleTimeout = 1000L;
     private String _defaultProtocol;
     private ConnectionFactory _defaultConnectionFactory;
     private String _name;
@@ -184,12 +182,17 @@ public abstract class AbstractConnector extends ContainerLifeCycle implements Co
     {
         _server = server;
         _executor = executor != null ? executor : _server.getThreadPool();
+        addBean(_executor);
+        if (executor == null)
+            unmanage(_executor); // inherited from server
         if (scheduler == null)
             scheduler = _server.getBean(Scheduler.class);
         _scheduler = scheduler != null ? scheduler : new ScheduledExecutorScheduler(String.format("Connector-Scheduler-%x", hashCode()), false);
+        addBean(_scheduler);
         if (pool == null)
             pool = _server.getBean(ByteBufferPool.class);
         _byteBufferPool = pool != null ? pool : new ArrayByteBufferPool();
+        addBean(_byteBufferPool);
 
         addEventListener(new Container.Listener()
         {
@@ -208,13 +211,6 @@ public abstract class AbstractConnector extends ContainerLifeCycle implements Co
             }
         });
 
-        addBean(_server, false);
-        addBean(_executor);
-        if (executor == null)
-            unmanage(_executor); // inherited from server
-        addBean(_scheduler);
-        addBean(_byteBufferPool);
-
         for (ConnectionFactory factory : factories)
         {
             addConnectionFactory(factory);
@@ -232,7 +228,7 @@ public abstract class AbstractConnector extends ContainerLifeCycle implements Co
      * Get the {@link HttpChannel.Listener}s added to the connector
      * as a single combined Listener.
      * This is equivalent to a listener that iterates over the individual
-     * listeners returned from <code>getBeans(HttpChannel.Listener.class);</code>,
+     * listeners returned from {@code getBeans(HttpChannel.Listener.class);},
      * except that: <ul>
      *     <li>The result is precomputed, so it is more efficient</li>
      *     <li>The result is ordered by the order added.</li>
@@ -287,6 +283,20 @@ public abstract class AbstractConnector extends ContainerLifeCycle implements Co
     public void setIdleTimeout(long idleTimeout)
     {
         _idleTimeout = idleTimeout;
+        if (_idleTimeout == 0)
+            _shutdownIdleTimeout = 0;
+        else if (_idleTimeout < _shutdownIdleTimeout)
+            _shutdownIdleTimeout = Math.min(1000L, _idleTimeout);
+    }
+
+    public void setShutdownIdleTimeout(long idle)
+    {
+        _shutdownIdleTimeout = idle;
+    }
+
+    public long getShutdownIdleTimeout()
+    {
+        return _shutdownIdleTimeout;
     }
 
     /**
@@ -301,7 +311,28 @@ public abstract class AbstractConnector extends ContainerLifeCycle implements Co
     @Override
     protected void doStart() throws Exception
     {
-        _shutdown.cancel();
+        getConnectionFactories().stream()
+            .filter(ConnectionFactory.Configuring.class::isInstance)
+            .map(ConnectionFactory.Configuring.class::cast)
+            .forEach(configuring -> configuring.configure(this));
+
+        _shutdown = new Graceful.Shutdown(this)
+        {
+            @Override
+            public boolean isShutdownDone()
+            {
+                if (!_endpoints.isEmpty())
+                    return false;
+
+                for (Thread a : _acceptors)
+                {
+                    if (a != null)
+                        return false;
+                }
+
+                return true;
+            }
+        };
 
         if (_defaultProtocol == null)
             throw new IllegalStateException("No default protocol for " + this);
@@ -320,7 +351,6 @@ public abstract class AbstractConnector extends ContainerLifeCycle implements Co
         _lease = ThreadPoolBudget.leaseFrom(getExecutor(), this, _acceptors.length);
         super.doStart();
 
-        _stopping = new CountDownLatch(_acceptors.length);
         for (int i = 0; i < _acceptors.length; i++)
         {
             Acceptor a = new Acceptor(i);
@@ -333,7 +363,7 @@ public abstract class AbstractConnector extends ContainerLifeCycle implements Co
 
     protected void interruptAcceptors()
     {
-        try (Locker.Lock lock = _locker.lock())
+        try (AutoLock lock = _lock.lock())
         {
             for (Thread thread : _acceptors)
             {
@@ -344,15 +374,29 @@ public abstract class AbstractConnector extends ContainerLifeCycle implements Co
     }
 
     @Override
-    public Future<Void> shutdown()
+    public CompletableFuture<Void> shutdown()
     {
-        return _shutdown.shutdown();
+        Shutdown shutdown = _shutdown;
+        if (shutdown == null)
+            return CompletableFuture.completedFuture(null);
+
+        // Signal for the acceptors to stop
+        CompletableFuture<Void> done = shutdown.shutdown();
+        interruptAcceptors();
+
+        // Reduce the idle timeout of existing connections
+        for (EndPoint ep : _endpoints)
+            ep.setIdleTimeout(getShutdownIdleTimeout());
+
+        // Return Future that waits for no acceptors and no connections.
+        return done;
     }
 
     @Override
     public boolean isShutdown()
     {
-        return _shutdown.isShutdown();
+        Shutdown shutdown = _shutdown;
+        return shutdown == null || shutdown.isShutdown();
     }
 
     @Override
@@ -363,20 +407,11 @@ public abstract class AbstractConnector extends ContainerLifeCycle implements Co
 
         // Tell the acceptors we are stopping
         interruptAcceptors();
-
-        // If we have a stop timeout
-        long stopTimeout = getStopTimeout();
-        CountDownLatch stopping = _stopping;
-        if (stopTimeout > 0 && stopping != null && getAcceptors() > 0)
-            stopping.await(stopTimeout, TimeUnit.MILLISECONDS);
-        _stopping = null;
-
         super.doStop();
-
         for (Acceptor a : getBeans(Acceptor.class))
-        {
             removeBean(a);
-        }
+
+        _shutdown = null;
 
         LOG.info("Stopped {}", this);
     }
@@ -388,7 +423,7 @@ public abstract class AbstractConnector extends ContainerLifeCycle implements Co
 
     public void join(long timeout) throws InterruptedException
     {
-        try (Locker.Lock lock = _locker.lock())
+        try (AutoLock lock = _lock.lock())
         {
             for (Thread thread : _acceptors)
             {
@@ -405,7 +440,7 @@ public abstract class AbstractConnector extends ContainerLifeCycle implements Co
      */
     public boolean isAccepting()
     {
-        try (Locker.Lock lock = _locker.lock())
+        try (AutoLock lock = _lock.lock())
         {
             return _accepting;
         }
@@ -413,7 +448,7 @@ public abstract class AbstractConnector extends ContainerLifeCycle implements Co
 
     public void setAccepting(boolean accepting)
     {
-        try (Locker.Lock lock = _locker.lock())
+        try (AutoLock l = _lock.lock())
         {
             _accepting = accepting;
             _setAccepting.signalAll();
@@ -423,7 +458,7 @@ public abstract class AbstractConnector extends ContainerLifeCycle implements Co
     @Override
     public ConnectionFactory getConnectionFactory(String protocol)
     {
-        try (Locker.Lock lock = _locker.lock())
+        try (AutoLock lock = _lock.lock())
         {
             return _factories.get(StringUtil.asciiToLowerCase(protocol));
         }
@@ -432,7 +467,7 @@ public abstract class AbstractConnector extends ContainerLifeCycle implements Co
     @Override
     public <T> T getConnectionFactory(Class<T> factoryType)
     {
-        try (Locker.Lock lock = _locker.lock())
+        try (AutoLock lock = _lock.lock())
         {
             for (ConnectionFactory f : _factories.values())
             {
@@ -490,35 +525,23 @@ public abstract class AbstractConnector extends ContainerLifeCycle implements Co
             throw new IllegalStateException(getState());
 
         List<ConnectionFactory> existings = new ArrayList<>(_factories.values());
-        _factories.clear();
+        clearConnectionFactories();
         addConnectionFactory(factory);
         for (ConnectionFactory existing : existings)
         {
             addConnectionFactory(existing);
         }
-        _defaultProtocol = factory.getProtocol();
     }
 
+    // Used from XML, do not remove.
     public void addIfAbsentConnectionFactory(ConnectionFactory factory)
     {
         if (isRunning())
             throw new IllegalStateException(getState());
 
         String key = StringUtil.asciiToLowerCase(factory.getProtocol());
-        if (_factories.containsKey(key))
-        {
-            if (LOG.isDebugEnabled())
-                LOG.debug("{} addIfAbsent ignored {}", this, factory);
-        }
-        else
-        {
-            _factories.put(key, factory);
-            addBean(factory);
-            if (_defaultProtocol == null)
-                _defaultProtocol = factory.getProtocol();
-            if (LOG.isDebugEnabled())
-                LOG.debug("{} addIfAbsent added {}", this, factory);
-        }
+        if (!_factories.containsKey(key))
+            addConnectionFactory(factory);
     }
 
     public ConnectionFactory removeConnectionFactory(String protocol)
@@ -527,6 +550,8 @@ public abstract class AbstractConnector extends ContainerLifeCycle implements Co
             throw new IllegalStateException(getState());
 
         ConnectionFactory factory = _factories.remove(StringUtil.asciiToLowerCase(protocol));
+        if (_factories.isEmpty())
+            _defaultProtocol = null;
         removeBean(factory);
         return factory;
     }
@@ -552,6 +577,15 @@ public abstract class AbstractConnector extends ContainerLifeCycle implements Co
             if (factory != null)
                 addConnectionFactory(factory);
         }
+    }
+
+    public void clearConnectionFactories()
+    {
+        if (isRunning())
+            throw new IllegalStateException(getState());
+
+        _factories.clear();
+        _defaultProtocol = null;
     }
 
     @ManagedAttribute("The priority delta to apply to acceptor threads")
@@ -589,14 +623,6 @@ public abstract class AbstractConnector extends ContainerLifeCycle implements Co
         return new ArrayList<>(_factories.keySet());
     }
 
-    public void clearConnectionFactories()
-    {
-        if (isRunning())
-            throw new IllegalStateException(getState());
-
-        _factories.clear();
-    }
-
     @ManagedAttribute("This connector's default protocol")
     public String getDefaultProtocol()
     {
@@ -624,17 +650,17 @@ public abstract class AbstractConnector extends ContainerLifeCycle implements Co
         {
             if (ex instanceof InterruptedException)
             {
-                LOG.debug(ex);
+                LOG.debug("Accept Interrupted", ex);
                 return true;
             }
 
             if (ex instanceof ClosedByInterruptException)
             {
-                LOG.debug(ex);
+                LOG.debug("Accept Closed by Interrupt", ex);
                 return false;
             }
 
-            LOG.warn(ex);
+            LOG.warn("Accept Failure", ex);
             try
             {
                 // Arbitrary sleep to avoid spin looping.
@@ -645,13 +671,13 @@ public abstract class AbstractConnector extends ContainerLifeCycle implements Co
             }
             catch (Throwable x)
             {
-                LOG.ignore(x);
+                LOG.trace("IGNORED", x);
             }
             return false;
         }
         else
         {
-            LOG.ignore(ex);
+            LOG.trace("IGNORED", ex);
             return false;
         }
     }
@@ -678,13 +704,16 @@ public abstract class AbstractConnector extends ContainerLifeCycle implements Co
             if (_acceptorPriorityDelta != 0)
                 thread.setPriority(Math.max(Thread.MIN_PRIORITY, Math.min(Thread.MAX_PRIORITY, priority + _acceptorPriorityDelta)));
 
-            _acceptors[_id] = thread;
+            try (AutoLock l = _lock.lock())
+            {
+                _acceptors[_id] = thread;
+            }
 
             try
             {
-                while (isRunning())
+                while (isRunning() && !_shutdown.isShutdown())
                 {
-                    try (Locker.Lock lock = _locker.lock())
+                    try (AutoLock l = _lock.lock())
                     {
                         if (!_accepting && isRunning())
                         {
@@ -714,13 +743,13 @@ public abstract class AbstractConnector extends ContainerLifeCycle implements Co
                 if (_acceptorPriorityDelta != 0)
                     thread.setPriority(priority);
 
-                synchronized (AbstractConnector.this)
+                try (AutoLock l = _lock.lock())
                 {
                     _acceptors[_id] = null;
                 }
-                CountDownLatch stopping = _stopping;
-                if (stopping != null)
-                    stopping.countDown();
+                Shutdown shutdown = _shutdown;
+                if (shutdown != null)
+                    shutdown.check();
             }
         }
 
@@ -748,6 +777,9 @@ public abstract class AbstractConnector extends ContainerLifeCycle implements Co
     protected void onEndPointClosed(EndPoint endp)
     {
         _endpoints.remove(endp);
+        Shutdown shutdown = _shutdown;
+        if (shutdown != null)
+            shutdown.check();
     }
 
     @Override

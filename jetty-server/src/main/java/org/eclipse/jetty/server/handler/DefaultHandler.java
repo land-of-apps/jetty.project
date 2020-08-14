@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.server.handler;
@@ -36,9 +36,9 @@ import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.util.IO;
 import org.eclipse.jetty.util.StringUtil;
 import org.eclipse.jetty.util.URIUtil;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
 import org.eclipse.jetty.util.resource.Resource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 
@@ -47,12 +47,12 @@ import static java.nio.charset.StandardCharsets.UTF_8;
  *
  * This handle will deal with unhandled requests in the server.
  * For requests for favicon.ico, the Jetty icon is served.
- * For reqests to '/' a 404 with a list of known contexts is served.
+ * For requests to '/' a 404 with a list of known contexts is served.
  * For all other requests a normal 404 is served.
  */
 public class DefaultHandler extends AbstractHandler
 {
-    private static final Logger LOG = Log.getLogger(DefaultHandler.class);
+    private static final Logger LOG = LoggerFactory.getLogger(DefaultHandler.class);
 
     final long _faviconModified = (System.currentTimeMillis() / 1000) * 1000L;
     final byte[] _favicon;
@@ -61,10 +61,11 @@ public class DefaultHandler extends AbstractHandler
 
     public DefaultHandler()
     {
+        String faviconRef = "/org/eclipse/jetty/favicon.ico";
         byte[] favbytes = null;
         try
         {
-            URL fav = this.getClass().getClassLoader().getResource("org/eclipse/jetty/favicon.ico");
+            URL fav = getClass().getResource(faviconRef);
             if (fav != null)
             {
                 Resource r = Resource.newResource(fav);
@@ -73,7 +74,7 @@ public class DefaultHandler extends AbstractHandler
         }
         catch (Exception e)
         {
-            LOG.warn(e);
+            LOG.warn("Unable to find default favicon: {}", faviconRef, e);
         }
         finally
         {
@@ -81,9 +82,6 @@ public class DefaultHandler extends AbstractHandler
         }
     }
 
-    /*
-     * @see org.eclipse.jetty.server.server.Handler#handle(javax.servlet.http.HttpServletRequest, javax.servlet.http.HttpServletResponse, int)
-     */
     @Override
     public void handle(String target, Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException
     {
@@ -133,15 +131,15 @@ public class DefaultHandler extends AbstractHandler
             writer.append("<p>No context on this server matched or handled this request.</p>\n");
             writer.append("<p>Contexts known to this server are:</p>\n");
 
-            Server server = getServer();
-            Handler[] handlers = server == null ? null : server.getChildHandlersByClass(ContextHandler.class);
-
             writer.append("<table class=\"contexts\"><thead><tr>");
             writer.append("<th>Context Path</th>");
             writer.append("<th>Display Name</th>");
             writer.append("<th>Status</th>");
             writer.append("<th>LifeCycle</th>");
             writer.append("</tr></thead><tbody>\n");
+
+            Server server = getServer();
+            Handler[] handlers = server == null ? null : server.getChildHandlersByClass(ContextHandler.class);
 
             for (int i = 0; handlers != null && i < handlers.length; i++)
             {

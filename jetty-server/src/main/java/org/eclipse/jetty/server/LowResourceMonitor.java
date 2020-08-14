@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.server;
@@ -32,11 +32,11 @@ import org.eclipse.jetty.util.annotation.ManagedAttribute;
 import org.eclipse.jetty.util.annotation.ManagedObject;
 import org.eclipse.jetty.util.annotation.Name;
 import org.eclipse.jetty.util.component.ContainerLifeCycle;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
 import org.eclipse.jetty.util.thread.ScheduledExecutorScheduler;
 import org.eclipse.jetty.util.thread.Scheduler;
 import org.eclipse.jetty.util.thread.ThreadPool;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * A monitor for low resources, low resources can be detected by:
@@ -46,15 +46,12 @@ import org.eclipse.jetty.util.thread.ThreadPool;
  * <li>If {@link #setMaxMemory(long)} is non zero then low resources is detected if the JVMs
  * {@link Runtime} instance has {@link Runtime#totalMemory()} minus {@link Runtime#freeMemory()}
  * greater than {@link #getMaxMemory()}</li>
- * <li>If {@link #setMaxConnections(int)} is non zero then low resources is detected if the total number
- * of connections exceeds {@link #getMaxConnections()}.  This feature is deprecated and replaced by
- * {@link ConnectionLimit}</li>
  * </ul>
  */
 @ManagedObject("Monitor for low resource conditions and activate a low resource mode if detected")
 public class LowResourceMonitor extends ContainerLifeCycle
 {
-    private static final Logger LOG = Log.getLogger(LowResourceMonitor.class);
+    private static final Logger LOG = LoggerFactory.getLogger(LowResourceMonitor.class);
 
     protected final Server _server;
     private Scheduler _scheduler;
@@ -110,48 +107,6 @@ public class LowResourceMonitor extends ContainerLifeCycle
                 addLowResourceCheck(new ConnectorsThreadPoolLowResourceCheck());
             else
                 getBeans(ConnectorsThreadPoolLowResourceCheck.class).forEach(this::removeBean);
-    }
-
-    /**
-     * @return The maximum connections allowed for the monitored connectors before low resource handling is activated
-     * @deprecated Replaced by ConnectionLimit
-     */
-    @ManagedAttribute("The maximum connections allowed for the monitored connectors before low resource handling is activated")
-    @Deprecated
-    public int getMaxConnections()
-    {
-        for (MaxConnectionsLowResourceCheck lowResourceCheck : getBeans(MaxConnectionsLowResourceCheck.class))
-        {
-            if (lowResourceCheck.getMaxConnections() > 0)
-            {
-                return lowResourceCheck.getMaxConnections();
-            }
-        }
-        return -1;
-    }
-
-    /**
-     * @param maxConnections The maximum connections before low resources state is triggered
-     * @deprecated Replaced by {@link ConnectionLimit}
-     */
-    @Deprecated
-    public void setMaxConnections(int maxConnections)
-    {
-        if (maxConnections > 0)
-        {
-            if (getBeans(MaxConnectionsLowResourceCheck.class).isEmpty())
-            {
-                addLowResourceCheck(new MaxConnectionsLowResourceCheck(maxConnections));
-            }
-            else
-            {
-                getBeans(MaxConnectionsLowResourceCheck.class).forEach(c -> c.setMaxConnections(maxConnections));
-            }
-        }
-        else
-        {
-            getBeans(ConnectorsThreadPoolLowResourceCheck.class).forEach(this::removeBean);
-        }
     }
 
     @ManagedAttribute("The reasons the monitored connectors are low on resources")
@@ -542,29 +497,6 @@ public class LowResourceMonitor extends ContainerLifeCycle
 
         public MaxConnectionsLowResourceCheck(int maxConnections)
         {
-            this.maxConnections = maxConnections;
-        }
-
-        /**
-         * @return The maximum connections allowed for the monitored connectors before low resource handling is activated
-         * @deprecated Replaced by ConnectionLimit
-         */
-        @ManagedAttribute("The maximum connections allowed for the monitored connectors before low resource handling is activated")
-        @Deprecated
-        public int getMaxConnections()
-        {
-            return maxConnections;
-        }
-
-        /**
-         * @param maxConnections The maximum connections before low resources state is triggered
-         * @deprecated Replaced by ConnectionLimit
-         */
-        @Deprecated
-        public void setMaxConnections(int maxConnections)
-        {
-            if (maxConnections > 0)
-                LOG.warn("LowResourceMonitor.setMaxConnections is deprecated. Use ConnectionLimit.");
             this.maxConnections = maxConnections;
         }
 

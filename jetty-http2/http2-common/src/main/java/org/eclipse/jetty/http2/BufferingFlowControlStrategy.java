@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.http2;
@@ -38,7 +38,8 @@ import org.eclipse.jetty.util.annotation.ManagedObject;
  * consumed. Only the smaller bucket can refill the bigger bucket.</p>
  * <p>The smaller bucket is defined as a fraction of the bigger bucket.</p>
  * <p>For a more visual representation, see the
- * <a href="http://en.wikipedia.org/wiki/Shishi-odoshi">rocking bamboo fountain</a>.</p>
+ * <a href="http://en.wikipedia.org/wiki/Shishi-odoshi">rocking bamboo fountain</a>,
+ * where the bamboo is the smaller bucket and the pool is the bigger bucket.</p>
  * <p>The algorithm works in this way.</p>
  * <p>The initial bigger bucket (BB) capacity is 100, and let's imagine the smaller
  * bucket (SB) being 40% of the bigger bucket: 40.</p>
@@ -50,6 +51,16 @@ import org.eclipse.jetty.util.annotation.ManagedObject;
  * with delta=45.</p>
  * <p>The application consumes the remaining 15, so now SB=15, and no window
  * control frame is emitted.</p>
+ * <p>The {@code bufferRatio} controls how often the window control frame is
+ * emitted.</p>
+ * <p>A {@code bufferRatio=0.0} means that a window control frame is emitted
+ * every time the application consumes a data frame. This may result in too many
+ * window control frames be emitted, but may allow the sender to avoid stalling.</p>
+ * <p>A {@code bufferRatio=1.0} means that a window control frame is emitted
+ * only when the application has consumed a whole window. This minimizes the
+ * number of window control frames emitted, but may cause the sender to stall,
+ * waiting for the window control frame.</p>
+ * <p>The default value is {@code bufferRatio=0.5}.</p>
  */
 @ManagedObject
 public class BufferingFlowControlStrategy extends AbstractFlowControlStrategy
@@ -112,7 +123,7 @@ public class BufferingFlowControlStrategy extends AbstractFlowControlStrategy
                 session.updateRecvWindow(level);
                 if (LOG.isDebugEnabled())
                     LOG.debug("Data consumed, {} bytes, updated session recv window by {}/{} for {}", length, level, maxLevel, session);
-                session.frames(null, Callback.NOOP, new WindowUpdateFrame(0, level), Frame.EMPTY_ARRAY);
+                sendWindowUpdate(null, session, new WindowUpdateFrame(0, level));
             }
             else
             {
@@ -146,7 +157,7 @@ public class BufferingFlowControlStrategy extends AbstractFlowControlStrategy
                         stream.updateRecvWindow(level);
                         if (LOG.isDebugEnabled())
                             LOG.debug("Data consumed, {} bytes, updated stream recv window by {}/{} for {}", length, level, maxLevel, stream);
-                        session.frames(stream, Callback.NOOP, new WindowUpdateFrame(stream.getId(), level), Frame.EMPTY_ARRAY);
+                        sendWindowUpdate(stream, session, new WindowUpdateFrame(stream.getId(), level));
                     }
                     else
                     {
@@ -156,6 +167,11 @@ public class BufferingFlowControlStrategy extends AbstractFlowControlStrategy
                 }
             }
         }
+    }
+
+    protected void sendWindowUpdate(IStream stream, ISession session, WindowUpdateFrame frame)
+    {
+        session.frames(stream, Callback.NOOP, frame, Frame.EMPTY_ARRAY);
     }
 
     @Override

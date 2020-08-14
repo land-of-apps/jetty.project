@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.server;
@@ -21,7 +21,6 @@ package org.eclipse.jetty.server;
 import java.io.InputStream;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
-import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.concurrent.CountDownLatch;
@@ -69,7 +68,6 @@ public class LowResourcesMonitorTest
 
         _lowResourcesMonitor = new LowResourceMonitor(_server);
         _lowResourcesMonitor.setLowResourcesIdleTimeout(200);
-        _lowResourcesMonitor.setMaxConnections(20);
         _lowResourcesMonitor.setPeriod(900);
         _lowResourcesMonitor.setMonitoredConnectors(Collections.singleton(_connector));
         _server.addBean(_lowResourcesMonitor);
@@ -188,38 +186,6 @@ public class LowResourcesMonitorTest
 
         Thread.sleep(1200);
         assertFalse(_lowResourcesMonitor.isLowOnResources(), _lowResourcesMonitor.getReasons());
-    }
-
-    @Test
-    public void testMaxConnectionsAndMaxIdleTime() throws Exception
-    {
-        _lowResourcesMonitor.setMaxMemory(0);
-        assertFalse(_lowResourcesMonitor.isLowOnResources(), _lowResourcesMonitor.getReasons());
-
-        assertEquals(20, _lowResourcesMonitor.getMaxConnections());
-        Socket[] socket = new Socket[_lowResourcesMonitor.getMaxConnections() + 1];
-        for (int i = 0; i < socket.length; i++)
-        {
-            socket[i] = new Socket("localhost", _connector.getLocalPort());
-        }
-
-        Thread.sleep(1200);
-        assertTrue(_lowResourcesMonitor.isLowOnResources());
-
-        try (Socket newSocket = new Socket("localhost", _connector.getLocalPort()))
-        {
-            // wait for low idle time to close sockets, but not new Socket
-            Thread.sleep(1200);
-            assertFalse(_lowResourcesMonitor.isLowOnResources(), _lowResourcesMonitor.getReasons());
-
-            for (int i = 0; i < socket.length; i++)
-            {
-                assertEquals(-1, socket[i].getInputStream().read());
-            }
-
-            newSocket.getOutputStream().write("GET / HTTP/1.0\r\n\r\n".getBytes(StandardCharsets.UTF_8));
-            assertEquals('H', newSocket.getInputStream().read());
-        }
     }
 
     @Test

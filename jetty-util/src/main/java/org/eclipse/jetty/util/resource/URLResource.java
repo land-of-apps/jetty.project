@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.util.resource;
@@ -22,23 +22,27 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.MalformedURLException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.URLConnection;
 import java.nio.channels.ReadableByteChannel;
 
 import org.eclipse.jetty.util.URIUtil;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
+import org.eclipse.jetty.util.thread.AutoLock;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * URL resource class.
  */
 public class URLResource extends Resource
 {
-    private static final Logger LOG = Log.getLogger(URLResource.class);
+    private static final Logger LOG = LoggerFactory.getLogger(URLResource.class);
+
+    protected final AutoLock _lock = new AutoLock();
     protected final URL _url;
     protected final String _urlString;
-
     protected URLConnection _connection;
     protected InputStream _in = null;
     transient boolean _useCaches = Resource.__defaultUseCaches;
@@ -56,44 +60,50 @@ public class URLResource extends Resource
         _useCaches = useCaches;
     }
 
-    protected synchronized boolean checkConnection()
+    protected boolean checkConnection()
     {
-        if (_connection == null)
+        try (AutoLock l = _lock.lock())
         {
-            try
+            if (_connection == null)
             {
-                _connection = _url.openConnection();
-                _connection.setUseCaches(_useCaches);
+                try
+                {
+                    _connection = _url.openConnection();
+                    _connection.setUseCaches(_useCaches);
+                }
+                catch (IOException e)
+                {
+                    LOG.trace("IGNORED", e);
+                }
             }
-            catch (IOException e)
-            {
-                LOG.ignore(e);
-            }
+            return _connection != null;
         }
-        return _connection != null;
     }
 
     /**
      * Release any resources held by the resource.
      */
     @Override
-    public synchronized void close()
+    public void close()
     {
-        if (_in != null)
+        try (AutoLock l = _lock.lock())
         {
-            try
+            if (_in != null)
             {
-                _in.close();
+                try
+                {
+                    _in.close();
+                }
+                catch (IOException e)
+                {
+                    LOG.trace("IGNORED", e);
+                }
+                _in = null;
             }
-            catch (IOException e)
-            {
-                LOG.ignore(e);
-            }
-            _in = null;
-        }
 
-        if (_connection != null)
-            _connection = null;
+            if (_connection != null)
+                _connection = null;
+        }
     }
 
     /**
@@ -104,7 +114,7 @@ public class URLResource extends Resource
     {
         try
         {
-            synchronized (this)
+            try (AutoLock l = _lock.lock())
             {
                 if (checkConnection() && _in == null)
                     _in = _connection.getInputStream();
@@ -112,7 +122,7 @@ public class URLResource extends Resource
         }
         catch (IOException e)
         {
-            LOG.ignore(e);
+            LOG.trace("IGNORED", e);
         }
         return _in != null;
     }
@@ -151,12 +161,19 @@ public class URLResource extends Resource
     }
 
     /**
-     * Returns a URL representing the given resource
+     * Returns a URI representing the given resource
      */
     @Override
-    public URL getURL()
+    public URI getURI()
     {
-        return _url;
+        try
+        {
+            return _url.toURI();
+        }
+        catch (URISyntaxException e)
+        {
+            throw new RuntimeException(e);
+        }
     }
 
     /**
@@ -184,8 +201,7 @@ public class URLResource extends Resource
      * url connection will be nulled out to prevent re-use.
      */
     @Override
-    public synchronized InputStream getInputStream()
-        throws java.io.IOException
+    public InputStream getInputStream() throws IOException
     {
         return getInputStream(true); //backwards compatibility
     }
@@ -201,29 +217,31 @@ public class URLResource extends Resource
      * @return the inputstream for this resource
      * @throws IOException if unable to open the input stream
      */
-    protected synchronized InputStream getInputStream(boolean resetConnection)
-        throws IOException
+    protected InputStream getInputStream(boolean resetConnection) throws IOException
     {
-        if (!checkConnection())
-            throw new IOException("Invalid resource");
+        try (AutoLock l = _lock.lock())
+        {
+            if (!checkConnection())
+                throw new IOException("Invalid resource");
 
-        try
-        {
-            if (_in != null)
+            try
             {
-                InputStream in = _in;
-                _in = null;
-                return in;
+                if (_in != null)
+                {
+                    InputStream in = _in;
+                    _in = null;
+                    return in;
+                }
+                return _connection.getInputStream();
             }
-            return _connection.getInputStream();
-        }
-        finally
-        {
-            if (resetConnection)
+            finally
             {
-                _connection = null;
-                if (LOG.isDebugEnabled())
-                    LOG.debug("Connection nulled");
+                if (resetConnection)
+                {
+                    _connection = null;
+                    if (LOG.isDebugEnabled())
+                        LOG.debug("Connection nulled");
+                }
             }
         }
     }
@@ -269,7 +287,7 @@ public class URLResource extends Resource
      */
     @Override
     public Resource addPath(String path)
-        throws IOException
+        throws IOException, MalformedURLException
     {
         if (path == null)
             return null;

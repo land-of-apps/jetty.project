@@ -26,39 +26,6 @@
  *
  * modified April 2001
  * by Iris Van den Broeke, Daniel Deville
- *
- * modified April 2001
- * by Iris Van den Broeke, Daniel Deville
- *
- * modified April 2001
- * by Iris Van den Broeke, Daniel Deville
- *
- * modified April 2001
- * by Iris Van den Broeke, Daniel Deville
- *
- * modified April 2001
- * by Iris Van den Broeke, Daniel Deville
- *
- * modified April 2001
- * by Iris Van den Broeke, Daniel Deville
- *
- * modified April 2001
- * by Iris Van den Broeke, Daniel Deville
- *
- * modified April 2001
- * by Iris Van den Broeke, Daniel Deville
- *
- * modified April 2001
- * by Iris Van den Broeke, Daniel Deville
- *
- * modified April 2001
- * by Iris Van den Broeke, Daniel Deville
- *
- * modified April 2001
- * by Iris Van den Broeke, Daniel Deville
- *
- * modified April 2001
- * by Iris Van den Broeke, Daniel Deville
  */
 
 /**
@@ -73,12 +40,13 @@ import java.nio.charset.StandardCharsets;
 /**
  * Unix Crypt. Implements the one way cryptography used by Unix systems for
  * simple password protection.
- *
- * @version $Id: UnixCrypt.java,v 1.1 2005/10/05 14:09:14 janb Exp $
- * @author Greg Wilkins (gregw)
  */
 public class UnixCrypt
 {
+    // @checkstyle-disable-check : MethodNameCheck
+    // @checkstyle-disable-check : ParameterNameCheck
+    // @checkstyle-disable-check : LocalVariableNameCheck
+    // @checkstyle-disable-check : OperatorWrapCheck
 
     /* (mostly) Standard DES Tables from Tom Truscott */
     private static final byte[] IP = {
@@ -365,10 +333,6 @@ public class UnixCrypt
     {
     }
 
-    // @checkstyle-disable-check : MethodNameCheck
-    // @checkstyle-disable-check : LocalVariableNameCheck
-    // @checkstyle-disable-check : ParameterNameCheck
-
     /**
      * Returns the transposed and split code of a 24-bit code into a 4-byte
      * code, each having 6 bits.
@@ -464,33 +428,29 @@ public class UnixCrypt
         {
             for (int loop_count = 0; loop_count < 8; loop_count++)
             {
-                long kp;
-                long B;
-                long k;
-
-                kp = KS[(loop_count << 1)];
-                k = ((R >> 32) ^ R) & salt & 0xffffffffL;
+                long kp = KS[(loop_count << 1)];
+                long k = ((R >> 32) ^ R) & salt & 0xffffffffL;
                 k |= (k << 32);
-                B = (k ^ R ^ kp);
+                long B = (k ^ R ^ kp);
 
-                L ^= (SPE[0][(int)((B >> 58) & 0x3f)] ^ SPE[1][(int)((B >> 50) & 0x3f)] ^
-                    SPE[2][(int)((B >> 42) & 0x3f)] ^
-                    SPE[3][(int)((B >> 34) & 0x3f)] ^
-                    SPE[4][(int)((B >> 26) & 0x3f)] ^
-                    SPE[5][(int)((B >> 18) & 0x3f)] ^
-                    SPE[6][(int)((B >> 10) & 0x3f)] ^ SPE[7][(int)((B >> 2) & 0x3f)]);
+                L ^= (SPE[0][(int)((B >> 58) & 0x3f)] ^ SPE[1][(int)((B >> 50) & 0x3f)]
+                    ^ SPE[2][(int)((B >> 42) & 0x3f)]
+                    ^ SPE[3][(int)((B >> 34) & 0x3f)]
+                    ^ SPE[4][(int)((B >> 26) & 0x3f)]
+                    ^ SPE[5][(int)((B >> 18) & 0x3f)]
+                    ^ SPE[6][(int)((B >> 10) & 0x3f)] ^ SPE[7][(int)((B >> 2) & 0x3f)]);
 
                 kp = KS[(loop_count << 1) + 1];
                 k = ((L >> 32) ^ L) & salt & 0xffffffffL;
                 k |= (k << 32);
                 B = (k ^ L ^ kp);
 
-                R ^= (SPE[0][(int)((B >> 58) & 0x3f)] ^ SPE[1][(int)((B >> 50) & 0x3f)] ^
-                    SPE[2][(int)((B >> 42) & 0x3f)] ^
-                    SPE[3][(int)((B >> 34) & 0x3f)] ^
-                    SPE[4][(int)((B >> 26) & 0x3f)] ^
-                    SPE[5][(int)((B >> 18) & 0x3f)] ^
-                    SPE[6][(int)((B >> 10) & 0x3f)] ^ SPE[7][(int)((B >> 2) & 0x3f)]);
+                R ^= (SPE[0][(int)((B >> 58) & 0x3f)] ^ SPE[1][(int)((B >> 50) & 0x3f)]
+                    ^ SPE[2][(int)((B >> 42) & 0x3f)]
+                    ^ SPE[3][(int)((B >> 34) & 0x3f)]
+                    ^ SPE[4][(int)((B >> 26) & 0x3f)]
+                    ^ SPE[5][(int)((B >> 18) & 0x3f)]
+                    ^ SPE[6][(int)((B >> 10) & 0x3f)] ^ SPE[7][(int)((B >> 2) & 0x3f)]);
             }
             // swap L and R
             L ^= R;
@@ -535,8 +495,6 @@ public class UnixCrypt
      */
     public static String crypt(String key, String setting)
     {
-        long constdatablock = 0L; /* encryption constant */
-        byte[] cryptresult = new byte[13]; /* encrypted result */
         long keyword = 0L;
         /* invalid parameters! */
         if (key == null || setting == null)
@@ -553,6 +511,8 @@ public class UnixCrypt
         long[] KS = des_setkey(keyword);
 
         int salt = 0;
+        /* encrypted result */
+        byte[] cryptresult = new byte[13];
         for (int i = 2; --i >= 0; )
         {
             char c = (i < setting.length()) ? setting.charAt(i) : '.';
@@ -560,7 +520,8 @@ public class UnixCrypt
             salt = (salt << 6) | (0x00ff & A64TOI[c]);
         }
 
-        long rsltblock = des_cipher(constdatablock, salt, 25, KS);
+        /* encryption constant */
+        long rsltblock = des_cipher(0L, salt, 25, KS);
 
         cryptresult[12] = ITOA64[(((int)rsltblock) << 2) & 0x3f];
         rsltblock >>= 4;

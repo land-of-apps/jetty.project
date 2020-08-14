@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.http2.client;
@@ -38,6 +38,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 import javax.servlet.AsyncContext;
 import javax.servlet.ServletOutputStream;
 import javax.servlet.WriteListener;
@@ -51,6 +52,7 @@ import org.eclipse.jetty.http.HttpStatus;
 import org.eclipse.jetty.http.HttpURI;
 import org.eclipse.jetty.http.HttpVersion;
 import org.eclipse.jetty.http.MetaData;
+import org.eclipse.jetty.http2.BufferingFlowControlStrategy;
 import org.eclipse.jetty.http2.ErrorCode;
 import org.eclipse.jetty.http2.FlowControlStrategy;
 import org.eclipse.jetty.http2.HTTP2Flusher;
@@ -72,6 +74,7 @@ import org.eclipse.jetty.http2.server.HTTP2ServerConnectionFactory;
 import org.eclipse.jetty.io.AbstractEndPoint;
 import org.eclipse.jetty.io.ByteBufferPool;
 import org.eclipse.jetty.io.WriteFlusher;
+import org.eclipse.jetty.logging.StacklessLogging;
 import org.eclipse.jetty.server.HttpChannel;
 import org.eclipse.jetty.server.HttpConfiguration;
 import org.eclipse.jetty.server.HttpOutput;
@@ -85,7 +88,6 @@ import org.eclipse.jetty.util.Callback;
 import org.eclipse.jetty.util.FutureCallback;
 import org.eclipse.jetty.util.FuturePromise;
 import org.eclipse.jetty.util.IO;
-import org.eclipse.jetty.util.log.StacklessLogging;
 import org.eclipse.jetty.util.thread.QueuedThreadPool;
 import org.hamcrest.Matchers;
 import org.junit.jupiter.api.Test;
@@ -104,7 +106,7 @@ public class StreamResetTest extends AbstractTest
         start(new ServerSessionListener.Adapter());
 
         Session client = newClient(new Session.Listener.Adapter());
-        MetaData.Request request = newRequest("GET", new HttpFields());
+        MetaData.Request request = newRequest("GET", HttpFields.EMPTY);
         HeadersFrame requestFrame = new HeadersFrame(request, null, false);
         FuturePromise<Stream> promise = new FuturePromise<>();
         client.newStream(requestFrame, promise, new Stream.Listener.Adapter());
@@ -142,7 +144,7 @@ public class StreamResetTest extends AbstractTest
         });
 
         Session client = newClient(new Session.Listener.Adapter());
-        MetaData.Request request = newRequest("GET", new HttpFields());
+        MetaData.Request request = newRequest("GET", HttpFields.EMPTY);
         HeadersFrame requestFrame = new HeadersFrame(request, null, false);
         FuturePromise<Stream> promise = new FuturePromise<>();
         client.newStream(requestFrame, promise, new Stream.Listener.Adapter());
@@ -170,7 +172,7 @@ public class StreamResetTest extends AbstractTest
             @Override
             public Stream.Listener onNewStream(Stream stream, HeadersFrame requestFrame)
             {
-                MetaData.Response response = new MetaData.Response(HttpVersion.HTTP_2, 200, new HttpFields());
+                MetaData.Response response = new MetaData.Response(HttpVersion.HTTP_2, 200, HttpFields.EMPTY);
                 HeadersFrame responseFrame = new HeadersFrame(stream.getId(), response, null, false);
                 Callback.Completable completable = new Callback.Completable();
                 stream.headers(responseFrame, completable);
@@ -210,7 +212,7 @@ public class StreamResetTest extends AbstractTest
         });
 
         Session client = newClient(new Session.Listener.Adapter());
-        MetaData.Request request1 = newRequest("GET", new HttpFields());
+        MetaData.Request request1 = newRequest("GET", HttpFields.EMPTY);
         HeadersFrame requestFrame1 = new HeadersFrame(request1, null, false);
         FuturePromise<Stream> promise1 = new FuturePromise<>();
         final CountDownLatch stream1HeadersLatch = new CountDownLatch(1);
@@ -233,7 +235,7 @@ public class StreamResetTest extends AbstractTest
         Stream stream1 = promise1.get(5, TimeUnit.SECONDS);
         assertTrue(stream1HeadersLatch.await(5, TimeUnit.SECONDS));
 
-        MetaData.Request request2 = newRequest("GET", new HttpFields());
+        MetaData.Request request2 = newRequest("GET", HttpFields.EMPTY);
         HeadersFrame requestFrame2 = new HeadersFrame(request2, null, false);
         FuturePromise<Stream> promise2 = new FuturePromise<>();
         final CountDownLatch stream2DataLatch = new CountDownLatch(1);
@@ -317,7 +319,7 @@ public class StreamResetTest extends AbstractTest
         });
 
         Session client = newClient(new Session.Listener.Adapter());
-        MetaData.Request request = newRequest("GET", new HttpFields());
+        MetaData.Request request = newRequest("GET", HttpFields.EMPTY);
         HeadersFrame frame = new HeadersFrame(request, null, true);
         client.newStream(frame, new FuturePromise<>(), new Stream.Listener.Adapter()
         {
@@ -404,7 +406,7 @@ public class StreamResetTest extends AbstractTest
         });
 
         Session client = newClient(new Session.Listener.Adapter());
-        MetaData.Request request = newRequest("GET", new HttpFields());
+        MetaData.Request request = newRequest("GET", HttpFields.EMPTY);
         HeadersFrame frame = new HeadersFrame(request, null, true);
         client.newStream(frame, new FuturePromise<>(), new Stream.Listener.Adapter()
         {
@@ -434,7 +436,7 @@ public class StreamResetTest extends AbstractTest
         start(new EmptyHttpServlet());
 
         Session client = newClient(new Session.Listener.Adapter());
-        MetaData.Request request = newRequest("GET", new HttpFields());
+        MetaData.Request request = newRequest("GET", HttpFields.EMPTY);
         HeadersFrame frame = new HeadersFrame(request, null, false);
         FuturePromise<Stream> promise = new FuturePromise<>();
         client.newStream(frame, promise, new Stream.Listener.Adapter());
@@ -501,7 +503,7 @@ public class StreamResetTest extends AbstractTest
         {
             phaser.set(new CountDownLatch(1));
 
-            MetaData.Request request = newRequest("GET", new HttpFields());
+            MetaData.Request request = newRequest("GET", HttpFields.EMPTY);
             HeadersFrame frame = new HeadersFrame(request, null, false);
             FuturePromise<Stream> promise = new FuturePromise<>();
             client.newStream(frame, promise, new Stream.Listener.Adapter()
@@ -532,7 +534,7 @@ public class StreamResetTest extends AbstractTest
         }
 
         // Send one more request to consume the whole session flow control window, then reset it.
-        MetaData.Request request = newRequest("GET", "/x", new HttpFields());
+        MetaData.Request request = newRequest("GET", "/x", HttpFields.EMPTY);
         HeadersFrame frame = new HeadersFrame(request, null, false);
         FuturePromise<Stream> promise = new FuturePromise<>();
         // This request will get no event from the server since it's reset by the client.
@@ -585,7 +587,7 @@ public class StreamResetTest extends AbstractTest
 
             Session client = newClient(new Session.Listener.Adapter());
 
-            MetaData.Request request = newRequest("GET", new HttpFields());
+            MetaData.Request request = newRequest("GET", HttpFields.EMPTY);
             HeadersFrame frame = new HeadersFrame(request, null, false);
             FuturePromise<Stream> promise = new FuturePromise<>();
             client.newStream(frame, promise, new Stream.Listener.Adapter());
@@ -648,7 +650,7 @@ public class StreamResetTest extends AbstractTest
         AtomicLong received = new AtomicLong();
         CountDownLatch latch = new CountDownLatch(1);
         Session client = newClient(new Session.Listener.Adapter());
-        MetaData.Request request = newRequest("GET", new HttpFields());
+        MetaData.Request request = newRequest("GET", HttpFields.EMPTY);
         HeadersFrame frame = new HeadersFrame(request, null, true);
         FuturePromise<Stream> promise = new FuturePromise<>();
         client.newStream(frame, promise, new Stream.Listener.Adapter()
@@ -697,7 +699,7 @@ public class StreamResetTest extends AbstractTest
         AtomicLong received = new AtomicLong();
         CountDownLatch latch = new CountDownLatch(1);
         Session client = newClient(new Session.Listener.Adapter());
-        MetaData.Request request = newRequest("GET", new HttpFields());
+        MetaData.Request request = newRequest("GET", HttpFields.EMPTY);
         HeadersFrame frame = new HeadersFrame(request, null, true);
         FuturePromise<Stream> promise = new FuturePromise<>();
         client.newStream(frame, promise, new Stream.Listener.Adapter()
@@ -774,7 +776,7 @@ public class StreamResetTest extends AbstractTest
         AtomicLong received = new AtomicLong();
         CountDownLatch latch = new CountDownLatch(1);
         Session client = newClient(new Session.Listener.Adapter());
-        MetaData.Request request = newRequest("GET", new HttpFields());
+        MetaData.Request request = newRequest("GET", HttpFields.EMPTY);
         HeadersFrame frame = new HeadersFrame(request, null, true);
         FuturePromise<Stream> promise = new FuturePromise<>();
         client.newStream(frame, promise, new Stream.Listener.Adapter()
@@ -830,7 +832,7 @@ public class StreamResetTest extends AbstractTest
 
         Session client = newClient(new Session.Listener.Adapter());
 
-        MetaData.Request request = newRequest("GET", new HttpFields());
+        MetaData.Request request = newRequest("GET", HttpFields.EMPTY);
         HeadersFrame frame = new HeadersFrame(request, null, false);
         FuturePromise<Stream> promise = new FuturePromise<>();
         client.newStream(frame, promise, new Stream.Listener.Adapter());
@@ -906,8 +908,8 @@ public class StreamResetTest extends AbstractTest
             // Max session HTTP/2 flow control window.
             generator.control(lease, new WindowUpdateFrame(0, Integer.MAX_VALUE - FlowControlStrategy.DEFAULT_WINDOW_SIZE));
 
-            HttpURI uri = new HttpURI("http", host, port, servletPath);
-            MetaData.Request request = new MetaData.Request(HttpMethod.GET.asString(), uri, HttpVersion.HTTP_2, new HttpFields());
+            HttpURI uri = HttpURI.from("http", host, port, servletPath);
+            MetaData.Request request = new MetaData.Request(HttpMethod.GET.asString(), uri, HttpVersion.HTTP_2, HttpFields.EMPTY);
             int streamId = 3;
             HeadersFrame headersFrame = new HeadersFrame(streamId, request, null, true);
             generator.control(lease, headersFrame);
@@ -1009,8 +1011,8 @@ public class StreamResetTest extends AbstractTest
             // Max session HTTP/2 flow control window.
             generator.control(lease, new WindowUpdateFrame(0, Integer.MAX_VALUE - FlowControlStrategy.DEFAULT_WINDOW_SIZE));
 
-            HttpURI uri = new HttpURI("http", host, port, servletPath + "/1");
-            MetaData.Request request = new MetaData.Request(HttpMethod.GET.asString(), uri, HttpVersion.HTTP_2, new HttpFields());
+            HttpURI uri = HttpURI.from("http", host, port, servletPath + "/1");
+            MetaData.Request request = new MetaData.Request(HttpMethod.GET.asString(), uri, HttpVersion.HTTP_2, HttpFields.EMPTY);
             HeadersFrame headersFrame = new HeadersFrame(3, request, null, true);
             generator.control(lease, headersFrame);
 
@@ -1020,8 +1022,8 @@ public class StreamResetTest extends AbstractTest
             waitUntilTCPCongested(exchanger.exchange(null));
 
             // Send a second request.
-            uri = new HttpURI("http", host, port, servletPath + "/2");
-            request = new MetaData.Request(HttpMethod.GET.asString(), uri, HttpVersion.HTTP_2, new HttpFields());
+            uri = HttpURI.from("http", host, port, servletPath + "/2");
+            request = new MetaData.Request(HttpMethod.GET.asString(), uri, HttpVersion.HTTP_2, HttpFields.EMPTY);
             int streamId = 5;
             headersFrame = new HeadersFrame(streamId, request, null, true);
             generator.control(lease, headersFrame);
@@ -1040,6 +1042,64 @@ public class StreamResetTest extends AbstractTest
             requestLatch2.countDown();
             assertTrue(writeLatch1.await(5, TimeUnit.SECONDS));
         }
+    }
+
+    @Test
+    public void testResetBeforeReceivingWindowUpdate() throws Exception
+    {
+        int window = FlowControlStrategy.DEFAULT_WINDOW_SIZE;
+        float ratio = 0.5F;
+        AtomicReference<Stream> streamRef = new AtomicReference<>();
+        Consumer<AbstractHTTP2ServerConnectionFactory> http2Factory = http2 ->
+        {
+            http2.setInitialSessionRecvWindow(window);
+            http2.setInitialStreamRecvWindow(window);
+            http2.setFlowControlStrategyFactory(() -> new BufferingFlowControlStrategy(ratio)
+            {
+                @Override
+                protected void sendWindowUpdate(IStream stream, ISession session, WindowUpdateFrame frame)
+                {
+                    // Before sending the window update, reset from the client side.
+                    if (stream != null)
+                        streamRef.get().reset(new ResetFrame(stream.getId(), ErrorCode.CANCEL_STREAM_ERROR.code), Callback.NOOP);
+                    super.sendWindowUpdate(stream, session, frame);
+                }
+            });
+        };
+        start(new ServerSessionListener.Adapter()
+        {
+            @Override
+            public Stream.Listener onNewStream(Stream stream, HeadersFrame frame)
+            {
+                MetaData.Response response = new MetaData.Response(HttpVersion.HTTP_2, 200, HttpFields.EMPTY);
+                HeadersFrame responseFrame = new HeadersFrame(stream.getId(), response, null, false);
+                Callback.Completable completable = new Callback.Completable();
+                stream.headers(responseFrame, completable);
+                // Consume the request content as it arrives.
+                return new Stream.Listener.Adapter();
+            }
+        }, http2Factory);
+
+        CountDownLatch failureLatch = new CountDownLatch(1);
+        Session client = newClient(new Session.Listener.Adapter()
+        {
+            @Override
+            public void onFailure(Session session, Throwable failure)
+            {
+                failureLatch.countDown();
+            }
+        });
+        MetaData.Request request = newRequest("GET", HttpFields.EMPTY);
+        HeadersFrame requestFrame = new HeadersFrame(request, null, false);
+        FuturePromise<Stream> promise = new FuturePromise<>();
+        client.newStream(requestFrame, promise, new Stream.Listener.Adapter());
+        Stream stream = promise.get(5, TimeUnit.SECONDS);
+        streamRef.set(stream);
+        // Send enough bytes to trigger the server to send a window update.
+        ByteBuffer content = ByteBuffer.allocate((int)(window * ratio) + 1024);
+        stream.data(new DataFrame(stream.getId(), content, false), Callback.NOOP);
+
+        assertFalse(failureLatch.await(1, TimeUnit.SECONDS));
     }
 
     private void waitUntilTCPCongested(WriteFlusher flusher) throws TimeoutException, InterruptedException

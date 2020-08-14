@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.client;
@@ -28,6 +28,7 @@ import java.net.SocketAddress;
 import java.net.URI;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -52,7 +53,7 @@ import org.eclipse.jetty.client.api.Destination;
 import org.eclipse.jetty.client.api.Request;
 import org.eclipse.jetty.client.api.Response;
 import org.eclipse.jetty.client.http.HttpClientTransportOverHTTP;
-import org.eclipse.jetty.client.util.FormContentProvider;
+import org.eclipse.jetty.client.util.FormRequestContent;
 import org.eclipse.jetty.http.HttpCompliance;
 import org.eclipse.jetty.http.HttpField;
 import org.eclipse.jetty.http.HttpHeader;
@@ -61,6 +62,7 @@ import org.eclipse.jetty.http.HttpParser;
 import org.eclipse.jetty.http.HttpScheme;
 import org.eclipse.jetty.io.ByteBufferPool;
 import org.eclipse.jetty.io.ClientConnectionFactory;
+import org.eclipse.jetty.io.ClientConnector;
 import org.eclipse.jetty.io.MappedByteBufferPool;
 import org.eclipse.jetty.io.ssl.SslClientConnectionFactory;
 import org.eclipse.jetty.util.Fields;
@@ -72,25 +74,25 @@ import org.eclipse.jetty.util.annotation.ManagedAttribute;
 import org.eclipse.jetty.util.annotation.ManagedObject;
 import org.eclipse.jetty.util.component.ContainerLifeCycle;
 import org.eclipse.jetty.util.component.DumpableCollection;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
 import org.eclipse.jetty.util.ssl.SslContextFactory;
 import org.eclipse.jetty.util.thread.QueuedThreadPool;
 import org.eclipse.jetty.util.thread.ScheduledExecutorScheduler;
 import org.eclipse.jetty.util.thread.Scheduler;
 import org.eclipse.jetty.util.thread.ThreadPool;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
- * <p>{@link HttpClient} provides an efficient, asynchronous, non-blocking implementation
+ * <p>HttpClient provides an efficient, asynchronous, non-blocking implementation
  * to perform HTTP requests to a server through a simple API that offers also blocking semantic.</p>
- * <p>{@link HttpClient} provides easy-to-use methods such as {@link #GET(String)} that allow to perform HTTP
+ * <p>HttpClient provides easy-to-use methods such as {@link #GET(String)} that allow to perform HTTP
  * requests in a one-liner, but also gives the ability to fine tune the configuration of requests via
  * {@link HttpClient#newRequest(URI)}.</p>
- * <p>{@link HttpClient} acts as a central configuration point for network parameters (such as idle timeouts)
+ * <p>HttpClient acts as a central configuration point for network parameters (such as idle timeouts)
  * and HTTP parameters (such as whether to follow redirects).</p>
- * <p>{@link HttpClient} transparently pools connections to servers, but allows direct control of connections
+ * <p>HttpClient transparently pools connections to servers, but allows direct control of connections
  * for cases where this is needed.</p>
- * <p>{@link HttpClient} also acts as a central configuration point for cookies, via {@link #getCookieStore()}.</p>
+ * <p>HttpClient also acts as a central configuration point for cookies, via {@link #getCookieStore()}.</p>
  * <p>Typical usage:</p>
  * <pre>
  * HttpClient httpClient = new HttpClient();
@@ -119,7 +121,8 @@ import org.eclipse.jetty.util.thread.ThreadPool;
 @ManagedObject("The HTTP client")
 public class HttpClient extends ContainerLifeCycle
 {
-    private static final Logger LOG = Log.getLogger(HttpClient.class);
+    public static final String USER_AGENT = "Jetty/" + Jetty.VERSION;
+    private static final Logger LOG = LoggerFactory.getLogger(HttpClient.class);
 
     private final ConcurrentMap<Origin, HttpDestination> destinations = new ConcurrentHashMap<>();
     private final ProtocolHandlers handlers = new ProtocolHandlers();
@@ -127,75 +130,42 @@ public class HttpClient extends ContainerLifeCycle
     private final Set<ContentDecoder.Factory> decoderFactories = new ContentDecoderFactorySet();
     private final ProxyConfiguration proxyConfig = new ProxyConfiguration();
     private final HttpClientTransport transport;
-    private final SslContextFactory sslContextFactory;
+    private final ClientConnector connector;
     private AuthenticationStore authenticationStore = new HttpAuthenticationStore();
     private CookieManager cookieManager;
     private CookieStore cookieStore;
-    private Executor executor;
-    private ByteBufferPool byteBufferPool;
-    private Scheduler scheduler;
     private SocketAddressResolver resolver;
-    private HttpField agentField = new HttpField(HttpHeader.USER_AGENT, "Jetty/" + Jetty.VERSION);
+    private HttpField agentField = new HttpField(HttpHeader.USER_AGENT, USER_AGENT);
     private boolean followRedirects = true;
     private int maxConnectionsPerDestination = 64;
     private int maxRequestsQueuedPerDestination = 1024;
     private int requestBufferSize = 4096;
     private int responseBufferSize = 16384;
     private int maxRedirects = 8;
-    private SocketAddress bindAddress;
-    private long connectTimeout = 15000;
     private long addressResolutionTimeout = 15000;
-    private long idleTimeout;
     private boolean tcpNoDelay = true;
     private boolean strictEventOrdering = false;
     private HttpField encodingField;
     private boolean removeIdleDestinations = false;
-    private boolean connectBlocking = false;
     private String name = getClass().getSimpleName() + "@" + Integer.toHexString(hashCode());
     private HttpCompliance httpCompliance = HttpCompliance.RFC7230;
     private String defaultRequestContentType = "application/octet-stream";
+    private boolean useInputDirectByteBuffers = true;
+    private boolean useOutputDirectByteBuffers = true;
 
     /**
-     * Creates a {@link HttpClient} instance that can perform requests to non-TLS destinations only
-     * (that is, requests with the "http" scheme only, and not "https").
-     *
-     * @see #HttpClient(SslContextFactory) to perform requests to TLS destinations.
+     * Creates a HttpClient instance that can perform HTTP/1.1 requests to non-TLS and TLS destinations.
      */
     public HttpClient()
     {
-        this(new HttpClientTransportOverHTTP(), null);
+        this(new HttpClientTransportOverHTTP());
     }
 
-    /**
-     * Creates a {@link HttpClient} instance that can perform requests to non-TLS and TLS destinations
-     * (that is, both requests with the "http" scheme and with the "https" scheme).
-     *
-     * @param sslContextFactory the {@link SslContextFactory} that manages TLS encryption
-     * @see #getSslContextFactory()
-     */
-    public HttpClient(SslContextFactory sslContextFactory)
-    {
-        this(new HttpClientTransportOverHTTP(), sslContextFactory);
-    }
-
-    /**
-     * Creates a {@link HttpClient} instance that can perform requests to non-TLS destinations only
-     * (that is, requests with the "http" scheme only, and not "https").
-     *
-     * @param transport the {@link HttpClientTransport}
-     * @see #HttpClient(HttpClientTransport, SslContextFactory)  to perform requests to TLS destinations.
-     */
     public HttpClient(HttpClientTransport transport)
     {
-        this(transport, null);
-    }
-
-    public HttpClient(HttpClientTransport transport, SslContextFactory sslContextFactory)
-    {
-        this.transport = transport;
+        this.transport = Objects.requireNonNull(transport);
         addBean(transport);
-        this.sslContextFactory = sslContextFactory;
-        addBean(sslContextFactory);
+        this.connector = ((AbstractHttpClientTransport)transport).getBean(ClientConnector.class);
         addBean(handlers);
         addBean(decoderFactories);
     }
@@ -213,39 +183,40 @@ public class HttpClient extends ContainerLifeCycle
 
     /**
      * @return the {@link SslContextFactory} that manages TLS encryption
-     * @see #HttpClient(SslContextFactory)
      */
-    public SslContextFactory getSslContextFactory()
+    public SslContextFactory.Client getSslContextFactory()
     {
-        return sslContextFactory;
+        return connector.getSslContextFactory();
     }
 
     @Override
     protected void doStart() throws Exception
     {
+        Executor executor = getExecutor();
         if (executor == null)
         {
             QueuedThreadPool threadPool = new QueuedThreadPool();
             threadPool.setName(name);
             setExecutor(threadPool);
         }
-
+        ByteBufferPool byteBufferPool = getByteBufferPool();
         if (byteBufferPool == null)
             setByteBufferPool(new MappedByteBufferPool(2048,
                 executor instanceof ThreadPool.SizedThreadPool
                     ? ((ThreadPool.SizedThreadPool)executor).getMaxThreads() / 2
                     : ProcessorUtils.availableProcessors() * 2));
-
+        Scheduler scheduler = getScheduler();
         if (scheduler == null)
             setScheduler(new ScheduledExecutorScheduler(name + "-scheduler", false));
 
         if (resolver == null)
-            setSocketAddressResolver(new SocketAddressResolver.Async(executor, scheduler, getAddressResolutionTimeout()));
+            setSocketAddressResolver(new SocketAddressResolver.Async(getExecutor(), getScheduler(), getAddressResolutionTimeout()));
 
         handlers.put(new ContinueProtocolHandler());
         handlers.put(new RedirectProtocolHandler(this));
         handlers.put(new WWWAuthenticationProtocolHandler(this));
         handlers.put(new ProxyAuthenticationProtocolHandler(this));
+        handlers.put(new UpgradeProtocolHandler());
 
         decoderFactories.add(new GZIPContentDecoder.Factory(byteBufferPool));
 
@@ -304,6 +275,8 @@ public class HttpClient extends ContainerLifeCycle
      */
     public void setCookieStore(CookieStore cookieStore)
     {
+        if (isStarted())
+            throw new IllegalStateException();
         this.cookieStore = Objects.requireNonNull(cookieStore);
         this.cookieManager = newCookieManager();
     }
@@ -332,6 +305,8 @@ public class HttpClient extends ContainerLifeCycle
      */
     public void setAuthenticationStore(AuthenticationStore authenticationStore)
     {
+        if (isStarted())
+            throw new IllegalStateException();
         this.authenticationStore = authenticationStore;
     }
 
@@ -405,7 +380,7 @@ public class HttpClient extends ContainerLifeCycle
      */
     public ContentResponse FORM(URI uri, Fields fields) throws InterruptedException, ExecutionException, TimeoutException
     {
-        return POST(uri).content(new FormContentProvider(fields)).send();
+        return POST(uri).body(new FormRequestContent(fields)).send();
     }
 
     /**
@@ -430,6 +405,8 @@ public class HttpClient extends ContainerLifeCycle
     {
         return newRequest(uri).method(HttpMethod.POST);
     }
+
+    // @checkstyle-enable-check : MethodNameCheck
 
     /**
      * Creates a new request with the "http" scheme and the specified host and port
@@ -467,10 +444,10 @@ public class HttpClient extends ContainerLifeCycle
 
     protected Request copyRequest(HttpRequest oldRequest, URI newURI)
     {
-        Request newRequest = newHttpRequest(oldRequest.getConversation(), newURI);
+        HttpRequest newRequest = newHttpRequest(oldRequest.getConversation(), newURI);
         newRequest.method(oldRequest.getMethod())
             .version(oldRequest.getVersion())
-            .content(oldRequest.getContent())
+            .body(oldRequest.getBody())
             .idleTimeout(oldRequest.getIdleTimeout(), TimeUnit.MILLISECONDS)
             .timeout(oldRequest.getTimeout(), TimeUnit.MILLISECONDS)
             .followRedirects(oldRequest.isFollowRedirects());
@@ -494,10 +471,8 @@ public class HttpClient extends ContainerLifeCycle
                 HttpHeader.PROXY_AUTHORIZATION == header)
                 continue;
 
-            String name = field.getName();
-            String value = field.getValue();
-            if (!newRequest.getHeaders().contains(name, value))
-                newRequest.header(name, value);
+            if (!newRequest.getHeaders().contains(field))
+                newRequest.addHeader(field);
         }
         return newRequest;
     }
@@ -523,55 +498,40 @@ public class HttpClient extends ContainerLifeCycle
         return uri;
     }
 
-    /**
-     * Returns a {@link Destination} for the given scheme, host and port.
-     * Applications may use {@link Destination}s to create {@link Connection}s
-     * that will be outside {@link HttpClient}'s pooling mechanism, to explicitly
-     * control the connection lifecycle (in particular their termination with
-     * {@link Connection#close()}).
-     *
-     * @param scheme the destination scheme
-     * @param host the destination host
-     * @param port the destination port
-     * @return the destination
-     * @see #getDestinations()
-     */
-    public Destination getDestination(String scheme, String host, int port)
+    public Destination resolveDestination(Request request)
     {
-        return destinationFor(scheme, host, port);
+        HttpClientTransport transport = getTransport();
+        Origin origin = transport.newOrigin((HttpRequest)request);
+        HttpDestination destination = resolveDestination(origin);
+        if (LOG.isDebugEnabled())
+            LOG.debug("Resolved {} for {}", destination, request);
+        return destination;
     }
 
-    protected HttpDestination destinationFor(String scheme, String host, int port)
+    public Origin createOrigin(HttpRequest request, Origin.Protocol protocol)
     {
-        return resolveDestination(scheme, host, port, null);
-    }
-
-    protected HttpDestination resolveDestination(String scheme, String host, int port, Object tag)
-    {
-        Origin origin = createOrigin(scheme, host, port, tag);
-        return resolveDestination(origin);
-    }
-
-    protected Origin createOrigin(String scheme, String host, int port, Object tag)
-    {
+        String scheme = request.getScheme();
         if (!HttpScheme.HTTP.is(scheme) && !HttpScheme.HTTPS.is(scheme) &&
             !HttpScheme.WS.is(scheme) && !HttpScheme.WSS.is(scheme))
             throw new IllegalArgumentException("Invalid protocol " + scheme);
         scheme = scheme.toLowerCase(Locale.ENGLISH);
+        String host = request.getHost();
         host = host.toLowerCase(Locale.ENGLISH);
+        int port = request.getPort();
         port = normalizePort(scheme, port);
-        return new Origin(scheme, host, port, tag);
+        return new Origin(scheme, host, port, request.getTag(), protocol);
     }
 
-    protected HttpDestination resolveDestination(Origin origin)
+    public HttpDestination resolveDestination(Origin origin)
     {
         return destinations.computeIfAbsent(origin, o ->
         {
-            HttpDestination newDestination = getTransport().newHttpDestination(o);
-            addManaged(newDestination);
+            HttpDestination destination = getTransport().newHttpDestination(o);
+            // Start the destination before it's published to other threads.
+            addManaged(destination);
             if (LOG.isDebugEnabled())
-                LOG.debug("Created {}", newDestination);
-            return newDestination;
+                LOG.debug("Created {}", destination);
+            return destination;
         });
     }
 
@@ -582,7 +542,7 @@ public class HttpClient extends ContainerLifeCycle
     }
 
     /**
-     * @return the list of destinations known to this {@link HttpClient}.
+     * @return the list of destinations known to this HttpClient.
      */
     public List<Destination> getDestinations()
     {
@@ -591,20 +551,20 @@ public class HttpClient extends ContainerLifeCycle
 
     protected void send(final HttpRequest request, List<Response.ResponseListener> listeners)
     {
-        HttpDestination destination = resolveDestination(request.getScheme(), request.getHost(), request.getPort(), request.getTag());
+        HttpDestination destination = (HttpDestination)resolveDestination(request);
         destination.send(request, listeners);
     }
 
     protected void newConnection(final HttpDestination destination, final Promise<Connection> promise)
     {
         Origin.Address address = destination.getConnectAddress();
-        resolver.resolve(address.getHost(), address.getPort(), new Promise<List<InetSocketAddress>>()
+        resolver.resolve(address.getHost(), address.getPort(), new Promise<>()
         {
             @Override
             public void succeeded(List<InetSocketAddress> socketAddresses)
             {
                 Map<String, Object> context = new HashMap<>();
-                context.put(ClientConnectionFactory.CONNECTOR_CONTEXT_KEY, HttpClient.this);
+                context.put(ClientConnectionFactory.CLIENT_CONTEXT_KEY, HttpClient.this);
                 context.put(HttpClientTransport.HTTP_DESTINATION_CONTEXT_KEY, destination);
                 connect(socketAddresses, 0, context);
             }
@@ -617,7 +577,7 @@ public class HttpClient extends ContainerLifeCycle
 
             private void connect(List<InetSocketAddress> socketAddresses, int index, Map<String, Object> context)
             {
-                context.put(HttpClientTransport.HTTP_CONNECTION_PROMISE_CONTEXT_KEY, new Promise.Wrapper<Connection>(promise)
+                context.put(HttpClientTransport.HTTP_CONNECTION_PROMISE_CONTEXT_KEY, new Promise.Wrapper<>(promise)
                 {
                     @Override
                     public void failed(Throwable x)
@@ -650,22 +610,19 @@ public class HttpClient extends ContainerLifeCycle
     }
 
     /**
-     * @return the {@link ByteBufferPool} of this {@link HttpClient}
+     * @return the {@link ByteBufferPool} of this HttpClient
      */
     public ByteBufferPool getByteBufferPool()
     {
-        return byteBufferPool;
+        return connector.getByteBufferPool();
     }
 
     /**
-     * @param byteBufferPool the {@link ByteBufferPool} of this {@link HttpClient}
+     * @param byteBufferPool the {@link ByteBufferPool} of this HttpClient
      */
     public void setByteBufferPool(ByteBufferPool byteBufferPool)
     {
-        if (isStarted())
-            LOG.warn("Calling setByteBufferPool() while started is deprecated");
-        updateBean(this.byteBufferPool, byteBufferPool);
-        this.byteBufferPool = byteBufferPool;
+        connector.setByteBufferPool(byteBufferPool);
     }
 
     /**
@@ -695,7 +652,7 @@ public class HttpClient extends ContainerLifeCycle
     @ManagedAttribute("The timeout, in milliseconds, for connect() operations")
     public long getConnectTimeout()
     {
-        return connectTimeout;
+        return connector.getConnectTimeout().toMillis();
     }
 
     /**
@@ -704,7 +661,7 @@ public class HttpClient extends ContainerLifeCycle
      */
     public void setConnectTimeout(long connectTimeout)
     {
-        this.connectTimeout = connectTimeout;
+        connector.setConnectTimeout(Duration.ofMillis(connectTimeout));
     }
 
     /**
@@ -718,7 +675,7 @@ public class HttpClient extends ContainerLifeCycle
 
     /**
      * <p>Sets the socket address resolution timeout used by the default {@link SocketAddressResolver}
-     * created by this {@link HttpClient} at startup.</p>
+     * created by this HttpClient at startup.</p>
      * <p>For more fine tuned configuration of socket address resolution, see
      * {@link #setSocketAddressResolver(SocketAddressResolver)}.</p>
      *
@@ -736,7 +693,7 @@ public class HttpClient extends ContainerLifeCycle
     @ManagedAttribute("The timeout, in milliseconds, to close idle connections")
     public long getIdleTimeout()
     {
-        return idleTimeout;
+        return connector.getIdleTimeout().toMillis();
     }
 
     /**
@@ -744,7 +701,7 @@ public class HttpClient extends ContainerLifeCycle
      */
     public void setIdleTimeout(long idleTimeout)
     {
-        this.idleTimeout = idleTimeout;
+        connector.setIdleTimeout(Duration.ofMillis(idleTimeout));
     }
 
     /**
@@ -753,7 +710,7 @@ public class HttpClient extends ContainerLifeCycle
      */
     public SocketAddress getBindAddress()
     {
-        return bindAddress;
+        return connector.getBindAddress();
     }
 
     /**
@@ -763,11 +720,11 @@ public class HttpClient extends ContainerLifeCycle
      */
     public void setBindAddress(SocketAddress bindAddress)
     {
-        this.bindAddress = bindAddress;
+        connector.setBindAddress(bindAddress);
     }
 
     /**
-     * @return the "User-Agent" HTTP field of this {@link HttpClient}
+     * @return the "User-Agent" HTTP field of this HttpClient
      */
     public HttpField getUserAgentField()
     {
@@ -775,7 +732,7 @@ public class HttpClient extends ContainerLifeCycle
     }
 
     /**
-     * @param agent the "User-Agent" HTTP header string of this {@link HttpClient}
+     * @param agent the "User-Agent" HTTP header string of this HttpClient
      */
     public void setUserAgentField(HttpField agent)
     {
@@ -785,7 +742,7 @@ public class HttpClient extends ContainerLifeCycle
     }
 
     /**
-     * @return whether this {@link HttpClient} follows HTTP redirects
+     * @return whether this HttpClient follows HTTP redirects
      * @see Request#isFollowRedirects()
      */
     @ManagedAttribute("Whether HTTP redirects are followed")
@@ -795,7 +752,7 @@ public class HttpClient extends ContainerLifeCycle
     }
 
     /**
-     * @param follow whether this {@link HttpClient} follows HTTP redirects
+     * @param follow whether this HttpClient follows HTTP redirects
      * @see #setMaxRedirects(int)
      */
     public void setFollowRedirects(boolean follow)
@@ -804,45 +761,39 @@ public class HttpClient extends ContainerLifeCycle
     }
 
     /**
-     * @return the {@link Executor} of this {@link HttpClient}
+     * @return the {@link Executor} of this HttpClient
      */
     public Executor getExecutor()
     {
-        return executor;
+        return connector.getExecutor();
     }
 
     /**
-     * @param executor the {@link Executor} of this {@link HttpClient}
+     * @param executor the {@link Executor} of this HttpClient
      */
     public void setExecutor(Executor executor)
     {
-        if (isStarted())
-            LOG.warn("Calling setExecutor() while started is deprecated");
-        updateBean(this.executor, executor);
-        this.executor = executor;
+        connector.setExecutor(executor);
     }
 
     /**
-     * @return the {@link Scheduler} of this {@link HttpClient}
+     * @return the {@link Scheduler} of this HttpClient
      */
     public Scheduler getScheduler()
     {
-        return scheduler;
+        return connector.getScheduler();
     }
 
     /**
-     * @param scheduler the {@link Scheduler} of this {@link HttpClient}
+     * @param scheduler the {@link Scheduler} of this HttpClient
      */
     public void setScheduler(Scheduler scheduler)
     {
-        if (isStarted())
-            LOG.warn("Calling setScheduler() while started is deprecated");
-        updateBean(this.scheduler, scheduler);
-        this.scheduler = scheduler;
+        connector.setScheduler(scheduler);
     }
 
     /**
-     * @return the {@link SocketAddressResolver} of this {@link HttpClient}
+     * @return the {@link SocketAddressResolver} of this HttpClient
      */
     public SocketAddressResolver getSocketAddressResolver()
     {
@@ -850,18 +801,18 @@ public class HttpClient extends ContainerLifeCycle
     }
 
     /**
-     * @param resolver the {@link SocketAddressResolver} of this {@link HttpClient}
+     * @param resolver the {@link SocketAddressResolver} of this HttpClient
      */
     public void setSocketAddressResolver(SocketAddressResolver resolver)
     {
         if (isStarted())
-            LOG.warn("Calling setSocketAddressResolver() while started is deprecated");
+            throw new IllegalStateException();
         updateBean(this.resolver, resolver);
         this.resolver = resolver;
     }
 
     /**
-     * @return the max number of connections that this {@link HttpClient} opens to {@link Destination}s
+     * @return the max number of connections that this HttpClient opens to {@link Destination}s
      */
     @ManagedAttribute("The max number of connections per each destination")
     public int getMaxConnectionsPerDestination()
@@ -874,11 +825,11 @@ public class HttpClient extends ContainerLifeCycle
      * <p>
      * RFC 2616 suggests that 2 connections should be opened per each destination,
      * but browsers commonly open 6.
-     * If this {@link HttpClient} is used for load testing, it is common to have only one destination
+     * If this HttpClient is used for load testing, it is common to have only one destination
      * (the server to load test), and it is recommended to set this value to a high value (at least as
      * much as the threads present in the {@link #getExecutor() executor}).
      *
-     * @param maxConnectionsPerDestination the max number of connections that this {@link HttpClient} opens to {@link Destination}s
+     * @param maxConnectionsPerDestination the max number of connections that this HttpClient opens to {@link Destination}s
      */
     public void setMaxConnectionsPerDestination(int maxConnectionsPerDestination)
     {
@@ -897,11 +848,11 @@ public class HttpClient extends ContainerLifeCycle
     /**
      * Sets the max number of requests that may be queued to a destination.
      * <p>
-     * If this {@link HttpClient} performs a high rate of requests to a destination,
+     * If this HttpClient performs a high rate of requests to a destination,
      * and all the connections managed by that destination are busy with other requests,
      * then new requests will be queued up in the destination.
      * This parameter controls how many requests can be queued before starting to reject them.
-     * If this {@link HttpClient} is used for load testing, it is common to have this parameter
+     * If this HttpClient is used for load testing, it is common to have this parameter
      * set to a high value, although this may impact latency (requests sit in the queue for a long
      * time before being sent).
      *
@@ -980,35 +931,6 @@ public class HttpClient extends ContainerLifeCycle
     public void setTCPNoDelay(boolean tcpNoDelay)
     {
         this.tcpNoDelay = tcpNoDelay;
-    }
-
-    /**
-     * @return true to dispatch I/O operations in a different thread, false to execute them in the selector thread
-     * @see #setDispatchIO(boolean)
-     */
-    @Deprecated
-    public boolean isDispatchIO()
-    {
-        // TODO this did default to true, so usage needs to be evaluated.
-        return false;
-    }
-
-    /**
-     * Whether to dispatch I/O operations from the selector thread to a different thread.
-     * <p>
-     * This implementation never blocks on I/O operation, but invokes application callbacks that may
-     * take time to execute or block on other I/O.
-     * If application callbacks are known to take time or block on I/O, then parameter {@code dispatchIO}
-     * should be set to true.
-     * If application callbacks are known to be quick and never block on I/O, then parameter {@code dispatchIO}
-     * may be set to false.
-     *
-     * @param dispatchIO true to dispatch I/O operations in a different thread,
-     * false to execute them in the selector thread
-     */
-    @Deprecated
-    public void setDispatchIO(boolean dispatchIO)
-    {
     }
 
     /**
@@ -1107,7 +1029,7 @@ public class HttpClient extends ContainerLifeCycle
     @ManagedAttribute("Whether the connect() operation is blocking")
     public boolean isConnectBlocking()
     {
-        return connectBlocking;
+        return connector.isConnectBlocking();
     }
 
     /**
@@ -1122,7 +1044,7 @@ public class HttpClient extends ContainerLifeCycle
      */
     public void setConnectBlocking(boolean connectBlocking)
     {
-        this.connectBlocking = connectBlocking;
+        connector.setConnectBlocking(connectBlocking);
     }
 
     /**
@@ -1140,6 +1062,40 @@ public class HttpClient extends ContainerLifeCycle
     public void setDefaultRequestContentType(String contentType)
     {
         this.defaultRequestContentType = contentType;
+    }
+
+    /**
+     * @return whether to use direct ByteBuffers for reading
+     */
+    @ManagedAttribute("Whether to use direct ByteBuffers for reading")
+    public boolean isUseInputDirectByteBuffers()
+    {
+        return useInputDirectByteBuffers;
+    }
+
+    /**
+     * @param useInputDirectByteBuffers whether to use direct ByteBuffers for reading
+     */
+    public void setUseInputDirectByteBuffers(boolean useInputDirectByteBuffers)
+    {
+        this.useInputDirectByteBuffers = useInputDirectByteBuffers;
+    }
+
+    /**
+     * @return whether to use direct ByteBuffers for writing
+     */
+    @ManagedAttribute("Whether to use direct ByteBuffers for writing")
+    public boolean isUseOutputDirectByteBuffers()
+    {
+        return useOutputDirectByteBuffers;
+    }
+
+    /**
+     * @param useOutputDirectByteBuffers whether to use direct ByteBuffers for writing
+     */
+    public void setUseOutputDirectByteBuffers(boolean useOutputDirectByteBuffers)
+    {
+        this.useOutputDirectByteBuffers = useOutputDirectByteBuffers;
     }
 
     /**
@@ -1180,28 +1136,15 @@ public class HttpClient extends ContainerLifeCycle
             return port == 80;
     }
 
-    static boolean isSchemeSecure(String scheme)
+    public static boolean isSchemeSecure(String scheme)
     {
         return HttpScheme.HTTPS.is(scheme) || HttpScheme.WSS.is(scheme);
     }
 
-    /**
-     * Creates a new {@code SslClientConnectionFactory} wrapping the given connection factory.
-     *
-     * @param connectionFactory the connection factory to wrap
-     * @return a new SslClientConnectionFactory
-     * @deprecated use {@link #newSslClientConnectionFactory(SslContextFactory, ClientConnectionFactory)} instead
-     */
-    @Deprecated
-    protected ClientConnectionFactory newSslClientConnectionFactory(ClientConnectionFactory connectionFactory)
-    {
-        return new SslClientConnectionFactory(getSslContextFactory(), getByteBufferPool(), getExecutor(), connectionFactory);
-    }
-
-    protected ClientConnectionFactory newSslClientConnectionFactory(SslContextFactory sslContextFactory, ClientConnectionFactory connectionFactory)
+    protected ClientConnectionFactory newSslClientConnectionFactory(SslContextFactory.Client sslContextFactory, ClientConnectionFactory connectionFactory)
     {
         if (sslContextFactory == null)
-            return newSslClientConnectionFactory(connectionFactory);
+            sslContextFactory = getSslContextFactory();
         return new SslClientConnectionFactory(sslContextFactory, getByteBufferPool(), getExecutor(), connectionFactory);
     }
 
@@ -1284,7 +1227,7 @@ public class HttpClient extends ContainerLifeCycle
         public Iterator<ContentDecoder.Factory> iterator()
         {
             final Iterator<ContentDecoder.Factory> iterator = set.iterator();
-            return new Iterator<ContentDecoder.Factory>()
+            return new Iterator<>()
             {
                 @Override
                 public boolean hasNext()

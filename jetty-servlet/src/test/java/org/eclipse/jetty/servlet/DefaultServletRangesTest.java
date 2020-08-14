@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.servlet;
@@ -150,12 +150,28 @@ public class DefaultServletRangesTest
         String boundary = body.substring(0, body.indexOf("\r\n"));
         assertResponseContains("206 Partial", response);
         assertResponseContains("Content-Type: multipart/byteranges; boundary=", response);
-        assertResponseContains("Content-Range: bytes 0-9/80", response);
-        assertResponseContains("Content-Range: bytes 20-29/80", response);
-        assertResponseContains("Content-Range: bytes 40-49/80", response);
-        assertResponseContains(DATA.substring(0, 10), response);
-        assertResponseContains(DATA.substring(20, 30), response);
-        assertResponseContains(DATA.substring(40, 50), response);
+
+        String section1 = boundary + "\r\n" +
+            "Content-Type: text/plain\r\n" +
+            "Content-Range: bytes 0-9/80\r\n" +
+            "\r\n" +
+            DATA.substring(0, 10) + "\r\n";
+        assertResponseContains(section1, response);
+
+        String section2 = boundary + "\r\n" +
+            "Content-Type: text/plain\r\n" +
+            "Content-Range: bytes 20-29/80\r\n" +
+            "\r\n" +
+            DATA.substring(20, 30) + "\r\n";
+        assertResponseContains(section2, response);
+
+        String section3 = boundary + "\r\n" +
+            "Content-Type: text/plain\r\n" +
+            "Content-Range: bytes 40-49/80\r\n" +
+            "\r\n" +
+            DATA.substring(40, 50) + "\r\n";
+        assertResponseContains(section3, response);
+
         assertTrue(body.endsWith(boundary + "--\r\n"));
     }
 

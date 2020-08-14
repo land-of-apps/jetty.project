@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.server;
@@ -26,7 +26,6 @@ import java.util.Deque;
 import java.util.Objects;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import javax.servlet.ReadListener;
 import javax.servlet.ServletInputStream;
 
@@ -37,8 +36,9 @@ import org.eclipse.jetty.io.RuntimeIOException;
 import org.eclipse.jetty.util.BufferUtil;
 import org.eclipse.jetty.util.Callback;
 import org.eclipse.jetty.util.component.Destroyable;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
+import org.eclipse.jetty.util.thread.AutoLock;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * {@link HttpInput} provides an implementation of {@link ServletInputStream} for {@link HttpChannel}.
@@ -122,10 +122,11 @@ public class HttpInput extends ServletInputStream implements Runnable
         }
     }
 
-    private static final Logger LOG = Log.getLogger(HttpInput.class);
+    private static final Logger LOG = LoggerFactory.getLogger(HttpInput.class);
     static final Content EOF_CONTENT = new EofContent("EOF");
     static final Content EARLY_EOF_CONTENT = new EofContent("EARLY_EOF");
 
+    private final AutoLock.WithCondition _lock = new AutoLock.WithCondition();
     private final byte[] _oneByteBuffer = new byte[1];
     private Content _content;
     private Content _intercepted;
@@ -152,7 +153,7 @@ public class HttpInput extends ServletInputStream implements Runnable
 
     public void recycle()
     {
-        synchronized (_inputQ)
+        try (AutoLock l = _lock.lock())
         {
             if (_content != null)
                 _content.failed(null);
@@ -213,7 +214,7 @@ public class HttpInput extends ServletInputStream implements Runnable
     {
         int available = 0;
         boolean woken = false;
-        synchronized (_inputQ)
+        try (AutoLock l = _lock.lock())
         {
             if (_content == null)
                 _content = _inputQ.poll();
@@ -247,11 +248,6 @@ public class HttpInput extends ServletInputStream implements Runnable
         executor.execute(channel);
     }
 
-    private long getBlockingTimeout()
-    {
-        return getHttpChannelState().getHttpChannel().getHttpConfiguration().getBlockingTimeout();
-    }
-
     @Override
     public int read() throws IOException
     {
@@ -265,20 +261,9 @@ public class HttpInput extends ServletInputStream implements Runnable
     public int read(byte[] b, int off, int len) throws IOException
     {
         boolean wake = false;
-        int l;
-        synchronized (_inputQ)
+        int read;
+        try (AutoLock l = _lock.lock())
         {
-            if (!isAsync())
-            {
-                // Setup blocking only if not async
-                if (_blockUntil == 0)
-                {
-                    long blockingTimeout = getBlockingTimeout();
-                    if (blockingTimeout > 0)
-                        _blockUntil = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(blockingTimeout);
-                }
-            }
-
             // Calculate minimum request rate for DOS protection
             long minRequestDataRate = _channelState.getHttpChannel().getHttpConfiguration().getMinRequestDataRate();
             if (minRequestDataRate > 0 && _firstByteTimeStamp != -1)
@@ -304,9 +289,9 @@ public class HttpInput extends ServletInputStream implements Runnable
                 Content item = nextContent();
                 if (item != null)
                 {
-                    l = get(item, b, off, len);
+                    read = get(item, b, off, len);
                     if (LOG.isDebugEnabled())
-                        LOG.debug("{} read {} from {}", this, l, item);
+                        LOG.debug("{} read {} from {}", this, read, item);
 
                     // Consume any following poison pills
                     if (item.isEmpty())
@@ -318,9 +303,9 @@ public class HttpInput extends ServletInputStream implements Runnable
                 if (!_state.blockForContent(this))
                 {
                     // Not blocking, so what should we return?
-                    l = _state.noContent();
+                    read = _state.noContent();
 
-                    if (l < 0)
+                    if (read < 0)
                         // If EOF do we need to wake for allDataRead callback?
                         wake = _channelState.onReadEof();
                     break;
@@ -330,7 +315,7 @@ public class HttpInput extends ServletInputStream implements Runnable
 
         if (wake)
             wake();
-        return l;
+        return read;
     }
 
     /**
@@ -350,7 +335,7 @@ public class HttpInput extends ServletInputStream implements Runnable
      */
     public void asyncReadProduce() throws IOException
     {
-        synchronized (_inputQ)
+        try (AutoLock l = _lock.lock())
         {
             produceContent();
         }
@@ -539,6 +524,7 @@ public class HttpInput extends ServletInputStream implements Runnable
      */
     protected void blockForContent() throws IOException
     {
+        assert _lock.isHeldByCurrentThread();
         try
         {
             _waitingForContent = true;
@@ -548,13 +534,6 @@ public class HttpInput extends ServletInputStream implements Runnable
             long timeout = 0;
             while (true)
             {
-                if (_blockUntil != 0)
-                {
-                    timeout = TimeUnit.NANOSECONDS.toMillis(_blockUntil - System.nanoTime());
-                    if (timeout <= 0)
-                        throw new TimeoutException(String.format("Blocking timeout %d ms", getBlockingTimeout()));
-                }
-
                 // This method is called from a loop, so we just
                 // need to check the timeout before and after waiting.
                 if (loop)
@@ -563,9 +542,9 @@ public class HttpInput extends ServletInputStream implements Runnable
                 if (LOG.isDebugEnabled())
                     LOG.debug("{} blocking for content timeout={}", this, timeout);
                 if (timeout > 0)
-                    _inputQ.wait(timeout);
+                    _lock.await(timeout, TimeUnit.MILLISECONDS);
                 else
-                    _inputQ.wait();
+                    _lock.await();
 
                 loop = true;
             }
@@ -584,7 +563,7 @@ public class HttpInput extends ServletInputStream implements Runnable
      */
     public boolean addContent(Content content)
     {
-        synchronized (_inputQ)
+        try (AutoLock l = _lock.lock())
         {
             _waitingForContent = false;
             if (_firstByteTimeStamp == -1)
@@ -618,7 +597,7 @@ public class HttpInput extends ServletInputStream implements Runnable
 
     public boolean hasContent()
     {
-        synchronized (_inputQ)
+        try (AutoLock l = _lock.lock())
         {
             return _content != null || _inputQ.size() > 0;
         }
@@ -626,15 +605,15 @@ public class HttpInput extends ServletInputStream implements Runnable
 
     public void unblock()
     {
-        synchronized (_inputQ)
+        try (AutoLock.WithCondition l = _lock.lock())
         {
-            _inputQ.notify();
+            l.signal();
         }
     }
 
     public long getContentConsumed()
     {
-        synchronized (_inputQ)
+        try (AutoLock l = _lock.lock())
         {
             return _contentConsumed;
         }
@@ -664,7 +643,7 @@ public class HttpInput extends ServletInputStream implements Runnable
 
     public boolean consumeAll()
     {
-        synchronized (_inputQ)
+        try (AutoLock l = _lock.lock())
         {
             try
             {
@@ -684,7 +663,7 @@ public class HttpInput extends ServletInputStream implements Runnable
             }
             catch (Throwable e)
             {
-                LOG.debug(e);
+                LOG.debug("Unable to consume all input", e);
                 _state = new ErrorState(e);
                 return false;
             }
@@ -693,7 +672,7 @@ public class HttpInput extends ServletInputStream implements Runnable
 
     public boolean isError()
     {
-        synchronized (_inputQ)
+        try (AutoLock l = _lock.lock())
         {
             return _state instanceof ErrorState;
         }
@@ -701,7 +680,7 @@ public class HttpInput extends ServletInputStream implements Runnable
 
     public boolean isAsync()
     {
-        synchronized (_inputQ)
+        try (AutoLock l = _lock.lock())
         {
             return _state == ASYNC;
         }
@@ -710,7 +689,7 @@ public class HttpInput extends ServletInputStream implements Runnable
     @Override
     public boolean isFinished()
     {
-        synchronized (_inputQ)
+        try (AutoLock l = _lock.lock())
         {
             return _state instanceof EOFState;
         }
@@ -721,7 +700,7 @@ public class HttpInput extends ServletInputStream implements Runnable
     {
         try
         {
-            synchronized (_inputQ)
+            try (AutoLock l = _lock.lock())
             {
                 if (_listener == null)
                     return true;
@@ -738,7 +717,7 @@ public class HttpInput extends ServletInputStream implements Runnable
         }
         catch (IOException e)
         {
-            LOG.ignore(e);
+            LOG.trace("IGNORED", e);
             return true;
         }
     }
@@ -749,12 +728,16 @@ public class HttpInput extends ServletInputStream implements Runnable
         boolean woken = false;
         try
         {
-            synchronized (_inputQ)
+            try (AutoLock l = _lock.lock())
             {
                 if (_listener != null)
                     throw new IllegalStateException("ReadListener already set");
 
                 _listener = Objects.requireNonNull(readListener);
+
+                //illegal if async not started
+                if (!_channelState.isAsyncStarted())
+                    throw new IllegalStateException("Async not started");
 
                 if (isError())
                 {
@@ -793,7 +776,7 @@ public class HttpInput extends ServletInputStream implements Runnable
 
     public boolean onIdleTimeout(Throwable x)
     {
-        synchronized (_inputQ)
+        try (AutoLock l = _lock.lock())
         {
             boolean neverDispatched = getHttpChannelState().isIdle();
             if ((_waitingForContent || neverDispatched) && !isError())
@@ -808,7 +791,7 @@ public class HttpInput extends ServletInputStream implements Runnable
 
     public boolean failed(Throwable x)
     {
-        synchronized (_inputQ)
+        try (AutoLock l = _lock.lock())
         {
             // Errors may be reported multiple times, for example
             // a local idle timeout and a remote I/O failure.
@@ -820,7 +803,7 @@ public class HttpInput extends ServletInputStream implements Runnable
                     // without modifying the original failure.
                     Throwable failure = new Throwable(_state.getError());
                     failure.addSuppressed(x);
-                    LOG.debug(failure);
+                    LOG.debug("HttpInput failure", failure);
                 }
             }
             else
@@ -836,9 +819,10 @@ public class HttpInput extends ServletInputStream implements Runnable
 
     private boolean wakeup()
     {
+        assert _lock.isHeldByCurrentThread();
         if (_listener != null)
             return _channelState.onContentAdded();
-        _inputQ.notify();
+        _lock.signal();
         return false;
     }
 
@@ -853,7 +837,7 @@ public class HttpInput extends ServletInputStream implements Runnable
         Throwable error;
         boolean aeof = false;
 
-        synchronized (_inputQ)
+        try (AutoLock l = _lock.lock())
         {
             listener = _listener;
 
@@ -911,8 +895,10 @@ public class HttpInput extends ServletInputStream implements Runnable
         }
         catch (Throwable e)
         {
-            LOG.warn(e.toString());
-            LOG.debug(e);
+            if (LOG.isDebugEnabled())
+                LOG.warn("Unable to notify listener", e);
+            else
+                LOG.warn("Unable to notify listener: {}", e.toString());
             try
             {
                 if (aeof || error == null)
@@ -921,11 +907,14 @@ public class HttpInput extends ServletInputStream implements Runnable
                     listener.onError(e);
                 }
             }
-            catch (Throwable ex2)
+            catch (Throwable e2)
             {
-                LOG.warn(ex2.toString());
-                LOG.debug(ex2);
-                throw new RuntimeIOException(ex2);
+                String msg = "Unable to notify error to listener";
+                if (LOG.isDebugEnabled())
+                    LOG.warn(msg, e2);
+                else
+                    LOG.warn(msg + ": {}", e2.toString());
+                throw new RuntimeIOException(msg, e2);
             }
         }
     }
@@ -937,7 +926,7 @@ public class HttpInput extends ServletInputStream implements Runnable
         long consumed;
         int q;
         Content content;
-        synchronized (_inputQ)
+        try (AutoLock l = _lock.lock())
         {
             state = _state;
             consumed = _contentConsumed;

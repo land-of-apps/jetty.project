@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.util.ssl;
@@ -86,12 +86,13 @@ import org.eclipse.jetty.util.annotation.ManagedAttribute;
 import org.eclipse.jetty.util.annotation.ManagedObject;
 import org.eclipse.jetty.util.component.AbstractLifeCycle;
 import org.eclipse.jetty.util.component.Dumpable;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
 import org.eclipse.jetty.util.resource.Resource;
 import org.eclipse.jetty.util.security.CertificateUtils;
 import org.eclipse.jetty.util.security.CertificateValidator;
 import org.eclipse.jetty.util.security.Password;
+import org.eclipse.jetty.util.thread.AutoLock;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * <p>SslContextFactory is used to configure SSL parameters
@@ -100,7 +101,7 @@ import org.eclipse.jetty.util.security.Password;
  * and {@link Client} to configure HTTP or WebSocket clients.</p>
  */
 @ManagedObject
-public class SslContextFactory extends AbstractLifeCycle implements Dumpable
+public abstract class SslContextFactory extends AbstractLifeCycle implements Dumpable
 {
     public static final TrustManager[] TRUST_ALL_CERTS = new X509TrustManager[]{new X509ExtendedTrustManagerWrapper(null)};
     public static final String DEFAULT_KEYMANAGERFACTORY_ALGORITHM = KeyManagerFactory.getDefaultAlgorithm();
@@ -114,8 +115,8 @@ public class SslContextFactory extends AbstractLifeCycle implements Dumpable
      */
     public static final String PASSWORD_PROPERTY = "org.eclipse.jetty.ssl.password";
 
-    private static final Logger LOG = Log.getLogger(SslContextFactory.class);
-    private static final Logger LOG_CONFIG = LOG.getLogger("config");
+    private static final Logger LOG = LoggerFactory.getLogger(SslContextFactory.class);
+    private static final Logger LOG_CONFIG = LoggerFactory.getLogger(LOG.getName() + ".config");
     /**
      * Default Excluded Protocols List
      */
@@ -137,6 +138,7 @@ public class SslContextFactory extends AbstractLifeCycle implements Dumpable
         "^.*_anon_.*$"
     };
 
+    private final AutoLock _lock = new AutoLock();
     private final Set<String> _excludeProtocols = new LinkedHashSet<>();
     private final Set<String> _includeProtocols = new LinkedHashSet<>();
     private final Set<String> _excludeCipherSuites = new LinkedHashSet<>();
@@ -150,13 +152,11 @@ public class SslContextFactory extends AbstractLifeCycle implements Dumpable
     private String[] _selectedCipherSuites;
     private Resource _keyStoreResource;
     private String _keyStoreProvider;
-    private String _keyStoreType = "JKS";
+    private String _keyStoreType = "PKCS12";
     private String _certAlias;
     private Resource _trustStoreResource;
     private String _trustStoreProvider;
     private String _trustStoreType;
-    private boolean _needClientAuth = false;
-    private boolean _wantClientAuth = false;
     private Password _keyStorePassword;
     private Password _keyManagerPassword;
     private Password _trustStorePassword;
@@ -188,49 +188,23 @@ public class SslContextFactory extends AbstractLifeCycle implements Dumpable
 
     /**
      * Construct an instance of SslContextFactory with the default configuration.
-     *
-     * @deprecated use {@link Client#Client()} or {@link Server#Server()} instead
      */
-    @Deprecated
-    public SslContextFactory()
+    protected SslContextFactory()
     {
         this(false);
     }
 
     /**
-     * Construct an instance of SslContextFactory
-     * Default constructor for use in XmlConfiguration files
+     * Construct an instance of SslContextFactory that trusts all certificates
      *
      * @param trustAll whether to blindly trust all certificates
      * @see #setTrustAll(boolean)
-     * @deprecated use {@link Client#Client(boolean)} instead
      */
-    @Deprecated
     public SslContextFactory(boolean trustAll)
-    {
-        this(trustAll, null);
-    }
-
-    /**
-     * Construct an instance of SslContextFactory
-     *
-     * @param keyStorePath default keystore location
-     * @deprecated use {@link #setKeyStorePath(String)} instead
-     */
-    @Deprecated
-    public SslContextFactory(String keyStorePath)
-    {
-        this(false, keyStorePath);
-    }
-
-    private SslContextFactory(boolean trustAll, String keyStorePath)
     {
         setTrustAll(trustAll);
         setExcludeProtocols(DEFAULT_EXCLUDED_PROTOCOLS);
         setExcludeCipherSuites(DEFAULT_EXCLUDED_CIPHER_SUITES);
-
-        if (keyStorePath != null)
-            setKeyStorePath(keyStorePath);
     }
 
     /**
@@ -240,7 +214,7 @@ public class SslContextFactory extends AbstractLifeCycle implements Dumpable
     protected void doStart() throws Exception
     {
         super.doStart();
-        synchronized (this)
+        try (AutoLock l = _lock.lock())
         {
             load();
         }
@@ -430,7 +404,7 @@ public class SslContextFactory extends AbstractLifeCycle implements Dumpable
         }
         catch (NoSuchAlgorithmException x)
         {
-            LOG.ignore(x);
+            LOG.trace("IGNORED", x);
         }
     }
 
@@ -464,7 +438,7 @@ public class SslContextFactory extends AbstractLifeCycle implements Dumpable
     @Override
     protected void doStop() throws Exception
     {
-        synchronized (this)
+        try (AutoLock l = _lock.lock())
         {
             unload();
         }
@@ -479,6 +453,21 @@ public class SslContextFactory extends AbstractLifeCycle implements Dumpable
         _aliasX509.clear();
         _certHosts.clear();
         _certWilds.clear();
+    }
+
+    Map<String, X509> aliasCerts()
+    {
+        return _aliasX509;
+    }
+
+    Map<String, X509> hostCerts()
+    {
+        return _certHosts;
+    }
+
+    Map<String, X509> wildCerts()
+    {
+        return _certWilds;
     }
 
     @ManagedAttribute(value = "The selected TLS protocol versions", readonly = true)
@@ -668,7 +657,7 @@ public class SslContextFactory extends AbstractLifeCycle implements Dumpable
     }
 
     /**
-     * @return The type of the key store (default "JKS")
+     * @return The type of the key store (default "PKCS12")
      */
     @ManagedAttribute("The keyStore type")
     public String getKeyStoreType()
@@ -677,7 +666,7 @@ public class SslContextFactory extends AbstractLifeCycle implements Dumpable
     }
 
     /**
-     * @param keyStoreType The type of the key store (default "JKS")
+     * @param keyStoreType The type of the key store
      */
     public void setKeyStoreType(String keyStoreType)
     {
@@ -763,52 +752,6 @@ public class SslContextFactory extends AbstractLifeCycle implements Dumpable
     }
 
     /**
-     * @return True if SSL needs client authentication.
-     * @see SSLEngine#getNeedClientAuth()
-     * @deprecated use {@link Server#getNeedClientAuth()} instead
-     */
-    @ManagedAttribute("Whether client authentication is needed")
-    @Deprecated
-    public boolean getNeedClientAuth()
-    {
-        return _needClientAuth;
-    }
-
-    /**
-     * @param needClientAuth True if SSL needs client authentication.
-     * @see SSLEngine#getNeedClientAuth()
-     * @deprecated use {@link Server#setNeedClientAuth(boolean)} instead
-     */
-    @Deprecated
-    public void setNeedClientAuth(boolean needClientAuth)
-    {
-        _needClientAuth = needClientAuth;
-    }
-
-    /**
-     * @return True if SSL wants client authentication.
-     * @see SSLEngine#getWantClientAuth()
-     * @deprecated use {@link Server#getWantClientAuth()} instead
-     */
-    @ManagedAttribute("Whether client authentication is wanted")
-    @Deprecated
-    public boolean getWantClientAuth()
-    {
-        return _wantClientAuth;
-    }
-
-    /**
-     * @param wantClientAuth True if SSL wants client authentication.
-     * @see SSLEngine#getWantClientAuth()
-     * @deprecated use {@link Server#setWantClientAuth(boolean)} instead
-     */
-    @Deprecated
-    public void setWantClientAuth(boolean wantClientAuth)
-    {
-        _wantClientAuth = wantClientAuth;
-    }
-
-    /**
      * @return true if SSL certificate has to be validated
      */
     @ManagedAttribute("Whether certificates are validated")
@@ -847,21 +790,11 @@ public class SslContextFactory extends AbstractLifeCycle implements Dumpable
      * a keystore is set, then
      * the {@link #getPassword(String)} is used to
      * obtain a password either from the {@value #PASSWORD_PROPERTY}
-     * system property or by prompting for manual entry.
+     * system property.
      */
     public void setKeyStorePassword(String password)
     {
-        if (password == null)
-        {
-            if (_keyStoreResource != null)
-                _keyStorePassword = getPassword(PASSWORD_PROPERTY);
-            else
-                _keyStorePassword = null;
-        }
-        else
-        {
-            _keyStorePassword = newPassword(password);
-        }
+        _keyStorePassword = password == null ? getPassword(PASSWORD_PROPERTY) : newPassword(password);
     }
 
     /**
@@ -872,39 +805,18 @@ public class SslContextFactory extends AbstractLifeCycle implements Dumpable
      */
     public void setKeyManagerPassword(String password)
     {
-        if (password == null)
-        {
-            if (System.getProperty(KEYPASSWORD_PROPERTY) != null)
-                _keyManagerPassword = getPassword(KEYPASSWORD_PROPERTY);
-            else
-                _keyManagerPassword = null;
-        }
-        else
-        {
-            _keyManagerPassword = newPassword(password);
-        }
+        _keyManagerPassword = password == null ? getPassword(KEYPASSWORD_PROPERTY) : newPassword(password);
     }
 
     /**
-     * @param password The password for the truststore. If null is passed and a truststore is set
-     * that is different from the keystore, then
+     * @param password The password for the truststore. If null is passed then
      * the {@link #getPassword(String)} is used to
-     * obtain a password either from the {@value #PASSWORD_PROPERTY}
-     * system property or by prompting for manual entry.
+     * obtain a password from the {@value #PASSWORD_PROPERTY}
+     * system property.
      */
     public void setTrustStorePassword(String password)
     {
-        if (password == null)
-        {
-            if (_trustStoreResource != null && !_trustStoreResource.equals(_keyStoreResource))
-                _trustStorePassword = getPassword(PASSWORD_PROPERTY);
-            else
-                _trustStorePassword = null;
-        }
-        else
-        {
-            _trustStorePassword = newPassword(password);
-        }
+        _trustStorePassword = password == null ? getPassword(PASSWORD_PROPERTY) : newPassword(password);
     }
 
     /**
@@ -1129,8 +1041,10 @@ public class SslContextFactory extends AbstractLifeCycle implements Dumpable
         if (!isStarted())
             return _setContext;
 
-        synchronized (this)
+        try (AutoLock l = _lock.lock())
         {
+            if (_factory == null)
+                throw new IllegalStateException("SslContextFactory reload failed");
             return _factory._context;
         }
     }
@@ -1154,7 +1068,7 @@ public class SslContextFactory extends AbstractLifeCycle implements Dumpable
 
     /**
      * When set to "HTTPS" hostname verification will be enabled.
-     * Deployments can be vulnerable to a man-in-the-middle attack if a EndpointIndentificationAlgorithm
+     * Deployments can be vulnerable to a man-in-the-middle attack if a EndpointIdentificationAlgorithm
      * is not set.
      *
      * @param endpointIdentificationAlgorithm Set the endpointIdentificationAlgorithm
@@ -1245,17 +1159,6 @@ public class SslContextFactory extends AbstractLifeCycle implements Dumpable
                             managers[idx] = new AliasedX509ExtendedKeyManager((X509ExtendedKeyManager)managers[idx], alias);
                     }
                 }
-
-                // Is SNI needed to select a certificate?
-                boolean sniRequired = (this instanceof Server) && ((Server)this).isSniRequired();
-                if (sniRequired || !_certWilds.isEmpty() || _certHosts.size() > 1 || (_certHosts.size() == 1 && _aliasX509.size() > 1))
-                {
-                    for (int idx = 0; idx < managers.length; idx++)
-                    {
-                        if (managers[idx] instanceof X509ExtendedKeyManager)
-                            managers[idx] = newSniX509ExtendedKeyManager((X509ExtendedKeyManager)managers[idx]);
-                    }
-                }
             }
         }
 
@@ -1263,19 +1166,6 @@ public class SslContextFactory extends AbstractLifeCycle implements Dumpable
             LOG.debug("managers={} for {}", managers, this);
 
         return managers;
-    }
-
-    /**
-     * @deprecated use {@link SslContextFactory.Server#newSniX509ExtendedKeyManager(X509ExtendedKeyManager)} instead
-     */
-    @Deprecated
-    protected X509ExtendedKeyManager newSniX509ExtendedKeyManager(X509ExtendedKeyManager keyManager)
-    {
-        throw new IllegalStateException(String.format(
-            "KeyStores with multiple certificates are not supported on the base class %s. (Use %s or %s instead)",
-            SslContextFactory.class.getName(),
-            Server.class.getName(),
-            Client.class.getName()));
     }
 
     protected TrustManager[] getTrustManagers(KeyStore trustStore, Collection<? extends CRL> crls) throws Exception
@@ -1305,7 +1195,9 @@ public class SslContextFactory extends AbstractLifeCycle implements Dumpable
         return managers;
     }
 
+    // @checkstyle-disable-check : AbbreviationAsWordInNameCheck
     protected PKIXBuilderParameters newPKIXBuilderParameters(KeyStore trustStore, Collection<? extends CRL> crls) throws Exception
+    // @checkstyle-enable-check : AbbreviationAsWordInNameCheck
     {
         PKIXBuilderParameters pbParams = new PKIXBuilderParameters(trustStore, new X509CertSelector());
 
@@ -1530,8 +1422,10 @@ public class SslContextFactory extends AbstractLifeCycle implements Dumpable
         if (!isStarted())
             return _setKeyStore;
 
-        synchronized (this)
+        try (AutoLock l = _lock.lock())
         {
+            if (_factory == null)
+                throw new IllegalStateException("SslContextFactory reload failed");
             return _factory._keyStore;
         }
     }
@@ -1551,8 +1445,10 @@ public class SslContextFactory extends AbstractLifeCycle implements Dumpable
         if (!isStarted())
             return _setTrustStore;
 
-        synchronized (this)
+        try (AutoLock l = _lock.lock())
         {
+            if (_factory == null)
+                throw new IllegalStateException("SslContextFactory reload failed");
             return _factory._trustStore;
         }
     }
@@ -1693,7 +1589,8 @@ public class SslContextFactory extends AbstractLifeCycle implements Dumpable
      */
     protected Password getPassword(String realm)
     {
-        return Password.getPassword(realm, null, null);
+        String password = System.getProperty(realm);
+        return password == null ? null : newPassword(password);
     }
 
     /**
@@ -1747,9 +1644,11 @@ public class SslContextFactory extends AbstractLifeCycle implements Dumpable
         }
         catch (Throwable cause)
         {
-            LOG.info("Unable to get CertificateFactory instance for type [{}] on provider [{}], using default", type, provider);
+            String msg = String.format("Unable to get CertificateFactory instance for type [%s] on provider [%s], using default", type, provider);
             if (LOG.isDebugEnabled())
-                LOG.debug(cause);
+                LOG.debug(msg, cause);
+            else
+                LOG.info(msg);
         }
 
         return CertificateFactory.getInstance(type);
@@ -1769,9 +1668,11 @@ public class SslContextFactory extends AbstractLifeCycle implements Dumpable
         }
         catch (Throwable cause)
         {
-            LOG.info("Unable to get CertStore instance for type [{}] on provider [{}], using default", type, provider);
+            String msg = String.format("Unable to get CertStore instance for type [%s] on provider [%s], using default", type, provider);
             if (LOG.isDebugEnabled())
-                LOG.debug(cause);
+                LOG.debug(msg, cause);
+            else
+                LOG.info(msg);
         }
 
         return CertStore.getInstance(type, new CollectionCertStoreParameters(crls));
@@ -1792,9 +1693,11 @@ public class SslContextFactory extends AbstractLifeCycle implements Dumpable
         catch (Throwable cause)
         {
             // fall back to non-provider option
-            LOG.info("Unable to get KeyManagerFactory instance for algorithm [{}] on provider [{}], using default", algorithm, provider);
+            String msg = String.format("Unable to get KeyManagerFactory instance for algorithm [%s] on provider [%s], using default", algorithm, provider);
             if (LOG.isDebugEnabled())
-                LOG.debug(cause);
+                LOG.debug(msg, cause);
+            else
+                LOG.info(msg);
         }
 
         return KeyManagerFactory.getInstance(algorithm);
@@ -1817,9 +1720,11 @@ public class SslContextFactory extends AbstractLifeCycle implements Dumpable
             }
             catch (Throwable cause)
             {
-                LOG.info("Unable to get SecureRandom instance for algorithm [{}] on provider [{}], using default", algorithm, provider);
+                String msg = String.format("Unable to get SecureRandom instance for algorithm [%s] on provider [%s], using default", algorithm, provider);
                 if (LOG.isDebugEnabled())
-                    LOG.debug(cause);
+                    LOG.debug(msg, cause);
+                else
+                    LOG.info(msg);
             }
 
             return SecureRandom.getInstance(algorithm);
@@ -1842,9 +1747,11 @@ public class SslContextFactory extends AbstractLifeCycle implements Dumpable
         }
         catch (Throwable cause)
         {
-            LOG.info("Unable to get SSLContext instance for protocol [{}] on provider [{}], using default", protocol, provider);
+            String msg = String.format("Unable to get SSLContext instance for protocol [%s] on provider [%s], using default", protocol, provider);
             if (LOG.isDebugEnabled())
-                LOG.debug(cause);
+                LOG.debug(msg, cause);
+            else
+                LOG.info(msg);
         }
 
         return SSLContext.getInstance(protocol);
@@ -1863,11 +1770,11 @@ public class SslContextFactory extends AbstractLifeCycle implements Dumpable
         }
         catch (Throwable cause)
         {
-            LOG.info("Unable to get TrustManagerFactory instance for algorithm [{}] on provider [{}], using default", algorithm, provider);
+            String msg = String.format("Unable to get TrustManagerFactory instance for algorithm [%s] on provider [%s], using default", algorithm, provider);
             if (LOG.isDebugEnabled())
-            {
-                LOG.debug(cause);
-            }
+                LOG.debug(msg, cause);
+            else
+                LOG.info(msg);
         }
 
         return TrustManagerFactory.getInstance(algorithm);
@@ -1962,11 +1869,12 @@ public class SslContextFactory extends AbstractLifeCycle implements Dumpable
             sslParams.setCipherSuites(_selectedCipherSuites);
         if (_selectedProtocols != null)
             sslParams.setProtocols(_selectedProtocols);
-        if (!(this instanceof Client))
+        if (this instanceof Server)
         {
-            if (getWantClientAuth())
+            Server server = (Server)this;
+            if (server.getWantClientAuth())
                 sslParams.setWantClientAuth(true);
-            if (getNeedClientAuth())
+            if (server.getNeedClientAuth())
                 sslParams.setNeedClientAuth(true);
         }
         return sslParams;
@@ -1974,24 +1882,12 @@ public class SslContextFactory extends AbstractLifeCycle implements Dumpable
 
     public void reload(Consumer<SslContextFactory> consumer) throws Exception
     {
-        synchronized (this)
+        try (AutoLock l = _lock.lock())
         {
             consumer.accept(this);
             unload();
             load();
         }
-    }
-
-    /**
-     * Obtain the X509 Certificate Chain from the provided SSLSession using this
-     * SslContextFactory's optional Provider specific {@link CertificateFactory}.
-     *
-     * @param sslSession the session to use for active peer certificates
-     * @return the certificate chain
-     */
-    public X509Certificate[] getX509CertChain(SSLSession sslSession)
-    {
-        return getX509CertChain(this, sslSession);
     }
 
     /**
@@ -2004,6 +1900,18 @@ public class SslContextFactory extends AbstractLifeCycle implements Dumpable
     public static X509Certificate[] getCertChain(SSLSession sslSession)
     {
         return getX509CertChain(null, sslSession);
+    }
+
+    /**
+     * Obtain the X509 Certificate Chain from the provided SSLSession using this
+     * SslContextFactory's optional Provider specific {@link CertificateFactory}.
+     *
+     * @param sslSession the session to use for active peer certificates
+     * @return the certificate chain
+     */
+    public X509Certificate[] getX509CertChain(SSLSession sslSession)
+    {
+        return getX509CertChain(this, sslSession);
     }
 
     private static X509Certificate[] getX509CertChain(SslContextFactory sslContextFactory, SSLSession sslSession)
@@ -2043,7 +1951,7 @@ public class SslContextFactory extends AbstractLifeCycle implements Dumpable
         }
         catch (Exception e)
         {
-            LOG.warn(Log.EXCEPTION, e);
+            LOG.warn("Unable to get X509CertChain", e);
             return null;
         }
     }
@@ -2110,15 +2018,14 @@ public class SslContextFactory extends AbstractLifeCycle implements Dumpable
             _trustStoreResource);
     }
 
-    class Factory
+    private static class Factory
     {
         private final KeyStore _keyStore;
         private final KeyStore _trustStore;
         private final SSLContext _context;
 
-        Factory(KeyStore keyStore, KeyStore trustStore, SSLContext context)
+        private Factory(KeyStore keyStore, KeyStore trustStore, SSLContext context)
         {
-            super();
             _keyStore = keyStore;
             _trustStore = trustStore;
             _context = context;
@@ -2183,18 +2090,13 @@ public class SslContextFactory extends AbstractLifeCycle implements Dumpable
             checkEndPointIdentificationAlgorithm();
             super.checkConfiguration();
         }
-
-        @Override
-        protected X509ExtendedKeyManager newSniX509ExtendedKeyManager(X509ExtendedKeyManager keyManager)
-        {
-            // Client has no SNI functionality.
-            return keyManager;
-        }
     }
 
     @ManagedObject
     public static class Server extends SslContextFactory implements SniX509ExtendedKeyManager.SniSelector
     {
+        private boolean _needClientAuth;
+        private boolean _wantClientAuth;
         private boolean _sniRequired;
         private SniX509ExtendedKeyManager.SniSelector _sniSelector;
 
@@ -2203,35 +2105,51 @@ public class SslContextFactory extends AbstractLifeCycle implements Dumpable
             setEndpointIdentificationAlgorithm(null);
         }
 
-        @Override
-        public boolean getWantClientAuth()
-        {
-            return super.getWantClientAuth();
-        }
-
-        public void setWantClientAuth(boolean wantClientAuth)
-        {
-            super.setWantClientAuth(wantClientAuth);
-        }
-
-        @Override
+        /**
+         * @return True if SSL needs client authentication.
+         * @see SSLEngine#getNeedClientAuth()
+         */
+        @ManagedAttribute("Whether client authentication is needed")
         public boolean getNeedClientAuth()
         {
-            return super.getNeedClientAuth();
+            return _needClientAuth;
         }
 
-        @Override
+        /**
+         * @param needClientAuth True if SSL needs client authentication.
+         * @see SSLEngine#getNeedClientAuth()
+         */
         public void setNeedClientAuth(boolean needClientAuth)
         {
-            super.setNeedClientAuth(needClientAuth);
+            _needClientAuth = needClientAuth;
+        }
+
+        /**
+         * @return True if SSL wants client authentication.
+         * @see SSLEngine#getWantClientAuth()
+         */
+        @ManagedAttribute("Whether client authentication is wanted")
+        public boolean getWantClientAuth()
+        {
+            return _wantClientAuth;
+        }
+
+        /**
+         * @param wantClientAuth True if SSL wants client authentication.
+         * @see SSLEngine#getWantClientAuth()
+         */
+        public void setWantClientAuth(boolean wantClientAuth)
+        {
+            _wantClientAuth = wantClientAuth;
         }
 
         /**
          * Does the default {@link #sniSelect(String, Principal[], SSLSession, String, Collection)} implementation
          * require an SNI match?  Note that if a non SNI handshake is accepted, requests may still be rejected
          * at the HTTP level for incorrect SNI (see SecureRequestCustomizer).
+         *
          * @return true if no SNI match is handled as no certificate match, false if no SNI match is handled by
-         *         delegation to the non SNI matching methods.
+         * delegation to the non SNI matching methods.
          */
         @ManagedAttribute("Whether the TLS handshake is rejected if there is no SNI host match")
         public boolean isSniRequired()
@@ -2245,8 +2163,9 @@ public class SslContextFactory extends AbstractLifeCycle implements Dumpable
          * at the HTTP level for incorrect SNI (see SecureRequestCustomizer).
          * This setting may have no effect if {@link #sniSelect(String, Principal[], SSLSession, String, Collection)} is
          * overridden or a non null function is passed to {@link #setSNISelector(SniX509ExtendedKeyManager.SniSelector)}.
+         *
          * @param sniRequired true if no SNI match is handled as no certificate match, false if no SNI match is handled by
-         *                    delegation to the non SNI matching methods.
+         * delegation to the non SNI matching methods.
          */
         public void setSniRequired(boolean sniRequired)
         {
@@ -2257,9 +2176,25 @@ public class SslContextFactory extends AbstractLifeCycle implements Dumpable
         protected KeyManager[] getKeyManagers(KeyStore keyStore) throws Exception
         {
             KeyManager[] managers = super.getKeyManagers(keyStore);
+
+            boolean hasSniX509ExtendedKeyManager = false;
+
+            // Is SNI needed to select a certificate?
+            if (isSniRequired() || !wildCerts().isEmpty() || hostCerts().size() > 1 || (hostCerts().size() == 1 && aliasCerts().size() > 1))
+            {
+                for (int idx = 0; idx < managers.length; idx++)
+                {
+                    if (managers[idx] instanceof X509ExtendedKeyManager)
+                    {
+                        managers[idx] = newSniX509ExtendedKeyManager((X509ExtendedKeyManager)managers[idx]);
+                        hasSniX509ExtendedKeyManager = true;
+                    }
+                }
+            }
+
             if (isSniRequired())
             {
-                if (managers == null || Arrays.stream(managers).noneMatch(SniX509ExtendedKeyManager.class::isInstance))
+                if (managers == null || !hasSniX509ExtendedKeyManager)
                     throw new IllegalStateException("No SNI Key managers when SNI is required");
             }
             return managers;
@@ -2289,7 +2224,7 @@ public class SslContextFactory extends AbstractLifeCycle implements Dumpable
             if (sniHost == null)
             {
                 // No SNI, so reject or delegate.
-                return _sniRequired ? null : SniX509ExtendedKeyManager.SniSelector.DELEGATE;
+                return isSniRequired() ? null : SniX509ExtendedKeyManager.SniSelector.DELEGATE;
             }
             else
             {
@@ -2302,7 +2237,6 @@ public class SslContextFactory extends AbstractLifeCycle implements Dumpable
             }
         }
 
-        @Override
         protected X509ExtendedKeyManager newSniX509ExtendedKeyManager(X509ExtendedKeyManager keyManager)
         {
             return new SniX509ExtendedKeyManager(keyManager, this);

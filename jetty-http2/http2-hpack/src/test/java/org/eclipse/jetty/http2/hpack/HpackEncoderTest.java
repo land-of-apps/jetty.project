@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.http2.hpack;
@@ -39,7 +39,7 @@ public class HpackEncoderTest
     public void testUnknownFieldsContextManagement() throws Exception
     {
         HpackEncoder encoder = new HpackEncoder(38 * 5);
-        HttpFields fields = new HttpFields();
+        HttpFields.Mutable fields = HttpFields.build();
 
         HttpField[] field =
             {
@@ -200,8 +200,8 @@ public class HpackEncoderTest
         HpackEncoder encoder = new HpackEncoder(38 * 5);
         ByteBuffer buffer = BufferUtil.allocate(4096);
 
-        HttpFields fields = new HttpFields();
-        fields.put("set-cookie", "some cookie value");
+        HttpFields.Mutable fields = HttpFields.build()
+            .put("set-cookie", "some cookie value");
 
         // encode
         BufferUtil.clearToFill(buffer);
@@ -229,7 +229,7 @@ public class HpackEncoderTest
     @Test
     public void testFieldLargerThanTable() throws Exception
     {
-        HttpFields fields = new HttpFields();
+        HttpFields.Mutable fields = HttpFields.build();
 
         HpackEncoder encoder = new HpackEncoder(128);
         ByteBuffer buffer0 = BufferUtil.allocate(4096);
@@ -293,9 +293,9 @@ public class HpackEncoderTest
     @Test
     public void testResize() throws Exception
     {
-        HttpFields fields = new HttpFields();
-        fields.add("host", "localhost0");
-        fields.add("cookie", "abcdefghij");
+        HttpFields fields = HttpFields.build()
+            .add("host", "localhost0")
+            .add("cookie", "abcdefghij");
 
         HpackEncoder encoder = new HpackEncoder(4096);
 

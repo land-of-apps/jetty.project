@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.http.client;
@@ -40,36 +40,39 @@ import org.eclipse.jetty.client.api.Request;
 import org.eclipse.jetty.client.api.Response;
 import org.eclipse.jetty.client.api.Result;
 import org.eclipse.jetty.client.http.HttpClientTransportOverHTTP;
-import org.eclipse.jetty.client.util.BytesContentProvider;
+import org.eclipse.jetty.client.util.BytesRequestContent;
 import org.eclipse.jetty.fcgi.client.http.HttpClientTransportOverFCGI;
 import org.eclipse.jetty.http.HttpHeader;
+import org.eclipse.jetty.http.HttpHeaderValue;
 import org.eclipse.jetty.http.HttpMethod;
 import org.eclipse.jetty.io.ArrayByteBufferPool;
 import org.eclipse.jetty.io.ByteBufferPool;
+import org.eclipse.jetty.io.ClientConnector;
 import org.eclipse.jetty.io.LeakTrackingByteBufferPool;
 import org.eclipse.jetty.io.MappedByteBufferPool;
 import org.eclipse.jetty.server.Connector;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
 import org.eclipse.jetty.server.handler.AbstractHandler;
-import org.eclipse.jetty.unixsocket.UnixSocketConnector;
 import org.eclipse.jetty.unixsocket.client.HttpClientTransportOverUnixSockets;
+import org.eclipse.jetty.unixsocket.server.UnixSocketConnector;
 import org.eclipse.jetty.util.IO;
 import org.eclipse.jetty.util.LeakDetector;
 import org.eclipse.jetty.util.ProcessorUtils;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
+import org.eclipse.jetty.util.ssl.SslContextFactory;
 import org.eclipse.jetty.util.thread.Scheduler;
 import org.hamcrest.Matchers;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ArgumentsSource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class HttpClientLoadTest extends AbstractTest<HttpClientLoadTest.LoadTransportScenario>
 {
-    private final Logger logger = Log.getLogger(HttpClientLoadTest.class);
+    private final Logger logger = LoggerFactory.getLogger(HttpClientLoadTest.class);
     private final AtomicLong requestCount = new AtomicLong();
     private final AtomicLong connectionLeaks = new AtomicLong();
 
@@ -114,6 +117,7 @@ public class HttpClientLoadTest extends AbstractTest<HttpClientLoadTest.LoadTran
             LeakTrackingByteBufferPool serverBufferPool = (LeakTrackingByteBufferPool)byteBufferPool;
             assertThat("Server BufferPool - leaked acquires", serverBufferPool.getLeakedAcquires(), Matchers.is(0L));
             assertThat("Server BufferPool - leaked releases", serverBufferPool.getLeakedReleases(), Matchers.is(0L));
+            assertThat("Server BufferPool - leaked removes", serverBufferPool.getLeakedRemoves(), Matchers.is(0L));
             assertThat("Server BufferPool - unreleased", serverBufferPool.getLeakedResources(), Matchers.is(0L));
         }
 
@@ -123,6 +127,7 @@ public class HttpClientLoadTest extends AbstractTest<HttpClientLoadTest.LoadTran
             LeakTrackingByteBufferPool clientBufferPool = (LeakTrackingByteBufferPool)byteBufferPool;
             assertThat("Client BufferPool - leaked acquires", clientBufferPool.getLeakedAcquires(), Matchers.is(0L));
             assertThat("Client BufferPool - leaked releases", clientBufferPool.getLeakedReleases(), Matchers.is(0L));
+            assertThat("Client BufferPool - leaked removes", clientBufferPool.getLeakedRemoves(), Matchers.is(0L));
             assertThat("Client BufferPool - unreleased", clientBufferPool.getLeakedResources(), Matchers.is(0L));
         }
 
@@ -222,24 +227,24 @@ public class HttpClientLoadTest extends AbstractTest<HttpClientLoadTest.LoadTran
             .method(method);
 
         if (clientClose)
-            request.header(HttpHeader.CONNECTION, "close");
+            request.headers(headers -> headers.put(HttpHeader.CONNECTION, HttpHeaderValue.CLOSE));
         else if (serverClose)
-            request.header("X-Close", "true");
+            request.headers(headers -> headers.put("X-Close", "true"));
 
         if (clientTimeout > 0)
         {
-            request.header("X-Timeout", String.valueOf(clientTimeout));
+            request.headers(headers -> headers.put("X-Timeout", String.valueOf(clientTimeout)));
             request.idleTimeout(clientTimeout, TimeUnit.MILLISECONDS);
         }
 
         switch (method)
         {
             case "GET":
-                request.header("X-Download", String.valueOf(contentLength));
+                request.headers(headers -> headers.put("X-Download", String.valueOf(contentLength)));
                 break;
             case "POST":
-                request.header("X-Upload", String.valueOf(contentLength));
-                request.content(new BytesContentProvider(new byte[contentLength]));
+                request.headers(headers -> headers.put("X-Upload", String.valueOf(contentLength)));
+                request.body(new BytesRequestContent(new byte[contentLength]));
                 break;
         }
 
@@ -308,7 +313,7 @@ public class HttpClientLoadTest extends AbstractTest<HttpClientLoadTest.LoadTran
         }
     }
 
-    private class LoadHandler extends AbstractHandler
+    private static class LoadHandler extends AbstractHandler
     {
         @Override
         public void handle(String target, org.eclipse.jetty.server.Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException
@@ -383,14 +388,17 @@ public class HttpClientLoadTest extends AbstractTest<HttpClientLoadTest.LoadTran
         }
 
         @Override
-        public HttpClientTransport provideClientTransport(Transport transport)
+        public HttpClientTransport provideClientTransport(Transport transport, SslContextFactory.Client sslContextFactory)
         {
             switch (transport)
             {
                 case HTTP:
                 case HTTPS:
                 {
-                    HttpClientTransport clientTransport = new HttpClientTransportOverHTTP(1);
+                    ClientConnector clientConnector = new ClientConnector();
+                    clientConnector.setSelectors(1);
+                    clientConnector.setSslContextFactory(sslContextFactory);
+                    HttpClientTransport clientTransport = new HttpClientTransportOverHTTP(clientConnector);
                     clientTransport.setConnectionPoolFactory(destination -> new LeakTrackingConnectionPool(destination, client.getMaxConnectionsPerDestination(), destination)
                     {
                         @Override
@@ -404,7 +412,7 @@ public class HttpClientLoadTest extends AbstractTest<HttpClientLoadTest.LoadTran
                 }
                 case FCGI:
                 {
-                    HttpClientTransport clientTransport = new HttpClientTransportOverFCGI(1, false, "");
+                    HttpClientTransport clientTransport = new HttpClientTransportOverFCGI(1, "");
                     clientTransport.setConnectionPoolFactory(destination -> new LeakTrackingConnectionPool(destination, client.getMaxConnectionsPerDestination(), destination)
                     {
                         @Override
@@ -432,7 +440,7 @@ public class HttpClientLoadTest extends AbstractTest<HttpClientLoadTest.LoadTran
                 }
                 default:
                 {
-                    return super.provideClientTransport(transport);
+                    return super.provideClientTransport(transport, sslContextFactory);
                 }
             }
         }

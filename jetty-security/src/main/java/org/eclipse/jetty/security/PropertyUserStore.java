@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.security;
@@ -35,12 +35,12 @@ import org.eclipse.jetty.util.IO;
 import org.eclipse.jetty.util.PathWatcher;
 import org.eclipse.jetty.util.PathWatcher.PathWatchEvent;
 import org.eclipse.jetty.util.StringUtil;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
 import org.eclipse.jetty.util.resource.JarFileResource;
 import org.eclipse.jetty.util.resource.PathResource;
 import org.eclipse.jetty.util.resource.Resource;
 import org.eclipse.jetty.util.security.Credential;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * <p>This class monitors a property file of the format mentioned below
@@ -59,7 +59,7 @@ import org.eclipse.jetty.util.security.Credential;
  */
 public class PropertyUserStore extends UserStore implements PathWatcher.Listener
 {
-    private static final Logger LOG = Log.getLogger(PropertyUserStore.class);
+    private static final Logger LOG = LoggerFactory.getLogger(PropertyUserStore.class);
 
     protected Path _configPath;
     protected PathWatcher _pathWatcher;
@@ -122,17 +122,6 @@ public class PropertyUserStore extends UserStore implements PathWatcher.Listener
         return _configPath;
     }
 
-    /**
-     * Set the Config Path from a String reference to a file
-     *
-     * @param configFile the config file can a be a file path or a reference to a file within a jar file {@code jar:file:}
-     */
-    @Deprecated
-    public void setConfigPath(String configFile)
-    {
-        setConfig(configFile);
-    }
-
     private Path extractPackedFile(JarFileResource configResource) throws IOException
     {
         String uri = configResource.getURI().toASCIIString();
@@ -155,17 +144,6 @@ public class PropertyUserStore extends UserStore implements PathWatcher.Listener
             setHotReload(false);
         }
         return extractedPath;
-    }
-
-    /**
-     * Set the Config Path from a {@link File} reference
-     *
-     * @param configFile the config file
-     */
-    @Deprecated
-    public void setConfigPath(File configFile)
-    {
-        setConfigFile(configFile);
     }
 
     /**
@@ -327,7 +305,7 @@ public class PropertyUserStore extends UserStore implements PathWatcher.Listener
         }
         catch (IOException e)
         {
-            LOG.warn(e);
+            LOG.warn("Unable to load users", e);
         }
     }
 
@@ -388,8 +366,8 @@ public class PropertyUserStore extends UserStore implements PathWatcher.Listener
 
     public interface UserListener
     {
-        void update(String username, Credential credential, String[] roleArray);
+        public void update(String username, Credential credential, String[] roleArray);
 
-        void remove(String username);
+        public void remove(String username);
     }
 }

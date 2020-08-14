@@ -4,7 +4,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.eclipse.jetty</groupId>
   <artifactId>jetty-project</artifactId>
-  <version>9.4.30.v20200611</version>
+  <version>10.0.0-SNAPSHOT</version>
   <name>Jetty :: Project</name>
   <description>The Eclipse Jetty Project</description>
   <packaging>pom</packaging>
@@ -12,21 +12,22 @@
   <inceptionYear>1995</inceptionYear>
 
   <properties>
-    <compiler.source>1.8</compiler.source>
-    <compiler.target>1.8</compiler.target>
+    <compiler.source>11</compiler.source>
+    <compiler.target>11</compiler.target>
+    <compiler.release>11</compiler.release>
     <jetty.url>http://www.eclipse.org/jetty</jetty.url>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <build-support.version>1.4</build-support.version>
-    <checkstyle.version>8.20</checkstyle.version>
-    <slf4j.version>1.7.30</slf4j.version>
-    <log4j2.version>2.11.2</log4j2.version>
-    <disruptor.version>3.4.2</disruptor.version>
-    <logback.version>1.2.3</logback.version>
+    <checkstyle.version>8.29</checkstyle.version>
+    <slf4j.version>2.0.0-alpha1</slf4j.version>
+    <log4j2.version>2.13.0</log4j2.version>
+    <logback.version>1.3.0-alpha5</logback.version>
+    <spring-version>5.1.1.RELEASE</spring-version>
     <jetty-test-policy.version>1.2</jetty-test-policy.version>
-    <alpn.api.version>1.1.3.v20160715</alpn.api.version>
-    <jsp.version>8.5.54</jsp.version>
+    <servlet.api.version>4.0.3</servlet.api.version>
+    <websocket.api.version>1.1.2</websocket.api.version>
+    <jsp.version>9.0.29</jsp.version>
     <infinispan.version>9.4.8.Final</infinispan.version>
-    <alpn.agent.version>2.0.10</alpn.agent.version>
     <conscrypt.version>2.4.0</conscrypt.version>
     <asm.version>7.3.1</asm.version>
     <jmh.version>1.21</jmh.version>
@@ -35,13 +36,12 @@
     <junit.version>5.6.2</junit.version>
     <maven.version>3.6.0</maven.version>
     <maven.resolver.version>1.3.1</maven.resolver.version>
-    <javax.servlet.api.version>3.1.0</javax.servlet.api.version>
-    <weld.version>3.1.3.Final</weld.version>
+    <weld.version>3.1.2.Final</weld.version>
     <jetty.perf-helper.version>1.0.5</jetty.perf-helper.version>
     <unix.socket.tmp></unix.socket.tmp>
     <!-- enable or not TestTracker junit5 extension i.e log message when test method is starting -->
     <jetty.testtracker.log>false</jetty.testtracker.log>
-    <jpms-module-name>${bundle-symbolic-name}</jpms-module-name>
+    <jetty.surefire.argLine>-Dfile.encoding=UTF-8 -Duser.language=en -Duser.region=US -showversion -Xmx2g -Xms2g -Xlog:gc:stderr:time,level,tags</jetty.surefire.argLine>
 
     <!-- some maven plugins versions -->
     <maven.surefire.version>3.0.0-M4</maven.surefire.version>
@@ -49,7 +49,7 @@
     <maven.dependency.plugin.version>3.1.1</maven.dependency.plugin.version>
     <maven.resources.plugin.version>3.1.0</maven.resources.plugin.version>
     <maven.source.plugin.version>3.0.1</maven.source.plugin.version>
-    <maven.war.plugin.version>3.3.0</maven.war.plugin.version>
+    <maven.war.plugin.version>3.2.2</maven.war.plugin.version>
     <maven.plugin-tools.version>3.5.2</maven.plugin-tools.version>
     <maven.install.plugin.version>2.5.2</maven.install.plugin.version>
     <maven.deploy.plugin.version>2.8.2</maven.deploy.plugin.version>
@@ -57,23 +57,25 @@
     <!-- testing -->
     <it.debug>false</it.debug>
     <jetty.test.version>5.4</jetty.test.version>
-    <spring-boot.version>2.1.1.RELEASE</spring-boot.version>
-    <jsr250-api.version>1.0</jsr250-api.version>
-    <javax.annotation-api>1.3</javax.annotation-api>
+    <!-- springboot is only used for jetty-maven-plugin it test
+    otherwise depending on Spring Boot might be chicken and egg issue :) -->
+    <springboot.version>2.1.1.RELEASE</springboot.version>
+    <annotation-api.version>1.3.4</annotation-api.version>
+    <jackson-databind.version>2.9.9</jackson-databind.version>
     <localRepoPath>${project.build.directory}/local-repo</localRepoPath>
     <settingsPath>src/it/settings.xml</settingsPath>
     <surefire.rerunFailingTestsCount>0</surefire.rerunFailingTestsCount>
-    <testcontainers.version>1.14.2</testcontainers.version>
+    <testcontainers.version>1.14.3</testcontainers.version>
   </properties>
 
   <licenses>
     <license>
-      <name>Apache Software License - Version 2.0</name>
-      <url>http://www.apache.org/licenses/LICENSE-2.0</url>
+      <name>Eclipse Public License - Version 2.0</name>
+      <url>https://www.eclipse.org/legal/epl-2.0</url>
     </license>
     <license>
-      <name>Eclipse Public License - Version 1.0</name>
-      <url>http://www.eclipse.org/org/documents/epl-v10.php</url>
+      <name>Apache Software License - Version 2.0</name>
+      <url>https://www.apache.org/licenses/LICENSE-2.0</url>
     </license>
   </licenses>
 
@@ -85,13 +87,13 @@
 
   <modules>
     <module>build-resources</module>
+    <module>jetty-slf4j-impl</module>
     <module>jetty-ant</module>
     <module>jetty-util</module>
     <module>jetty-jmx</module>
     <module>jetty-io</module>
     <module>jetty-http</module>
     <module>jetty-http2</module>
-    <module>jetty-continuation</module>
     <module>jetty-server</module>
     <module>jetty-xml</module>
     <module>jetty-security</module>
@@ -124,7 +126,6 @@
     <module>jetty-memcached</module>
     <module>jetty-hazelcast</module>
     <module>jetty-unixsocket</module>
-    <module>jetty-jmh</module>
     <module>tests</module>
     <module>examples</module>
     <module>jetty-quickstart</module>
@@ -136,9 +137,6 @@
     <module>jetty-home</module>
     <module>jetty-bom</module>
     <module>jetty-documentation</module>
-    <!-- modules that need fixed and added back, or simply dropped and not maintained -->
-    <!-- <module>jetty-rhttp</module> -->
-    <!-- <module>jetty-overlay-deployer</module> -->
   </modules>
 
   <build>
@@ -154,39 +152,26 @@
             <configuration>
               <rules>
                 <requireMavenVersion>
-                  <version>[3.0.0,)</version>
-                  <message>[ERROR] OLD MAVEN [${maven.version}] in use, Jetty ${project.version} requires Maven 3.0.0 or newer</message>
+                  <version>[3.5.0,)</version>
+                  <message>[ERROR] OLD MAVEN [${maven.version}] in use, Jetty ${project.version} requires Maven 3.5.0 or newer</message>
                 </requireMavenVersion>
                 <requireJavaVersion>
-                  <version>[1.8,)</version>
-                  <message>[ERROR] OLD JDK [${java.version}] in use. Jetty ${project.version} requires JDK 1.8.0 or newer</message>
+                  <version>[11,)</version>
+                  <message>[ERROR] OLD JDK [${java.version}] in use. Jetty ${project.version} requires JDK 11 or newer</message>
                 </requireJavaVersion>
                 <versionTxtRule implementation="org.eclipse.jetty.toolchain.enforcer.rules.VersionTxtRule" />
+                <!--
+                jetty 10 alpha version want to use '-' such 10.0.0-alpha0 so disable all those rules....
                 <versionOsgiRule implementation="org.eclipse.jetty.toolchain.enforcer.rules.RequireOsgiCompatibleVersionRule" />
+
                 <versionRedhatRule implementation="org.eclipse.jetty.toolchain.enforcer.rules.RequireRedhatCompatibleVersionRule" />
                 <versionDebianRule implementation="org.eclipse.jetty.toolchain.enforcer.rules.RequireDebianCompatibleVersionRule" />
+                -->
                 <requireUpperBoundDeps>
                   <excludes>
                     <exclude>javax.enterprise:cdi-api</exclude>
                   </excludes>
                 </requireUpperBoundDeps>
-              </rules>
-            </configuration>
-          </execution>
-          <execution>
-            <id>ban-junit-dep.jar</id>
-            <goals>
-              <goal>enforce</goal>
-            </goals>
-            <configuration>
-              <rules>
-                <bannedDependencies>
-                  <excludes>
-                    <exclude>junit:junit-dep:*:jar</exclude>
-                  </excludes>
-                  <searchTransitive>true</searchTransitive>
-                  <message>We use junit.jar, not junit-dep.jar (as of junit 4.11, hamcrest is no longer embedded)</message>
-                </bannedDependencies>
               </rules>
             </configuration>
           </execution>
@@ -266,7 +251,7 @@
         </executions>
         <configuration>
           <linkXRef>false</linkXRef>
-          <targetJdk>1.8</targetJdk>
+          <targetJdk>11</targetJdk>
           <rulesets>
             <ruleset>jetty/pmd_logging_ruleset.xml</ruleset>
           </rulesets>
@@ -287,7 +272,7 @@
         <configuration>
           <autoVersionSubmodules>true</autoVersionSubmodules>
           <useReleaseProfile>false</useReleaseProfile>
-          <goals>javadoc:aggregate-jar deploy</goals>
+          <goals>deploy</goals>
           <arguments>-Peclipse-release</arguments>
           <preparationGoals>clean install</preparationGoals>
           <mavenExecutorId>forked-path</mavenExecutorId>
@@ -298,19 +283,21 @@
         <artifactId>maven-remote-resources-plugin</artifactId>
         <executions>
           <execution>
+            <id>copy-shared-resources</id>
             <phase>generate-resources</phase>
             <goals>
               <goal>process</goal>
             </goals>
             <configuration>
               <resourceBundles>
-                <resourceBundle>org.eclipse.jetty.toolchain:jetty-artifact-remote-resources:1.2</resourceBundle>
+                <resourceBundle>org.eclipse.jetty:build-resources:${project.version}</resourceBundle>
               </resourceBundles>
             </configuration>
           </execution>
         </executions>
       </plugin>
       <!-- The source maven plugin creates the source bundle and adds manifest -->
+      <!-- if removing this we need to add it back in eclipse-release profile -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-source-plugin</artifactId>
@@ -318,22 +305,10 @@
         <executions>
           <execution>
             <id>attach-sources</id>
-            <phase>process-classes</phase>
+            <phase>package</phase>
             <goals>
-              <goal>jar</goal>
+              <goal>jar-no-fork</goal>
             </goals>
-            <configuration>
-              <archive>
-                <manifestEntries>
-                  <Bundle-ManifestVersion>2</Bundle-ManifestVersion>
-                  <Bundle-Name>${project.name}</Bundle-Name>
-                  <Bundle-SymbolicName>${bundle-symbolic-name}.source</Bundle-SymbolicName>
-                  <Bundle-Vendor>Eclipse Jetty Project</Bundle-Vendor>
-                  <Bundle-Version>${parsedVersion.osgiVersion}</Bundle-Version>
-                  <Eclipse-SourceBundle>${bundle-symbolic-name};version="${parsedVersion.osgiVersion}";roots:="."</Eclipse-SourceBundle>
-                </manifestEntries>
-              </archive>
-            </configuration>
           </execution>
         </executions>
       </plugin>
@@ -357,12 +332,14 @@
               <goal>check</goal>
             </goals>
             <configuration>
-              <header>header-template-java.txt</header>
+              <header>header-template.txt</header>
               <mapping>
                 <java>DOUBLESLASH_STYLE</java>
+                <adoc>DOUBLESLASH_STYLE</adoc>
               </mapping>
               <includes>
                 <include>**/*.java</include>
+                <include>**/*.adoc</include>
               </includes>
               <excludes>
                 <exclude>jetty-util/src/main/java/org/eclipse/jetty/util/security/UnixCrypt.java</exclude>
@@ -372,22 +349,6 @@
                 <exclude>jetty-infinispan/**</exclude>
                 <exclude>tests/test-sessions/test-infinispan-sessions/**</exclude>
               </excludes>
-            </configuration>
-          </execution>
-          <execution>
-            <id>check-doc-headers</id>
-            <phase>verify</phase>
-            <goals>
-              <goal>check</goal>
-            </goals>
-            <configuration>
-              <header>header-template-doc.txt</header>
-              <mapping>
-                <adoc>DOUBLESLASH_STYLE</adoc>
-              </mapping>
-              <includes>
-                <include>**/*.adoc</include>
-              </includes>
             </configuration>
           </execution>
         </executions>
@@ -430,6 +391,14 @@
             </goals>
           </execution>
         </executions>
+        <!-- this has better support of gh token remove when with next release of jetty-version-maven-plugin -->
+        <dependencies>
+          <dependency>
+            <groupId>org.kohsuke</groupId>
+            <artifactId>github-api</artifactId>
+            <version>1.114</version>
+          </dependency>
+        </dependencies>
       </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
@@ -491,11 +460,6 @@
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
-          <artifactId>maven-checkstyle-plugin</artifactId>
-          <version>3.1.0</version>
-        </plugin>
-        <plugin>
-          <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-clean-plugin</artifactId>
           <version>3.1.0</version>
         </plugin>
@@ -506,6 +470,12 @@
           <configuration>
             <source>${compiler.source}</source>
             <target>${compiler.target}</target>
+            <release>${compiler.release}</release>
+            <showWarnings>true</showWarnings>
+            <compilerArgs>
+              <compilerArg>-Xlint:exports</compilerArg>
+            </compilerArgs>
+            <testCompilerArgument>-nowarn</testCompilerArgument>
           </configuration>
         </plugin>
         <plugin>
@@ -576,7 +546,6 @@
             <archive>
               <manifestFile>${project.build.outputDirectory}/META-INF/MANIFEST.MF</manifestFile>
               <manifestEntries>
-                <Automatic-Module-Name>${jpms-module-name}</Automatic-Module-Name>
                 <Implementation-Version>${project.version}</Implementation-Version>
                 <Implementation-Vendor>Eclipse Jetty Project</Implementation-Vendor>
                 <url>${jetty.url}</url>
@@ -587,18 +556,24 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-javadoc-plugin</artifactId>
-          <version>3.1.1</version>
+          <version>3.2.0</version>
           <configuration>
-            <source>8</source>
+            <verbose>true</verbose>
+            <debug>true</debug>
+            <source>11</source>
             <charset>UTF-8</charset>
             <docencoding>UTF-8</docencoding>
             <encoding>UTF-8</encoding>
+            <additionalOptions>-html5</additionalOptions>
             <docfilessubdirs>true</docfilessubdirs>
             <detectLinks>false</detectLinks>
             <detectJavaApiLink>false</detectJavaApiLink>
+            <detectOfflineLinks>false</detectOfflineLinks>
             <show>protected</show>
             <attach>true</attach>
+            <isOffline>true</isOffline>
             <excludePackageNames>com.*:org.slf4j*:org.mortbay*:*.jmh*:org.eclipse.jetty.embedded*:org.eclipse.jetty.example.asyncrest*:org.eclipse.jetty.test*</excludePackageNames>
+            <skippedModules>apache-jstl,jetty-osgi-alpn,infinispan-common,infinispan-embedded,infinispan-embedded-query,infinispan-remote,infinispan-remote-query,jetty-plus,jetty-jndi,jetty-documentation,jetty-distribution,jetty-home,jetty-bom,jetty-all,jetty-runner</skippedModules>
           </configuration>
         </plugin>
         <plugin>
@@ -629,7 +604,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-remote-resources-plugin</artifactId>
-          <version>1.5</version>
+          <version>1.6.0</version>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
@@ -657,6 +632,18 @@
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-source-plugin</artifactId>
           <version>${maven.source.plugin.version}</version>
+          <configuration>
+            <archive>
+              <manifestEntries>
+                <Bundle-ManifestVersion>2</Bundle-ManifestVersion>
+                <Bundle-Name>${project.name}</Bundle-Name>
+                <Bundle-SymbolicName>${bundle-symbolic-name}.source</Bundle-SymbolicName>
+                <Bundle-Vendor>Eclipse Jetty Project</Bundle-Vendor>
+                <Bundle-Version>${parsedVersion.osgiVersion}</Bundle-Version>
+                <Eclipse-SourceBundle>${bundle-symbolic-name};version="${parsedVersion.osgiVersion}";roots:="."</Eclipse-SourceBundle>
+              </manifestEntries>
+            </archive>
+          </configuration>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
@@ -678,6 +665,8 @@
             <failIfNoTests>false</failIfNoTests>
             <forkCount>1</forkCount>
             <reuseForks>true</reuseForks> <!-- to work around crash at https://github.com/junit-team/junit5/issues/801 -->
+            <!-- order can be different depending on os jvm so let's force it -->
+            <runOrder>alphabetical</runOrder>
             <systemPropertyVariables>
               <java.io.tmpdir>${project.build.directory}</java.io.tmpdir>
               <unix.socket.tmp>${unix.socket.tmp}</unix.socket.tmp>
@@ -685,6 +674,13 @@
               <jetty.testtracker.log>${jetty.testtracker.log}</jetty.testtracker.log>
             </systemPropertyVariables>
           </configuration>
+          <dependencies>
+            <dependency>
+              <groupId>org.ow2.asm</groupId>
+              <artifactId>asm-commons</artifactId>
+              <version>${asm.version}</version>
+            </dependency>
+          </dependencies>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
@@ -724,13 +720,14 @@
             <instructions>
               <Bundle-SymbolicName>${bundle-symbolic-name}</Bundle-SymbolicName>
               <Bundle-Description>Jetty module for ${project.name}</Bundle-Description>
-              <Bundle-RequiredExecutionEnvironment>JavaSE-1.8</Bundle-RequiredExecutionEnvironment>
+              <Bundle-RequiredExecutionEnvironment>JavaSE-11</Bundle-RequiredExecutionEnvironment>
               <Bundle-DocURL>${jetty.url}</Bundle-DocURL>
               <Bundle-Vendor>Eclipse Jetty Project</Bundle-Vendor>
               <Bundle-Classpath>.</Bundle-Classpath>
               <Bundle-Copyright>Copyright (c) 2008-2020 Mort Bay Consulting Pty Ltd and others.</Bundle-Copyright>
               <_provider-policy><![CDATA[$<range;[===,=+)>]]></_provider-policy>
               <_consumer-policy><![CDATA[$<range;[===,+)>]]></_consumer-policy>
+              <_noee>true</_noee>
             </instructions>
           </configuration>
         </plugin>
@@ -820,9 +817,7 @@
                   <pluginExecutionFilter>
                     <groupId>org.ops4j.pax.exam</groupId>
                     <artifactId>maven-paxexam-plugin</artifactId>
-                    <versionRange>
-                      [1.2.0,)
-                    </versionRange>
+                    <versionRange>[1.2.0,)</versionRange>
                     <goals>
                       <goal>
                         generate-depends-file
@@ -974,24 +969,25 @@
   <dependencyManagement>
     <dependencies>
       <dependency>
-        <groupId>javax.servlet</groupId>
-        <artifactId>javax.servlet-api</artifactId>
-        <version>${javax.servlet.api.version}</version>
+        <groupId>org.eclipse.jetty</groupId>
+        <artifactId>jetty-slf4j-impl</artifactId>
+        <version>${project.version}</version>
+        <scope>test</scope>
       </dependency>
       <dependency>
-        <groupId>javax.websocket</groupId>
-        <artifactId>javax.websocket-api</artifactId>
-        <version>1.0</version>
+        <groupId>org.eclipse.jetty.toolchain</groupId>
+        <artifactId>jetty-servlet-api</artifactId>
+        <version>${servlet.api.version}</version>
       </dependency>
       <dependency>
-        <groupId>javax.websocket</groupId>
-        <artifactId>javax.websocket-client-api</artifactId>
-        <version>1.0</version>
+        <groupId>org.eclipse.jetty.toolchain</groupId>
+        <artifactId>jetty-javax-websocket-api</artifactId>
+        <version>${websocket.api.version}</version>
       </dependency>
       <dependency>
-        <groupId>javax.annotation</groupId>
-        <artifactId>javax.annotation-api</artifactId>
-        <version>${javax.annotation-api}</version>
+        <groupId>jakarta.annotation</groupId>
+        <artifactId>jakarta.annotation-api</artifactId>
+        <version>${annotation-api.version}</version>
       </dependency>
       <dependency>
         <groupId>org.ow2.asm</groupId>
@@ -1020,11 +1016,6 @@
       </dependency>
       <!-- JSP Deps -->
       <dependency>
-        <groupId>org.eclipse.jetty.toolchain</groupId>
-        <artifactId>jetty-schemas</artifactId>
-        <version>3.1.2</version>
-      </dependency>
-      <dependency>
         <groupId>org.mortbay.jasper</groupId>
         <artifactId>apache-jsp</artifactId>
         <version>${jsp.version}</version>
@@ -1045,7 +1036,6 @@
         <groupId>org.eclipse.jetty.orbit</groupId>
         <artifactId>javax.activation</artifactId>
         <version>1.1.0.v201105071233</version>
-        <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>org.eclipse.jetty.orbit</groupId>
@@ -1053,10 +1043,9 @@
         <version>1.4.1.v201005082020</version>
       </dependency>
       <dependency>
-        <groupId>javax.transaction</groupId>
-        <artifactId>javax.transaction-api</artifactId>
-        <version>1.3</version>
-        <scope>provided</scope>
+        <groupId>jakarta.transaction</groupId>
+        <artifactId>jakarta.transaction-api</artifactId>
+        <version>1.3.2</version>
       </dependency>
       <!-- maven deps -->
       <dependency>
@@ -1130,6 +1119,12 @@
         <groupId>org.slf4j</groupId>
         <artifactId>slf4j-simple</artifactId>
         <version>${slf4j.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.slf4j</groupId>
+        <artifactId>jul-to-slf4j</artifactId>
+        <version>${slf4j.version}</version>
+        <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.jboss.logging</groupId>
@@ -1239,55 +1234,6 @@
       </build>
     </profile>
     <profile>
-      <id>jdk8</id>
-      <activation>
-        <jdk>[1.8,1.9)</jdk>
-      </activation>
-      <build>
-        <pluginManagement>
-          <plugins>
-            <plugin>
-              <groupId>org.codehaus.mojo</groupId>
-              <artifactId>clirr-maven-plugin</artifactId>
-              <version>2.8</version>
-              <configuration>
-                <htmlOutputFile>clirr-report.html</htmlOutputFile>
-                <xmlOutputFile>${project.build.directory}/clirr-report.xml</xmlOutputFile>
-                <failOnError>true</failOnError>
-                <failOnWarning>true</failOnWarning>
-                <failOnInfo>false</failOnInfo>
-                <logResults>true</logResults>
-                <minSeverity>info</minSeverity>
-                <comparisonVersion>9.4.6.v20170531</comparisonVersion>
-                <ignoreMaintenenceVersions>false</ignoreMaintenenceVersions>
-              </configuration>
-            </plugin>
-          </plugins>
-        </pluginManagement>
-      </build>
-    </profile>
-    <profile>
-      <id>jdk11</id>
-      <activation>
-        <jdk>[11,)</jdk>
-      </activation>
-      <build>
-        <pluginManagement>
-          <plugins>
-            <plugin>
-              <groupId>org.apache.maven.plugins</groupId>
-              <artifactId>maven-javadoc-plugin</artifactId>
-              <configuration>
-                <additionalJOption>--no-module-directories</additionalJOption>
-                <additionalOptions>-html5</additionalOptions>
-                <excludePackageNames>com.*:org.slf4j*:org.mortbay*:*.jmh*:org.eclipse.jetty.embedded*:org.eclipse.jetty.example.asyncrest*:org.eclipse.jetty.test*</excludePackageNames>
-              </configuration>
-            </plugin>
-          </plugins>
-        </pluginManagement>
-      </build>
-    </profile>
-    <profile>
       <id>config</id>
       <activation>
         <file>
@@ -1349,18 +1295,6 @@
             <configuration>
               <updateReleaseInfo>true</updateReleaseInfo>
             </configuration>
-          </plugin>
-          <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-source-plugin</artifactId>
-            <executions>
-              <execution>
-                <id>attach-sources</id>
-                <goals>
-                  <goal>jar-no-fork</goal>
-                </goals>
-              </execution>
-            </executions>
           </plugin>
           <plugin>
             <groupId>org.apache.maven.plugins</groupId>
@@ -1435,7 +1369,6 @@
                   <copyGenerated>true</copyGenerated>
                   <attachArtifact>false</attachArtifact>
                   <updateDate>true</updateDate>
-                  <versionTagHeader>Tag for release: jetty-${project.version}</versionTagHeader>
                   <filenameExcludes>
                     <filenameExclude>jetty-documentation/.*</filenameExclude>
                     <filenameExclude>examples/.*</filenameExclude>
@@ -1457,12 +1390,9 @@
       </build>
     </profile>
     <profile>
-      <id>compact3</id>
-      <modules>
-        <module>aggregates/jetty-all-compact3</module>
-      </modules>
-    </profile>
-    <profile>
+      <!-- This profile is used exclusively on Eclipse CBI.
+           Various plugins and artifacts declared here only
+           exist on the Eclipse CBI infrastructure. -->
       <id>eclipse-sign</id>
       <activation>
         <property>
@@ -1489,6 +1419,7 @@
             </executions>
           </plugin>
           <plugin>
+            <!-- This plugin only exists on Eclipse CBI -->
             <groupId>org.eclipse.cbi.maven.plugins</groupId>
             <artifactId>eclipse-jarsigner-plugin</artifactId>
             <version>${cbi-plugins.version}</version>
@@ -1529,22 +1460,6 @@
       </pluginRepositories>
     </profile>
     <profile>
-      <id>jdk9</id>
-      <activation>
-        <jdk>[1.9,)</jdk>
-      </activation>
-      <build>
-        <plugins>
-          <plugin>
-            <artifactId>maven-compiler-plugin</artifactId>
-            <configuration>
-              <release>8</release>
-            </configuration>
-          </plugin>
-        </plugins>
-      </build>
-    </profile>
-    <profile>
       <id>snapshot-repositories</id>
       <activation>
         <activeByDefault>false</activeByDefault>
@@ -1558,16 +1473,6 @@
             <enabled>true</enabled>
           </snapshots>
         </repository>
-        <!--repository>
-          <id>apache.snapshots</id>
-          <url>https://repository.apache.org/content/repositories/snapshots</url>
-          <releases>
-            <enabled>false</enabled>
-          </releases>
-          <snapshots>
-            <enabled>true</enabled>
-          </snapshots>
-        </repository-->
         <repository>
           <id>oss.snapshots</id>
           <name>OSS Snapshots</name>
@@ -1646,7 +1551,7 @@
       <email>joakim.erdfelt@gmail.com</email>
       <organization>Webtide, LLC</organization>
       <organizationUrl>https://webtide.com</organizationUrl>
-      <timezone>-7</timezone>
+      <timezone>-6</timezone>
     </developer>
     <developer>
       <id>sbordet</id>
@@ -1694,29 +1599,4 @@
       <url>scp://build.eclipse.org:/home/data/httpd/download.eclipse.org/jetty/${project.version}/</url>
     </site>
   </distributionManagement>
-
-  <!-- comment this until if we do not need some Apache maven plugins SNAPSHOT versions -->
-<!--  <pluginRepositories>-->
-<!--    <pluginRepository>-->
-<!--      <id>apache.snapshots</id>-->
-<!--      <url>https://repository.apache.org/content/repositories/snapshots</url>-->
-<!--      <releases>-->
-<!--        <enabled>false</enabled>-->
-<!--      </releases>-->
-<!--      <snapshots>-->
-<!--        <enabled>true</enabled>-->
-<!--      </snapshots>-->
-<!--    </pluginRepository>-->
-<!--    <pluginRepository>-->
-<!--      <id>plexus-snapshots</id>-->
-<!--      <url>https://oss.sonatype.org/content/repositories/plexus-snapshots</url>-->
-<!--      <releases>-->
-<!--        <enabled>false</enabled>-->
-<!--      </releases>-->
-<!--      <snapshots>-->
-<!--        <enabled>true</enabled>-->
-<!--      </snapshots>-->
-<!--    </pluginRepository>-->
-<!--  </pluginRepositories>-->
-
 </project>

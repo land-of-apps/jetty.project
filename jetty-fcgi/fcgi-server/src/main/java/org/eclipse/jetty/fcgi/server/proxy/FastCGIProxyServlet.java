@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.fcgi.server.proxy;
@@ -131,7 +131,7 @@ public class FastCGIProxyServlet extends AsyncProxyServlet.Transparent
         String value = config.getInitParameter("selectors");
         if (value != null)
             selectors = Integer.parseInt(value);
-        return new HttpClient(new ProxyHttpClientTransportOverFCGI(selectors, scriptRoot), null);
+        return new HttpClient(new ProxyHttpClientTransportOverFCGI(selectors, scriptRoot));
     }
 
     @Override
@@ -180,14 +180,16 @@ public class FastCGIProxyServlet extends AsyncProxyServlet.Transparent
             proxyRequest.attribute(REQUEST_QUERY_ATTRIBUTE, originalQuery);
 
         // If the Host header is missing, add it.
-        if (!proxyRequest.getHeaders().containsKey(HttpHeader.HOST.asString()))
+        if (!proxyRequest.getHeaders().contains(HttpHeader.HOST))
         {
-            String host = request.getServerName();
+            String server = request.getServerName();
             int port = request.getServerPort();
             if (!getHttpClient().isDefaultPort(request.getScheme(), port))
-                host += ":" + port;
-            proxyRequest.header(HttpHeader.HOST, host);
-            proxyRequest.header(HttpHeader.X_FORWARDED_HOST, host);
+                server += ":" + port;
+            String host = server;
+            proxyRequest.headers(headers -> headers
+                .put(HttpHeader.HOST, host)
+                .put(HttpHeader.X_FORWARDED_HOST, host));
         }
 
         // PHP does not like multiple Cookie headers, coalesce into one.
@@ -202,14 +204,13 @@ public class FastCGIProxyServlet extends AsyncProxyServlet.Transparent
                 String cookie = cookies.get(i);
                 builder.append(cookie);
             }
-            proxyRequest.header(HttpHeader.COOKIE, null);
-            proxyRequest.header(HttpHeader.COOKIE, builder.toString());
+            proxyRequest.headers(headers -> headers.put(HttpHeader.COOKIE, builder.toString()));
         }
 
         super.sendProxyRequest(request, proxyResponse, proxyRequest);
     }
 
-    protected void customizeFastCGIHeaders(Request proxyRequest, HttpFields fastCGIHeaders)
+    protected void customizeFastCGIHeaders(Request proxyRequest, HttpFields.Mutable fastCGIHeaders)
     {
         for (String envName : fcgiEnvNames)
         {
@@ -267,11 +268,11 @@ public class FastCGIProxyServlet extends AsyncProxyServlet.Transparent
     {
         private ProxyHttpClientTransportOverFCGI(int selectors, String scriptRoot)
         {
-            super(selectors, false, scriptRoot);
+            super(selectors, scriptRoot);
         }
 
         @Override
-        protected void customize(Request request, HttpFields fastCGIHeaders)
+        protected void customize(Request request, HttpFields.Mutable fastCGIHeaders)
         {
             super.customize(request, fastCGIHeaders);
             customizeFastCGIHeaders(request, fastCGIHeaders);
@@ -283,7 +284,7 @@ public class FastCGIProxyServlet extends AsyncProxyServlet.Transparent
                     fcgi.put(field.getName(), field.getValue());
                 }
                 String eol = System.lineSeparator();
-                _log.debug("FastCGI variables{}{}", eol, fcgi.entrySet().stream()
+                _log.debug("FastCGI variables {}{}", eol, fcgi.entrySet().stream()
                     .map(entry -> String.format("%s: %s", entry.getKey(), entry.getValue()))
                     .collect(Collectors.joining(eol)));
             }

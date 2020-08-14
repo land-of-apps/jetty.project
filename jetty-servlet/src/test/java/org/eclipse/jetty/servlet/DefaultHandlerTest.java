@@ -1,25 +1,27 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.servlet;
 
 import java.io.File;
 
+import org.eclipse.jetty.http.HttpStatus;
+import org.eclipse.jetty.http.tools.HttpTester;
 import org.eclipse.jetty.server.LocalConnector;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.handler.DefaultHandler;
@@ -33,6 +35,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
 
 public class DefaultHandlerTest
@@ -67,12 +70,7 @@ public class DefaultHandlerTest
         contextFoo.setContextPath("/foo");
         contextFoo.setBaseResource(new PathResource(baseFoo));
 
-        HandlerList handlers = new HandlerList();
-        handlers.addHandler(contextA);
-        handlers.addHandler(contextFoo);
-        handlers.addHandler(new DefaultHandler());
-
-        server.setHandler(handlers);
+        server.setHandler(new HandlerList(contextA, contextFoo, new DefaultHandler()));
         server.start();
     }
 
@@ -89,13 +87,18 @@ public class DefaultHandlerTest
         req.append("GET / HTTP/1.0\r\n");
         req.append("\r\n");
 
-        String rawResponse = localConnector.getResponses(req.toString());
-        assertThat(rawResponse, containsString("404 Not Found"));
-        assertThat(rawResponse, containsString("No context on this server matched or handled this request"));
-        assertThat(rawResponse, containsString("Contexts known to this server are"));
-        assertThat(rawResponse, containsString("<a href=\"/a/\">"));
-        assertThat(rawResponse, containsString("<a href=\"/foo/\">"));
-        assertThat(rawResponse, not(containsString(baseA.toString())));
-        assertThat(rawResponse, not(containsString(baseFoo.toString())));
+        String rawResponse = localConnector.getResponse(req.toString());
+
+        HttpTester.Response response = HttpTester.parseResponse(rawResponse);
+
+        assertThat(response.getStatus(), is(HttpStatus.NOT_FOUND_404));
+
+        String body = response.getContent();
+        assertThat(body, containsString("No context on this server matched or handled this request"));
+        assertThat(body, containsString("Contexts known to this server are"));
+        assertThat(body, containsString("<a href=\"/a/\">"));
+        assertThat(body, containsString("<a href=\"/foo/\">"));
+        assertThat(body, not(containsString(baseA.toString())));
+        assertThat(body, not(containsString(baseFoo.toString())));
     }
 }

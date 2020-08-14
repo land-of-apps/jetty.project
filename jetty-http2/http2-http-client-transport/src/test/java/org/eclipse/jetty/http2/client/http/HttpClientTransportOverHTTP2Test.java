@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.http2.client.http;
@@ -43,6 +43,7 @@ import javax.servlet.http.HttpServletResponse;
 import org.eclipse.jetty.client.HttpClient;
 import org.eclipse.jetty.client.HttpDestination;
 import org.eclipse.jetty.client.HttpProxy;
+import org.eclipse.jetty.client.Origin;
 import org.eclipse.jetty.client.api.ContentResponse;
 import org.eclipse.jetty.http.HttpFields;
 import org.eclipse.jetty.http.HttpMethod;
@@ -66,6 +67,7 @@ import org.eclipse.jetty.http2.parser.RateControl;
 import org.eclipse.jetty.http2.parser.ServerParser;
 import org.eclipse.jetty.http2.server.RawHTTP2ServerConnectionFactory;
 import org.eclipse.jetty.io.ByteBufferPool;
+import org.eclipse.jetty.io.ClientConnector;
 import org.eclipse.jetty.io.MappedByteBufferPool;
 import org.eclipse.jetty.server.HttpConfiguration;
 import org.eclipse.jetty.server.Request;
@@ -93,11 +95,13 @@ public class HttpClientTransportOverHTTP2Test extends AbstractTest
     public void testPropertiesAreForwarded() throws Exception
     {
         HTTP2Client http2Client = new HTTP2Client();
-        HttpClient httpClient = new HttpClient(new HttpClientTransportOverHTTP2(http2Client), null);
+        HttpClient httpClient = new HttpClient(new HttpClientTransportOverHTTP2(http2Client));
         Executor executor = new QueuedThreadPool();
         httpClient.setExecutor(executor);
         httpClient.setConnectTimeout(13);
         httpClient.setIdleTimeout(17);
+        httpClient.setUseInputDirectByteBuffers(false);
+        httpClient.setUseOutputDirectByteBuffers(false);
 
         httpClient.start();
 
@@ -107,6 +111,8 @@ public class HttpClientTransportOverHTTP2Test extends AbstractTest
         assertSame(httpClient.getByteBufferPool(), http2Client.getByteBufferPool());
         assertEquals(httpClient.getConnectTimeout(), http2Client.getConnectTimeout());
         assertEquals(httpClient.getIdleTimeout(), http2Client.getIdleTimeout());
+        assertEquals(httpClient.isUseInputDirectByteBuffers(), http2Client.isUseInputDirectByteBuffers());
+        assertEquals(httpClient.isUseOutputDirectByteBuffers(), http2Client.isUseOutputDirectByteBuffers());
 
         httpClient.stop();
 
@@ -134,11 +140,9 @@ public class HttpClientTransportOverHTTP2Test extends AbstractTest
         });
 
         assertThrows(ExecutionException.class, () ->
-        {
             client.newRequest("localhost", connector.getLocalPort())
                 .onRequestCommit(request -> request.abort(new Exception("explicitly_aborted_by_test")))
-                .send();
-        });
+                .send());
         assertTrue(resetLatch.await(5, TimeUnit.SECONDS));
     }
 
@@ -151,7 +155,7 @@ public class HttpClientTransportOverHTTP2Test extends AbstractTest
             @Override
             public Stream.Listener onNewStream(Stream stream, HeadersFrame frame)
             {
-                MetaData.Response metaData = new MetaData.Response(HttpVersion.HTTP_2, HttpStatus.OK_200, new HttpFields());
+                MetaData.Response metaData = new MetaData.Response(HttpVersion.HTTP_2, HttpStatus.OK_200, HttpFields.EMPTY);
                 stream.headers(new HeadersFrame(stream.getId(), metaData, null, false), new Callback()
                 {
                     @Override
@@ -174,11 +178,9 @@ public class HttpClientTransportOverHTTP2Test extends AbstractTest
         });
 
         assertThrows(ExecutionException.class, () ->
-        {
             client.newRequest("localhost", connector.getLocalPort())
                 .onResponseContent((response, buffer) -> response.abort(new Exception("explicitly_aborted_by_test")))
-                .send();
-        });
+                .send());
         assertTrue(resetLatch.await(5, TimeUnit.SECONDS));
     }
 
@@ -230,7 +232,7 @@ public class HttpClientTransportOverHTTP2Test extends AbstractTest
                 }
                 else
                 {
-                    MetaData.Response response = new MetaData.Response(HttpVersion.HTTP_2, HttpStatus.OK_200, new HttpFields());
+                    MetaData.Response response = new MetaData.Response(HttpVersion.HTTP_2, HttpStatus.OK_200, HttpFields.EMPTY);
                     stream.headers(new HeadersFrame(stream.getId(), response, null, true), Callback.NOOP);
                 }
                 return null;
@@ -276,7 +278,7 @@ public class HttpClientTransportOverHTTP2Test extends AbstractTest
                 lastStream.set(frame.getLastStreamId());
                 latch.countDown();
             }
-        }, null);
+        });
         QueuedThreadPool clientExecutor = new QueuedThreadPool();
         clientExecutor.setName("client");
         client.setExecutor(clientExecutor);
@@ -347,7 +349,7 @@ public class HttpClientTransportOverHTTP2Test extends AbstractTest
         });
 
         int proxyPort = connector.getLocalPort();
-        client.getProxyConfiguration().getProxies().add(new HttpProxy("localhost", proxyPort));
+        client.getProxyConfiguration().getProxies().add(new HttpProxy(new Origin.Address("localhost", proxyPort), false, new Origin.Protocol(List.of("h2c"), false)));
 
         int serverPort = proxyPort + 1; // Any port will do, just not the same as the proxy.
         ContentResponse response = client.newRequest("localhost", serverPort)
@@ -384,12 +386,10 @@ public class HttpClientTransportOverHTTP2Test extends AbstractTest
         client.start();
 
         assertThrows(TimeoutException.class, () ->
-        {
             client.newRequest("localhost", connector.getLocalPort())
                 // Make sure the connection idle times out, not the stream.
                 .idleTimeout(2 * idleTimeout, TimeUnit.MILLISECONDS)
-                .send();
-        });
+                .send());
 
         assertTrue(resetLatch.await(5, TimeUnit.SECONDS));
     }
@@ -440,7 +440,7 @@ public class HttpClientTransportOverHTTP2Test extends AbstractTest
                     sessions.add(session);
                     return super.newHttpConnection(destination, session);
                 }
-            }, null);
+            });
             QueuedThreadPool clientExecutor = new QueuedThreadPool();
             clientExecutor.setName("client");
             client.setExecutor(clientExecutor);
@@ -489,7 +489,7 @@ public class HttpClientTransportOverHTTP2Test extends AbstractTest
                         try
                         {
                             // Response.
-                            MetaData.Response metaData = new MetaData.Response(HttpVersion.HTTP_2, HttpStatus.OK_200, new HttpFields());
+                            MetaData.Response metaData = new MetaData.Response(HttpVersion.HTTP_2, HttpStatus.OK_200, HttpFields.EMPTY);
                             HeadersFrame response = new HeadersFrame(request.getStreamId(), metaData, null, true);
                             generator.control(lease, response);
                             writeFrames();
@@ -563,7 +563,7 @@ public class HttpClientTransportOverHTTP2Test extends AbstractTest
             public Stream.Listener onNewStream(Stream stream, HeadersFrame frame)
             {
                 int streamId = stream.getId();
-                MetaData.Response response = new MetaData.Response(HttpVersion.HTTP_2, HttpStatus.NO_CONTENT_204, new HttpFields());
+                MetaData.Response response = new MetaData.Response(HttpVersion.HTTP_2, HttpStatus.NO_CONTENT_204, HttpFields.EMPTY);
                 HeadersFrame responseFrame = new HeadersFrame(streamId, response, null, false);
                 Callback.Completable callback = new Callback.Completable();
                 stream.headers(responseFrame, callback);
@@ -592,8 +592,8 @@ public class HttpClientTransportOverHTTP2Test extends AbstractTest
                 // Disable checks for invalid headers.
                 ((HTTP2Session)stream.getSession()).getGenerator().setValidateHpackEncoding(false);
                 // Produce an invalid HPACK block by adding a request pseudo-header to the response.
-                HttpFields fields = new HttpFields();
-                fields.put(":method", "get");
+                HttpFields fields = HttpFields.build()
+                    .put(":method", "get");
                 MetaData.Response response = new MetaData.Response(HttpVersion.HTTP_2, HttpStatus.OK_200, fields, 0);
                 int streamId = stream.getId();
                 HeadersFrame responseFrame = new HeadersFrame(streamId, response, null, false);
@@ -622,12 +622,13 @@ public class HttpClientTransportOverHTTP2Test extends AbstractTest
     @Tag("external")
     public void testExternalServer() throws Exception
     {
-        HTTP2Client http2Client = new HTTP2Client();
-        SslContextFactory sslContextFactory = new SslContextFactory.Client();
-        HttpClient httpClient = new HttpClient(new HttpClientTransportOverHTTP2(http2Client), sslContextFactory);
+        ClientConnector clientConnector = new ClientConnector();
+        HTTP2Client http2Client = new HTTP2Client(clientConnector);
+        SslContextFactory.Client sslContextFactory = new SslContextFactory.Client();
+        clientConnector.setSslContextFactory(sslContextFactory);
+        HttpClient httpClient = new HttpClient(new HttpClientTransportOverHTTP2(http2Client));
         Executor executor = new QueuedThreadPool();
-        httpClient.setExecutor(executor);
-
+        clientConnector.setExecutor(executor);
         httpClient.start();
 
 //        ContentResponse response = httpClient.GET("https://http2.akamai.com/");

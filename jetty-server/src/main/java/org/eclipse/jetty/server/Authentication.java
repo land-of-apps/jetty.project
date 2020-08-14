@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.server;
@@ -34,7 +34,7 @@ import javax.servlet.http.HttpServletResponse;
 public interface Authentication
 {
 
-    class Failed extends QuietServletException
+    public static class Failed extends QuietServletException
     {
         public Failed(String message)
         {
@@ -45,23 +45,20 @@ public interface Authentication
     /**
      * A successful Authentication with User information.
      */
-    interface User extends LogoutAuthentication
+    public interface User extends LogoutAuthentication
     {
         String getAuthMethod();
 
         UserIdentity getUserIdentity();
 
         boolean isUserInRole(UserIdentity.Scope scope, String role);
-
-        @Deprecated
-        void logout();
     }
 
     /**
      * A wrapped authentication with methods provide the
      * wrapped request/response for use by the application
      */
-    interface Wrapped extends Authentication
+    public interface Wrapped extends Authentication
     {
         HttpServletRequest getHttpServletRequest();
 
@@ -72,7 +69,7 @@ public interface Authentication
      * An authentication that is capable of performing a programmatic login
      * operation.
      */
-    interface LoginAuthentication extends Authentication
+    public interface LoginAuthentication extends Authentication
     {
 
         /**
@@ -90,7 +87,7 @@ public interface Authentication
      * An authentication that is capable of performing a programmatic
      * logout operation.
      */
-    interface LogoutAuthentication extends Authentication
+    public interface LogoutAuthentication extends Authentication
     {
 
         /**
@@ -107,7 +104,7 @@ public interface Authentication
      * A deferred authentication with methods to progress
      * the authentication process.
      */
-    interface Deferred extends LoginAuthentication, LogoutAuthentication
+    public interface Deferred extends LoginAuthentication, LogoutAuthentication
     {
 
         /**
@@ -138,25 +135,25 @@ public interface Authentication
      * authentication challenge or on successful authentication in
      * order to redirect the user to the original URL.
      */
-    interface ResponseSent extends Authentication
+    public interface ResponseSent extends Authentication
     {
     }
 
     /**
      * An Authentication Challenge has been sent.
      */
-    interface Challenge extends ResponseSent
+    public interface Challenge extends ResponseSent
     {
     }
 
     /**
      * An Authentication Failure has been sent.
      */
-    interface Failure extends ResponseSent
+    public interface Failure extends ResponseSent
     {
     }
 
-    interface SendSuccess extends ResponseSent
+    public interface SendSuccess extends ResponseSent
     {
     }
 
@@ -164,7 +161,7 @@ public interface Authentication
      * After a logout, the authentication reverts to a state
      * where it is possible to programmatically log in again.
      */
-    interface NonAuthenticated extends LoginAuthentication
+    public interface NonAuthenticated extends LoginAuthentication
     {
     }
 
@@ -174,14 +171,15 @@ public interface Authentication
      * This convenience instance is for non mandatory authentication where credentials
      * have been presented and checked, but failed authentication.
      */
-    Authentication UNAUTHENTICATED = new Authentication()
-    {
-        @Override
-        public String toString()
+    public static final Authentication UNAUTHENTICATED =
+        new Authentication()
         {
-            return "UNAUTHENTICATED";
-        }
-    };
+            @Override
+            public String toString()
+            {
+                return "UNAUTHENTICATED";
+            }
+        };
 
     /**
      * Authentication not checked
@@ -189,7 +187,7 @@ public interface Authentication
      * This convenience instance us for non mandatory authentication when no
      * credentials are present to be checked.
      */
-    Authentication NOT_CHECKED = new Authentication()
+    public static final Authentication NOT_CHECKED = new Authentication()
     {
         @Override
         public String toString()
@@ -203,7 +201,7 @@ public interface Authentication
      * <p>
      * This convenience instance is for when an authentication challenge has been sent.
      */
-    Authentication SEND_CONTINUE = new Authentication.Challenge()
+    public static final Authentication SEND_CONTINUE = new Authentication.Challenge()
     {
         @Override
         public String toString()
@@ -217,7 +215,7 @@ public interface Authentication
      * <p>
      * This convenience instance is for when an authentication failure has been sent.
      */
-    Authentication SEND_FAILURE = new Authentication.Failure()
+    public static final Authentication SEND_FAILURE = new Authentication.Failure()
     {
         @Override
         public String toString()
@@ -225,8 +223,7 @@ public interface Authentication
             return "FAILURE";
         }
     };
-
-    Authentication SEND_SUCCESS = new SendSuccess()
+    public static final Authentication SEND_SUCCESS = new SendSuccess()
     {
         @Override
         public String toString()

@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.util;
@@ -207,6 +207,9 @@ public class QuotedStringTokenizer
                         _token.append(c);
                     }
                     break;
+
+                default:
+                    throw new IllegalStateException();
             }
         }
 
@@ -290,6 +293,40 @@ public class QuotedStringTokenizer
     }
 
     /**
+     * Append into buf the provided string, adding quotes if needed.
+     * <p>
+     * Quoting is determined if any of the characters in the {@code delim} are found in the input {@code str}.
+     *
+     * @param buf the buffer to append to
+     * @param str the string to possibly quote
+     * @param delim the delimiter characters that will trigger automatic quoting
+     */
+    public static void quoteIfNeeded(StringBuilder buf, String str, String delim)
+    {
+        if (str == null)
+            return;
+        // check for delimiters in input string
+        int len = str.length();
+        if (len == 0)
+            return;
+
+        int ch;
+        for (int i = 0; i < len; i++)
+        {
+            ch = str.codePointAt(i);
+            if (delim.indexOf(ch) >= 0)
+            {
+                // found a delimiter codepoint. we need to quote it.
+                quote(buf, str);
+                return;
+            }
+        }
+
+        // no special delimiters used, no quote needed.
+        buf.append(str);
+    }
+
+    /**
      * Quote a string.
      * The string is quoted only if quoting is required due to
      * embedded delimiters, quote characters or the
@@ -320,36 +357,6 @@ public class QuotedStringTokenizer
         escapes['\n'] = 'n';
         escapes['\f'] = 'f';
         escapes['\r'] = 'r';
-    }
-
-    /**
-     * Quote a string into an Appendable.
-     * Only quotes and backslash are escaped.
-     *
-     * @param buffer The Appendable
-     * @param input The String to quote.
-     */
-    public static void quoteOnly(Appendable buffer, String input)
-    {
-        if (input == null)
-            return;
-
-        try
-        {
-            buffer.append('"');
-            for (int i = 0; i < input.length(); ++i)
-            {
-                char c = input.charAt(i);
-                if (c == '"' || c == '\\')
-                    buffer.append('\\');
-                buffer.append(c);
-            }
-            buffer.append('"');
-        }
-        catch (IOException x)
-        {
-            throw new RuntimeException(x);
-        }
     }
 
     /**
@@ -392,6 +399,36 @@ public class QuotedStringTokenizer
                         buffer.append('\\').append(escape);
                     }
                 }
+            }
+            buffer.append('"');
+        }
+        catch (IOException x)
+        {
+            throw new RuntimeException(x);
+        }
+    }
+
+    /**
+     * Quote a string into an Appendable.
+     * Only quotes and backslash are escaped.
+     *
+     * @param buffer The Appendable
+     * @param input The String to quote.
+     */
+    public static void quoteOnly(Appendable buffer, String input)
+    {
+        if (input == null)
+            return;
+
+        try
+        {
+            buffer.append('"');
+            for (int i = 0; i < input.length(); ++i)
+            {
+                char c = input.charAt(i);
+                if (c == '"' || c == '\\')
+                    buffer.append('\\');
+                buffer.append(c);
             }
             buffer.append('"');
         }

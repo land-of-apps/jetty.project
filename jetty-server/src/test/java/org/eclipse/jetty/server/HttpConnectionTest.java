@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 /*
@@ -45,15 +45,13 @@ import javax.servlet.http.HttpServletResponse;
 import org.eclipse.jetty.http.HttpCompliance;
 import org.eclipse.jetty.http.HttpHeader;
 import org.eclipse.jetty.http.HttpParser;
-import org.eclipse.jetty.http.HttpTester;
 import org.eclipse.jetty.http.MimeTypes;
+import org.eclipse.jetty.http.tools.HttpTester;
+import org.eclipse.jetty.logging.StacklessLogging;
 import org.eclipse.jetty.server.LocalConnector.LocalEndPoint;
 import org.eclipse.jetty.server.handler.AbstractHandler;
 import org.eclipse.jetty.server.handler.ErrorHandler;
 import org.eclipse.jetty.util.BufferUtil;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
-import org.eclipse.jetty.util.log.StacklessLogging;
 import org.hamcrest.Matchers;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -61,6 +59,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.slf4j.LoggerFactory;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
@@ -72,6 +71,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class HttpConnectionTest
 {
+    private static final org.slf4j.Logger LOG = LoggerFactory.getLogger(HttpConnectionTest.class);
     private Server server;
     private LocalConnector connector;
 
@@ -155,15 +155,17 @@ public class HttpConnectionTest
     @Test
     public void testHttp09NoVersion() throws Exception
     {
-        connector.getConnectionFactory(HttpConnectionFactory.class).setHttpCompliance(HttpCompliance.RFC2616);
+        connector.getConnectionFactory(HttpConnectionFactory.class).getHttpConfiguration().setHttpCompliance(HttpCompliance.RFC2616);
         String request = "GET / HTTP/0.9\r\n\r\n";
         String response = connector.getResponse(request);
-        assertThat(response, containsString("400 Bad Version"));
+        assertThat(response, containsString("400 Bad Request"));
+        assertThat(response, containsString("reason: Bad Version"));
 
-        connector.getConnectionFactory(HttpConnectionFactory.class).setHttpCompliance(HttpCompliance.RFC7230);
+        connector.getConnectionFactory(HttpConnectionFactory.class).getHttpConfiguration().setHttpCompliance(HttpCompliance.RFC7230);
         request = "GET / HTTP/0.9\r\n\r\n";
         response = connector.getResponse(request);
-        assertThat(response, containsString("400 Bad Version"));
+        assertThat(response, containsString("400 Bad Request"));
+        assertThat(response, containsString("reason: Bad Version"));
     }
 
     /**
@@ -172,7 +174,7 @@ public class HttpConnectionTest
     @Test
     public void testHttp09NoHeaders() throws Exception
     {
-        connector.getConnectionFactory(HttpConnectionFactory.class).setHttpCompliance(HttpCompliance.RFC2616);
+        connector.getConnectionFactory(HttpConnectionFactory.class).getHttpConfiguration().setHttpCompliance(HttpCompliance.RFC2616);
         // header looking like another request is ignored
         String request = "GET /one\r\nGET :/two\r\n\r\n";
         String response = BufferUtil.toString(connector.executeRequest(request).waitForOutput(10, TimeUnit.SECONDS));
@@ -186,7 +188,7 @@ public class HttpConnectionTest
     @Test
     public void testHttp09MultipleRequests() throws Exception
     {
-        connector.getConnectionFactory(HttpConnectionFactory.class).setHttpCompliance(HttpCompliance.RFC2616);
+        connector.getConnectionFactory(HttpConnectionFactory.class).getHttpConfiguration().setHttpCompliance(HttpCompliance.RFC2616);
 
         // Verify that pipelining does not work with HTTP/0.9.
         String requests = "GET /?id=123\r\n\r\nGET /?id=456\r\n\r\n";
@@ -500,7 +502,8 @@ public class HttpConnectionTest
     public void testBadPathDotDotPath() throws Exception
     {
         String response = connector.getResponse("GET /ooops/../../path HTTP/1.0\r\nHost: localhost:80\r\n\n");
-        checkContains(response, 0, "HTTP/1.1 400 Bad URI");
+        checkContains(response, 0, "HTTP/1.1 400 Bad Request");
+        checkContains(response, 0, "reason: Bad URI");
     }
 
     @Test
@@ -515,34 +518,38 @@ public class HttpConnectionTest
     public void testBadPathEncodedDotDotPath() throws Exception
     {
         String response = connector.getResponse("GET /ooops/%2e%2e/%2e%2e/path HTTP/1.0\r\nHost: localhost:80\r\n\n");
-        checkContains(response, 0, "HTTP/1.1 400 Bad URI");
+        checkContains(response, 0, "HTTP/1.1 400 Bad Request");
+        checkContains(response, 0, "reason: Bad URI");
     }
 
     @Test
     public void testBadDotDotPath() throws Exception
     {
         String response = connector.getResponse("GET ../path HTTP/1.0\r\nHost: localhost:80\r\n\n");
-        checkContains(response, 0, "HTTP/1.1 400 Bad URI");
+        checkContains(response, 0, "HTTP/1.1 400 Bad Request");
+        checkContains(response, 0, "reason: Bad URI");
     }
 
     @Test
     public void testBadSlashDotDotPath() throws Exception
     {
         String response = connector.getResponse("GET /../path HTTP/1.0\r\nHost: localhost:80\r\n\n");
-        checkContains(response, 0, "HTTP/1.1 400 Bad URI");
+        checkContains(response, 0, "HTTP/1.1 400 Bad Request");
+        checkContains(response, 0, "reason: Bad URI");
     }
 
     @Test
     public void testEncodedBadDotDotPath() throws Exception
     {
         String response = connector.getResponse("GET %2e%2e/path HTTP/1.0\r\nHost: localhost:80\r\n\n");
-        checkContains(response, 0, "HTTP/1.1 400 Bad URI");
+        checkContains(response, 0, "HTTP/1.1 400 Bad Request");
+        checkContains(response, 0, "reason: Bad URI");
     }
 
     @Test
     public void test09() throws Exception
     {
-        connector.getConnectionFactory(HttpConnectionFactory.class).setHttpCompliance(HttpCompliance.RFC2616_LEGACY);
+        connector.getConnectionFactory(HttpConnectionFactory.class).getHttpConfiguration().setHttpCompliance(HttpCompliance.RFC2616_LEGACY);
         LocalEndPoint endp = connector.executeRequest("GET /R1\n");
         endp.waitUntilClosed();
         String response = BufferUtil.toString(endp.takeOutput());
@@ -673,6 +680,7 @@ public class HttpConnectionTest
     public void testChunkNoTrailer() throws Exception
     {
         // Expect TimeoutException logged
+        connector.setIdleTimeout(1000);
         String response = connector.getResponse("GET /R1 HTTP/1.1\r\n" +
             "Host: localhost\r\n" +
             "Transfer-Encoding: chunked\r\n" +
@@ -791,7 +799,7 @@ public class HttpConnectionTest
     @Test
     public void testBadHostPort() throws Exception
     {
-        Log.getLogger(HttpParser.class).info("badMessage: Number formate exception expected ...");
+        LOG.info("badMessage: Number formate exception expected ...");
         String response;
 
         response = connector.getResponse("GET http://localhost:EXPECTED_NUMBER_FORMAT_EXCEPTION/ HTTP/1.1\r\n" +
@@ -835,7 +843,7 @@ public class HttpConnectionTest
     @Test
     public void testBadUTF8FallsbackTo8859() throws Exception
     {
-        Log.getLogger(HttpParser.class).info("badMessage: bad encoding expected ...");
+        LOG.info("badMessage: bad encoding expected ...");
         String response;
 
         response = connector.getResponse("GET /foo/bar%c0%00 HTTP/1.1\r\n" +
@@ -937,7 +945,7 @@ public class HttpConnectionTest
             checkContains(response, offset, "12345");
 
             offset = 0;
-            Log.getLogger(DumpHandler.class).info("Expecting java.io.UnsupportedEncodingException");
+            LOG.info("Expecting java.io.UnsupportedEncodingException");
             response = connector.getResponse("GET /R1 HTTP/1.1\r\n" +
                 "Host: localhost\r\n" +
                 "Transfer-Encoding: chunked\r\n" +
@@ -1113,10 +1121,9 @@ public class HttpConnectionTest
             "\r\n" +
             "abcdefghij\r\n";
 
-        Logger logger = Log.getLogger(HttpChannel.class);
-        try (StacklessLogging stackless = new StacklessLogging(logger))
+        try (StacklessLogging stackless = new StacklessLogging(HttpChannel.class))
         {
-            logger.info("EXPECTING: java.lang.IllegalStateException...");
+            LOG.info("EXPECTING: java.lang.IllegalStateException...");
             String response = connector.getResponse(requests);
             offset = checkContains(response, offset, "HTTP/1.1 500");
             offset = checkContains(response, offset, "Connection: close");
@@ -1238,11 +1245,10 @@ public class HttpConnectionTest
         });
         server.start();
 
-        Logger logger = Log.getLogger(HttpChannel.class);
         String response = null;
-        try (StacklessLogging stackless = new StacklessLogging(logger))
+        try (StacklessLogging stackless = new StacklessLogging(HttpChannel.class))
         {
-            logger.info("Expect IOException: Response header too large...");
+            LOG.info("Expect IOException: Response header too large...");
             response = connector.getResponse("GET / HTTP/1.1\r\n" +
                 "Host: localhost\r\n" +
                 "\r\n"
@@ -1305,7 +1311,7 @@ public class HttpConnectionTest
     public void testAsterisk() throws Exception
     {
         String response = null;
-        try (StacklessLogging stackless = new StacklessLogging(HttpParser.LOG))
+        try (StacklessLogging stackless = new StacklessLogging(HttpParser.class))
         {
             int offset = 0;
 

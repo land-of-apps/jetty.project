@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.util;
@@ -35,7 +35,7 @@ public interface Callback extends Invocable
      * Instance of Adapter that can be used when the callback methods need an empty
      * implementation without incurring in the cost of allocating a new Adapter object.
      */
-    Callback NOOP = new Callback()
+    static Callback NOOP = new Callback()
     {
         @Override
         public InvocationType getInvocationType()
@@ -212,6 +212,59 @@ public interface Callback extends Invocable
                     x.addSuppressed(t);
                 }
                 callback.failed(x);
+            }
+        };
+    }
+
+    /**
+     * Create a nested callback which always fails the nested callback on completion.
+     *
+     * @param callback The nested callback
+     * @param cause The cause to fail the nested callback, if the new callback is failed the reason
+     * will be added to this cause as a suppressed exception.
+     * @return a new callback.
+     */
+    static Callback from(Callback callback, Throwable cause)
+    {
+        return new Callback()
+        {
+            @Override
+            public void succeeded()
+            {
+                callback.failed(cause);
+            }
+
+            @Override
+            public void failed(Throwable x)
+            {
+                cause.addSuppressed(x);
+                callback.failed(cause);
+            }
+        };
+    }
+
+    /**
+     * Create a callback which combines two other callbacks and will succeed or fail them both.
+     * @param callback1 The first callback
+     * @param callback2 The second callback
+     * @return a new callback.
+     */
+    static Callback from(Callback callback1, Callback callback2)
+    {
+        return new Callback()
+        {
+            @Override
+            public void succeeded()
+            {
+                callback1.succeeded();
+                callback2.succeeded();
+            }
+
+            @Override
+            public void failed(Throwable x)
+            {
+                callback1.failed(x);
+                callback2.failed(x);
             }
         };
     }

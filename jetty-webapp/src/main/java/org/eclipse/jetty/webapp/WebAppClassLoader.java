@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.webapp;
@@ -43,10 +43,10 @@ import org.eclipse.jetty.util.ClassVisibilityChecker;
 import org.eclipse.jetty.util.IO;
 import org.eclipse.jetty.util.TypeUtil;
 import org.eclipse.jetty.util.URIUtil;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
 import org.eclipse.jetty.util.resource.Resource;
 import org.eclipse.jetty.util.resource.ResourceCollection;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * ClassLoader for HttpContext.
@@ -59,8 +59,8 @@ import org.eclipse.jetty.util.resource.ResourceCollection;
  * parent loader.  Java2 compliant loading, where the parent loader
  * always has priority, can be selected with the
  * {@link org.eclipse.jetty.webapp.WebAppContext#setParentLoaderPriority(boolean)}
- * method and influenced with {@link WebAppContext#isServerClass(String)} and
- * {@link WebAppContext#isSystemClass(String)}.
+ * method and influenced with {@link WebAppContext#isServerClass(Class)} and
+ * {@link WebAppContext#isSystemClass(Class)}.
  * <p>
  * If no parent class loader is provided, then the current thread
  * context classloader will be used.  If that is null then the
@@ -73,7 +73,7 @@ public class WebAppClassLoader extends URLClassLoader implements ClassVisibility
         registerAsParallelCapable();
     }
 
-    private static final Logger LOG = Log.getLogger(WebAppClassLoader.class);
+    private static final Logger LOG = LoggerFactory.getLogger(WebAppClassLoader.class);
     private static final ThreadLocal<Boolean> __loadServerClasses = new ThreadLocal<>();
 
     private final Context _context;
@@ -126,6 +126,7 @@ public class WebAppClassLoader extends URLClassLoader implements ClassVisibility
      *
      * @param <T> The type returned by the action
      * @param action The action to run
+     * @param <T> the type of PrivilegedExceptionAction
      * @return The return from the action
      * @throws Exception if thrown by the action
      */
@@ -341,7 +342,7 @@ public class WebAppClassLoader extends URLClassLoader implements ClassVisibility
                 }
                 catch (Exception ex)
                 {
-                    LOG.warn(Log.EXCEPTION, ex);
+                    LOG.warn("Unable to load WEB-INF/lib JAR {}", files[f], ex);
                 }
             }
         }
@@ -565,27 +566,6 @@ public class WebAppClassLoader extends URLClassLoader implements ClassVisibility
                 throw ex == null ? new ClassNotFoundException(name) : ex;
             }
         }
-    }
-
-    /**
-     * @param transformer the transformer to add
-     * @deprecated {@link #addTransformer(ClassFileTransformer)} instead
-     */
-    @Deprecated
-    public void addClassFileTransformer(ClassFileTransformer transformer)
-    {
-        _transformers.add(transformer);
-    }
-
-    /**
-     * @param transformer the transformer to remove
-     * @return true if transformer was removed
-     * @deprecated use {@link #removeTransformer(ClassFileTransformer)} instead
-     */
-    @Deprecated
-    public boolean removeClassFileTransformer(ClassFileTransformer transformer)
-    {
-        return _transformers.remove(transformer);
     }
 
     public void addTransformer(ClassFileTransformer transformer)

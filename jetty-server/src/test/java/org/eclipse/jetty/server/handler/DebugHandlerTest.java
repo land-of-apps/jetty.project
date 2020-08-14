@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.server.handler;
@@ -26,13 +26,10 @@ import java.net.HttpURLConnection;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyStore;
-import java.util.concurrent.Executor;
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLSession;
 import javax.net.ssl.TrustManagerFactory;
-import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
@@ -47,7 +44,6 @@ import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
 import org.eclipse.jetty.toolchain.test.MavenTestingUtils;
 import org.eclipse.jetty.util.ssl.SslContextFactory;
-import org.eclipse.jetty.util.thread.Scheduler;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -59,25 +55,16 @@ import static org.hamcrest.Matchers.not;
 
 public class DebugHandlerTest
 {
-    public static final HostnameVerifier __hostnameverifier = new HostnameVerifier()
-    {
-        @Override
-        public boolean verify(String hostname, SSLSession session)
-        {
-            return true;
-        }
-    };
+    public static final HostnameVerifier __hostnameverifier = (hostname, session) -> true;
 
     private SSLContext sslContext;
     private Server server;
     private URI serverURI;
     private URI secureServerURI;
 
-    @SuppressWarnings("deprecation")
     private DebugHandler debugHandler;
     private ByteArrayOutputStream capturedLog;
 
-    @SuppressWarnings("deprecation")
     @BeforeEach
     public void startServer() throws Exception
     {
@@ -87,17 +74,12 @@ public class DebugHandlerTest
         httpConnector.setPort(0);
         server.addConnector(httpConnector);
 
-        File keystorePath = MavenTestingUtils.getTestResourceFile("keystore");
-        SslContextFactory sslContextFactory = new SslContextFactory.Server();
+        File keystorePath = MavenTestingUtils.getTestResourceFile("keystore.p12");
+        SslContextFactory.Server sslContextFactory = new SslContextFactory.Server();
         sslContextFactory.setKeyStorePath(keystorePath.getAbsolutePath());
         sslContextFactory.setKeyStorePassword("storepwd");
-        sslContextFactory.setKeyManagerPassword("keypwd");
-        sslContextFactory.setTrustStorePath(keystorePath.getAbsolutePath());
-        sslContextFactory.setTrustStorePassword("storepwd");
         ByteBufferPool pool = new LeakTrackingByteBufferPool(new MappedByteBufferPool.Tagged());
-        ServerConnector sslConnector = new ServerConnector(server,
-            (Executor)null,
-            (Scheduler)null, pool, 1, 1,
+        ServerConnector sslConnector = new ServerConnector(server, null, null, pool, 1, 1,
             AbstractConnectionFactory.getFactories(sslContextFactory, new HttpConnectionFactory()));
 
         server.addConnector(sslConnector);
@@ -108,7 +90,7 @@ public class DebugHandlerTest
         debugHandler.setHandler(new AbstractHandler()
         {
             @Override
-            public void handle(String target, Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException
+            public void handle(String target, Request baseRequest, HttpServletRequest request, HttpServletResponse response)
             {
                 baseRequest.setHandled(true);
                 response.setStatus(HttpStatus.OK_200);
@@ -161,7 +143,7 @@ public class DebugHandlerTest
         assertThat("Response Code", http.getResponseCode(), is(200));
 
         String log = capturedLog.toString(StandardCharsets.UTF_8.name());
-        String expectedThreadName = String.format("//%s:%s/foo/bar?a=b", serverURI.getHost(), serverURI.getPort());
+        String expectedThreadName = ":/foo/bar?a=b";
         assertThat("ThreadName", log, containsString(expectedThreadName));
         // Look for bad/mangled/duplicated schemes
         assertThat("ThreadName", log, not(containsString("http:" + expectedThreadName)));
@@ -175,7 +157,7 @@ public class DebugHandlerTest
         assertThat("Response Code", http.getResponseCode(), is(200));
 
         String log = capturedLog.toString(StandardCharsets.UTF_8.name());
-        String expectedThreadName = String.format("https://%s:%s/foo/bar?a=b", secureServerURI.getHost(), secureServerURI.getPort());
+        String expectedThreadName = ":/foo/bar?a=b";
         assertThat("ThreadName", log, containsString(expectedThreadName));
         // Look for bad/mangled/duplicated schemes
         assertThat("ThreadName", log, not(containsString("http:" + expectedThreadName)));

@@ -4,7 +4,7 @@
   <parent>
     <groupId>org.eclipse.jetty.tests</groupId>
     <artifactId>test-webapps-parent</artifactId>
-    <version>9.4.30.v20200611</version>
+    <version>10.0.0-SNAPSHOT</version>
   </parent>
   <artifactId>test-jndi-webapp</artifactId>
   <name>Jetty Tests :: WebApp :: JNDI</name>
@@ -51,20 +51,11 @@
           <execution>
             <phase>package</phase>
             <goals>
-              <goal>copy</goal>
+              <goal>copy-dependencies</goal>
             </goals>
             <configuration>
-              <artifactItems>
-                <artifactItem>
-                  <groupId>org.eclipse.jetty.tests</groupId>
-                  <artifactId>test-mock-resources</artifactId>
-                  <version>${project.version}</version>
-                  <type>jar</type>
-                  <includes>**</includes>
-                  <overWrite>true</overWrite>
-                  <outputDirectory>${project.build.directory}/lib/jndi</outputDirectory>
-                </artifactItem>
-              </artifactItems>
+              <includeArtifactIds>jakarta.transaction-api,javax.mail.glassfish,test-mock-resources</includeArtifactIds>
+              <outputDirectory>${project.build.directory}/lib/jndi</outputDirectory>
             </configuration>
           </execution>
         </executions>
@@ -92,12 +83,12 @@
         <artifactId>jetty-maven-plugin</artifactId>
         <version>${project.version}</version>
         <configuration>
-          <webAppXml>${project.build.directory}/plugin-context.xml</webAppXml>
-          <webAppConfig>
+          <contextXml>${project.build.directory}/plugin-context.xml</contextXml>
+          <webApp>
             <war>src/main/webapp</war>
             <descriptor>src/main/webapp/WEB-INF/web.xml</descriptor>
             <contextPath>/test-jndi</contextPath>
-          </webAppConfig>
+          </webApp>
         </configuration>
         <dependencies>
           <dependency>
@@ -116,13 +107,19 @@
   </build>
   <dependencies>
     <dependency>
-      <groupId>javax.transaction</groupId>
-      <artifactId>javax.transaction-api</artifactId>
+      <groupId>org.eclipse.jetty.tests</groupId>
+      <artifactId>test-mock-resources</artifactId>
+      <version>${project.version}</version>
       <scope>provided</scope>
     </dependency>
     <dependency>
-      <groupId>javax.servlet</groupId>
-      <artifactId>javax.servlet-api</artifactId>
+      <groupId>jakarta.transaction</groupId>
+      <artifactId>jakarta.transaction-api</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.jetty.toolchain</groupId>
+      <artifactId>jetty-servlet-api</artifactId>
       <scope>provided</scope>
     </dependency>
     <dependency>
@@ -130,6 +127,12 @@
       <artifactId>javax.mail.glassfish</artifactId>
       <version>1.4.1.v201005082020</version>
       <scope>provided</scope>
+      <exclusions>
+        <exclusion>
+          <groupId>org.eclipse.jetty.orbit</groupId>
+          <artifactId>javax.activation</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
   </dependencies>
 </project>

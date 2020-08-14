@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package com.acme;
@@ -55,24 +55,26 @@ public class TestListener implements HttpSessionListener, HttpSessionAttributeLi
         _called.put("TestListener", new Throwable());
     }
 
-    @PostConstruct
-    public void postConstruct()
-    {
-        _called.put("postConstruct", new Throwable());
-    }
-
-    @PreDestroy
-    public void preDestroy()
-    {
-        _called.put("preDestroy", new Throwable());
-    }
-
     @Override
     public void attributeAdded(HttpSessionBindingEvent se)
     {
         // System.err.println("attributedAdded "+se);
 
         _called.put("attributeAdded", new Throwable());
+    }
+
+    @Override
+    public void attributeAdded(ServletContextAttributeEvent scab)
+    {
+        _called.put("attributeAdded", new Throwable());
+        // System.err.println("attributeAdded "+scab);
+    }
+
+    @Override
+    public void attributeAdded(ServletRequestAttributeEvent srae)
+    {
+        _called.put("attributeAdded", new Throwable());
+        // System.err.println("attributeAdded "+srae);
     }
 
     @Override
@@ -83,6 +85,20 @@ public class TestListener implements HttpSessionListener, HttpSessionAttributeLi
     }
 
     @Override
+    public void attributeRemoved(ServletContextAttributeEvent scab)
+    {
+        _called.put("attributeRemoved", new Throwable());
+        // System.err.println("attributeRemoved "+scab);
+    }
+
+    @Override
+    public void attributeRemoved(ServletRequestAttributeEvent srae)
+    {
+        _called.put("attributeRemoved", new Throwable());
+        // System.err.println("attributeRemoved "+srae);
+    }
+
+    @Override
     public void attributeReplaced(HttpSessionBindingEvent se)
     {
         // System.err.println("attributeReplaced "+se);
@@ -90,22 +106,30 @@ public class TestListener implements HttpSessionListener, HttpSessionAttributeLi
     }
 
     @Override
-    public void sessionWillPassivate(HttpSessionEvent se)
+    public void attributeReplaced(ServletContextAttributeEvent scab)
     {
-        // System.err.println("sessionWillPassivate "+se);
-        _called.put("sessionWillPassivate", new Throwable());
+        _called.put("attributeReplaced", new Throwable());
+        // System.err.println("attributeReplaced "+scab);
     }
 
     @Override
-    public void sessionDidActivate(HttpSessionEvent se)
+    public void attributeReplaced(ServletRequestAttributeEvent srae)
     {
-        // System.err.println("sessionDidActivate "+se);
-        _called.put("sessionDidActivate", new Throwable());
+        _called.put("attributeReplaced", new Throwable());
+        // System.err.println("attributeReplaced "+srae);
+    }
+
+    @Override
+    public void contextDestroyed(ServletContextEvent sce)
+    {
+        _called.put("contextDestroyed", new Throwable());
+        // System.err.println("contextDestroyed "+sce);
     }
 
     @Override
     public void contextInitialized(ServletContextEvent sce)
     {
+
         // System.err.println("contextInitialized "+sce);
         _called.put("contextInitialized", new Throwable());
 
@@ -113,7 +137,7 @@ public class TestListener implements HttpSessionListener, HttpSessionAttributeLi
         ServletRegistration.Dynamic rego = sce.getServletContext().addServlet("RegoTest", RegTest.class.getName());
         rego.addMapping("/rego/*");
         HttpConstraintElement constraintElement = new HttpConstraintElement(ServletSecurity.EmptyRoleSemantic.PERMIT,
-            ServletSecurity.TransportGuarantee.NONE, "admin");
+            ServletSecurity.TransportGuarantee.NONE, new String[]{"admin"});
         ServletSecurityElement securityElement = new ServletSecurityElement(constraintElement, null);
         Set<String> unchanged = rego.setServletSecurity(securityElement);
         //// System.err.println("Security constraints registered: "+unchanged.isEmpty());
@@ -139,7 +163,7 @@ public class TestListener implements HttpSessionListener, HttpSessionAttributeLi
         registration.addMappingForUrlPatterns(
             EnumSet.of(DispatcherType.ERROR, DispatcherType.ASYNC, DispatcherType.FORWARD, DispatcherType.INCLUDE, DispatcherType.REQUEST),
             true,
-            "/*");
+            new String[]{"/*"});
 
         try
         {
@@ -153,32 +177,16 @@ public class TestListener implements HttpSessionListener, HttpSessionAttributeLi
         }
     }
 
-    @Override
-    public void contextDestroyed(ServletContextEvent sce)
+    @PostConstruct
+    public void postConstruct()
     {
-        _called.put("contextDestroyed", new Throwable());
-        // System.err.println("contextDestroyed "+sce);
+        _called.put("postConstruct", new Throwable());
     }
 
-    @Override
-    public void attributeAdded(ServletContextAttributeEvent scab)
+    @PreDestroy
+    public void preDestroy()
     {
-        _called.put("attributeAdded", new Throwable());
-        // System.err.println("attributeAdded "+scab);
-    }
-
-    @Override
-    public void attributeRemoved(ServletContextAttributeEvent scab)
-    {
-        _called.put("attributeRemoved", new Throwable());
-        // System.err.println("attributeRemoved "+scab);
-    }
-
-    @Override
-    public void attributeReplaced(ServletContextAttributeEvent scab)
-    {
-        _called.put("attributeReplaced", new Throwable());
-        // System.err.println("attributeReplaced "+scab);
+        _called.put("preDestroy", new Throwable());
     }
 
     @Override
@@ -199,27 +207,6 @@ public class TestListener implements HttpSessionListener, HttpSessionAttributeLi
     }
 
     @Override
-    public void attributeAdded(ServletRequestAttributeEvent srae)
-    {
-        _called.put("attributeAdded", new Throwable());
-        // System.err.println("attributeAdded "+srae);
-    }
-
-    @Override
-    public void attributeRemoved(ServletRequestAttributeEvent srae)
-    {
-        _called.put("attributeRemoved", new Throwable());
-        // System.err.println("attributeRemoved "+srae);
-    }
-
-    @Override
-    public void attributeReplaced(ServletRequestAttributeEvent srae)
-    {
-        _called.put("attributeReplaced", new Throwable());
-        // System.err.println("attributeReplaced "+srae);
-    }
-
-    @Override
     public void sessionCreated(HttpSessionEvent se)
     {
         _called.put("sessionCreated", new Throwable());
@@ -231,5 +218,19 @@ public class TestListener implements HttpSessionListener, HttpSessionAttributeLi
     {
         _called.put("sessionDestroyed", new Throwable());
         // System.err.println("sessionDestroyed "+se);
+    }
+
+    @Override
+    public void sessionDidActivate(HttpSessionEvent se)
+    {
+        // System.err.println("sessionDidActivate "+se);
+        _called.put("sessionDidActivate", new Throwable());
+    }
+
+    @Override
+    public void sessionWillPassivate(HttpSessionEvent se)
+    {
+        // System.err.println("sessionWillPassivate "+se);
+        _called.put("sessionWillPassivate", new Throwable());
     }
 }

@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.http2.client;
@@ -45,9 +45,9 @@ import org.eclipse.jetty.http2.frames.SettingsFrame;
 import org.eclipse.jetty.util.BufferUtil;
 import org.eclipse.jetty.util.Callback;
 import org.eclipse.jetty.util.FuturePromise;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
 import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.lessThanOrEqualTo;
@@ -95,12 +95,12 @@ public class InterleavingTest extends AbstractTest
             }
         };
 
-        HeadersFrame headersFrame1 = new HeadersFrame(newRequest("GET", new HttpFields()), null, true);
+        HeadersFrame headersFrame1 = new HeadersFrame(newRequest("GET", HttpFields.EMPTY), null, true);
         FuturePromise<Stream> streamPromise1 = new FuturePromise<>();
         session.newStream(headersFrame1, streamPromise1, streamListener);
         streamPromise1.get(5, TimeUnit.SECONDS);
 
-        HeadersFrame headersFrame2 = new HeadersFrame(newRequest("GET", new HttpFields()), null, true);
+        HeadersFrame headersFrame2 = new HeadersFrame(newRequest("GET", HttpFields.EMPTY), null, true);
         FuturePromise<Stream> streamPromise2 = new FuturePromise<>();
         session.newStream(headersFrame2, streamPromise2, streamListener);
         streamPromise2.get(5, TimeUnit.SECONDS);
@@ -111,7 +111,7 @@ public class InterleavingTest extends AbstractTest
 
         Stream serverStream1 = serverStreams.get(0);
         Stream serverStream2 = serverStreams.get(1);
-        MetaData.Response response1 = new MetaData.Response(HttpVersion.HTTP_2, HttpStatus.OK_200, new HttpFields());
+        MetaData.Response response1 = new MetaData.Response(HttpVersion.HTTP_2, HttpStatus.OK_200, HttpFields.EMPTY);
         serverStream1.headers(new HeadersFrame(serverStream1.getId(), response1, null, false), Callback.NOOP);
 
         Random random = new Random();
@@ -120,7 +120,7 @@ public class InterleavingTest extends AbstractTest
         byte[] content2 = new byte[2 * ((ISession)serverStream2.getSession()).updateSendWindow(0)];
         random.nextBytes(content2);
 
-        MetaData.Response response2 = new MetaData.Response(HttpVersion.HTTP_2, HttpStatus.OK_200, new HttpFields());
+        MetaData.Response response2 = new MetaData.Response(HttpVersion.HTTP_2, HttpStatus.OK_200, HttpFields.EMPTY);
         serverStream2.headers(new HeadersFrame(serverStream2.getId(), response2, null, false), new Callback()
         {
             @Override
@@ -188,7 +188,7 @@ public class InterleavingTest extends AbstractTest
         }
         groups.get(currentStream).add(currentLength);
 
-        Logger logger = Log.getLogger(getClass());
+        Logger logger = LoggerFactory.getLogger(getClass());
         logger.debug("frame lengths = {}", streamLengths);
 
         groups.forEach((stream, lengths) ->

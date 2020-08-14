@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.util;
@@ -43,6 +43,10 @@ public interface Attributes
 
     void clearAttributes();
 
+    /** Unwrap all  {@link Wrapper}s of the attributes
+     * @param attributes The attributes to unwrap, which may be a  {@link Wrapper}.
+     * @return The core attributes
+     */
     static Attributes unwrap(Attributes attributes)
     {
         while (attributes instanceof Wrapper)
@@ -52,6 +56,26 @@ public interface Attributes
         return attributes;
     }
 
+    /** Unwrap attributes to a specific attribute  {@link Wrapper}.
+     * @param attributes The attributes to unwrap, which may be a {@link Wrapper}
+     * @param target The target  {@link Wrapper} class.
+     * @param <T> The type of the target  {@link Wrapper}.
+     * @return The outermost {@link Wrapper} of the matching type of null if not found.
+     */
+    static <T extends Attributes.Wrapper> T unwrap(Attributes attributes, Class<T> target)
+    {
+        while (attributes instanceof Wrapper)
+        {
+            if (target.isAssignableFrom(attributes.getClass()))
+                return (T)attributes;
+            attributes = ((Wrapper)attributes).getAttributes();
+        }
+        return null;
+    }
+
+    /**
+     * A Wrapper of attributes
+     */
     abstract class Wrapper implements Attributes
     {
         protected final Attributes _attributes;

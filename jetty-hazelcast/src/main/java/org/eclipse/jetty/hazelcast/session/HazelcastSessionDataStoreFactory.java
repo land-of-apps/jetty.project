@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.hazelcast.session;
@@ -30,7 +30,6 @@ import com.hazelcast.config.SerializerConfig;
 import com.hazelcast.config.XmlConfigBuilder;
 import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
-
 import org.eclipse.jetty.server.session.AbstractSessionDataStoreFactory;
 import org.eclipse.jetty.server.session.SessionData;
 import org.eclipse.jetty.server.session.SessionDataStore;
@@ -61,7 +60,7 @@ public class HazelcastSessionDataStoreFactory
     private boolean scavengeZombies = false;
 
     private String addresses;
-    
+
     public boolean isScavengeZombies()
     {
         return scavengeZombies;
@@ -74,6 +73,7 @@ public class HazelcastSessionDataStoreFactory
 
     @Override
     public SessionDataStore getSessionDataStore(SessionHandler handler)
+        throws Exception
     {
         HazelcastSessionDataStore hazelcastSessionDataStore = new HazelcastSessionDataStore();
 
@@ -86,12 +86,12 @@ public class HazelcastSessionDataStoreFactory
                     if (StringUtil.isEmpty(configurationLocation))
                     {
                         ClientConfig config = new ClientConfig();
-                        
+
                         if (addresses != null && !addresses.isEmpty())
                         {
                             config.getNetworkConfig().setAddresses(Arrays.asList(addresses.split(",")));
                         }
-                        
+
                         SerializerConfig sc = new SerializerConfig()
                             .setImplementation(new SessionDataSerializer())
                             .setTypeClass(SessionData.class);
@@ -212,7 +212,7 @@ public class HazelcastSessionDataStoreFactory
     {
         this.hazelcastInstanceName = hazelcastInstanceName;
     }
-    
+
     public String getAddresses()
     {
         return addresses;

@@ -1,4 +1,5 @@
-<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE Configure PUBLIC "-//Jetty//Configure//EN" "http://www.eclipse.org/jetty/configure_9_3.dtd">
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE Configure PUBLIC "-//Jetty//Configure//EN" "https://www.eclipse.org/jetty/configure_10_0.dtd">
 
 <!-- ==================================================================
 Configure and deploy the test web application in $(jetty.home)/webapps/test
@@ -30,15 +31,17 @@ detected.
   
   <!-- Enable WebSocket container -->
   <Call name="setAttribute">
-    <Arg>org.eclipse.jetty.websocket.jsr356</Arg>
+    <Arg>org.eclipse.jetty.websocket.javax</Arg>
     <Arg type="Boolean">true</Arg>
   </Call>
   
-  <Set name="gzipHandler">
-    <New class="org.eclipse.jetty.server.handler.gzip.GzipHandler">
-      <Set name="minGzipSize">2048</Set>      
-    </New>
-  </Set>
+  <Call name="insertHandler">
+    <Arg>
+      <New class="org.eclipse.jetty.server.handler.gzip.GzipHandler">
+        <Set name="minGzipSize">2048</Set>
+      </New>
+    </Arg>
+  </Call>
   
   <!-- Set Caching Classloader that improves performance on resource searching webapps -->
   <!--

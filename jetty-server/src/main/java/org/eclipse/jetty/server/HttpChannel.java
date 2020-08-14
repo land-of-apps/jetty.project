@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.server;
@@ -30,7 +30,6 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.function.Supplier;
 import javax.servlet.DispatcherType;
 import javax.servlet.RequestDispatcher;
 import javax.servlet.ServletException;
@@ -39,12 +38,10 @@ import org.eclipse.jetty.http.BadMessageException;
 import org.eclipse.jetty.http.HttpFields;
 import org.eclipse.jetty.http.HttpGenerator;
 import org.eclipse.jetty.http.HttpHeader;
-import org.eclipse.jetty.http.HttpScheme;
 import org.eclipse.jetty.http.HttpStatus;
 import org.eclipse.jetty.http.HttpVersion;
 import org.eclipse.jetty.http.MetaData;
 import org.eclipse.jetty.io.ByteBufferPool;
-import org.eclipse.jetty.io.ChannelEndPoint;
 import org.eclipse.jetty.io.Connection;
 import org.eclipse.jetty.io.EndPoint;
 import org.eclipse.jetty.io.QuietException;
@@ -54,9 +51,9 @@ import org.eclipse.jetty.server.handler.ErrorHandler;
 import org.eclipse.jetty.util.BufferUtil;
 import org.eclipse.jetty.util.Callback;
 import org.eclipse.jetty.util.SharedBlockingCallback.Blocker;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
 import org.eclipse.jetty.util.thread.Scheduler;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * HttpChannel represents a single endpoint for HTTP semantic processing.
@@ -69,8 +66,8 @@ import org.eclipse.jetty.util.thread.Scheduler;
  */
 public class HttpChannel implements Runnable, HttpOutput.Interceptor
 {
-    public static Listener NOOP_LISTENER = new Listener(){};
-    private static final Logger LOG = Log.getLogger(HttpChannel.class);
+    public static Listener NOOP_LISTENER = new Listener() {};
+    private static final Logger LOG = LoggerFactory.getLogger(HttpChannel.class);
 
     private final AtomicLong _requests = new AtomicLong();
     private final Connector _connector;
@@ -84,8 +81,6 @@ public class HttpChannel implements Runnable, HttpOutput.Interceptor
     private final HttpChannel.Listener _combinedListener;
     @Deprecated
     private final List<Listener> _transientListeners = new ArrayList<>();
-    private HttpFields _trailers;
-    private final Supplier<HttpFields> _trailerSupplier = () -> _trailers;
     private MetaData.Response _committedMetaData;
     private RequestLog _requestLog;
     private long _oldIdleTimeout;
@@ -105,7 +100,6 @@ public class HttpChannel implements Runnable, HttpOutput.Interceptor
         _state = new HttpChannelState(this);
         _request = new Request(this, newHttpInput(_state));
         _response = new Response(this, newHttpOutput());
-
         _executor = connector.getServer().getThreadPool();
         _requestLog = connector.getServer().getRequestLog();
         _combinedListener = (connector instanceof AbstractConnector)
@@ -250,12 +244,6 @@ public class HttpChannel implements Runnable, HttpOutput.Interceptor
         return _configuration;
     }
 
-    @Override
-    public boolean isOptimizedForDirectBuffers()
-    {
-        return getHttpTransport().isOptimizedForDirectBuffers();
-    }
-
     public Server getServer()
     {
         return _connector.getServer();
@@ -311,7 +299,6 @@ public class HttpChannel implements Runnable, HttpOutput.Interceptor
         _committedMetaData = null;
         _requestLog = _connector == null ? null : _connector.getServer().getRequestLog();
         _written = 0;
-        _trailers = null;
         _oldIdleTimeout = 0;
         _transientListeners.clear();
     }
@@ -503,14 +490,13 @@ public class HttpChannel implements Runnable, HttpOutput.Interceptor
                             _response.getStatus() != HttpStatus.NOT_MODIFIED_304 &&
                             !_response.isContentComplete(_response.getHttpOutput().getWritten()))
                         {
-                            if (isCommitted())
-                                abort(new IOException("insufficient content written"));
-                            else
-                            {
-                                _response.sendError(HttpStatus.INTERNAL_SERVER_ERROR_500, "insufficient content written");
+                            if (sendErrorOrAbort("Insufficient content written"))
                                 break;
-                            }
                         }
+
+                        // If send error is called we need to break.
+                        if (checkAndPrepareUpgrade())
+                            break;
 
                         // TODO Currently a blocking/aborting consumeAll is done in the handling of the TERMINATED
                         // TODO Action triggered by the completed callback below.  It would be possible to modify the
@@ -518,7 +504,7 @@ public class HttpChannel implements Runnable, HttpOutput.Interceptor
                         // TODO that is done.
 
                         // Set a close callback on the HttpOutput to make it an async callback
-                        _response.completeOutput(Callback.from(_state::completed));
+                        _response.completeOutput(Callback.from(() -> _state.completed(null), _state::completed));
 
                         break;
                     }
@@ -530,7 +516,7 @@ public class HttpChannel implements Runnable, HttpOutput.Interceptor
             catch (Throwable failure)
             {
                 if ("org.eclipse.jetty.continuation.ContinuationThrowable".equals(failure.getClass().getName()))
-                    LOG.ignore(failure);
+                    LOG.trace("IGNORED", failure);
                 else
                     handleException(failure);
             }
@@ -543,6 +529,31 @@ public class HttpChannel implements Runnable, HttpOutput.Interceptor
 
         boolean suspended = action == Action.WAIT;
         return !suspended;
+    }
+
+    /**
+     * @param message the error message.
+     * @return true if we have sent an error, false if we have aborted.
+     */
+    public boolean sendErrorOrAbort(String message)
+    {
+        try
+        {
+            if (isCommitted())
+            {
+                abort(new IOException(message));
+                return false;
+            }
+
+            _response.sendError(HttpStatus.INTERNAL_SERVER_ERROR_500, message);
+            return true;
+        }
+        catch (Throwable x)
+        {
+            LOG.trace("IGNORED", x);
+            abort(x);
+        }
+        return false;
     }
 
     private void dispatch(DispatcherType type, Dispatchable dispatchable) throws IOException, ServletException
@@ -633,7 +644,7 @@ public class HttpChannel implements Runnable, HttpOutput.Interceptor
         {
             _request.setHandled(true);
             _state.completing();
-            sendResponse(null, _response.getHttpOutput().getBuffer(), true, Callback.from(_state::completed));
+            sendResponse(null, _response.getHttpOutput().getBuffer(), true, Callback.from(() -> _state.completed(null), _state::completed));
         }
         catch (Throwable x)
         {
@@ -671,7 +682,7 @@ public class HttpChannel implements Runnable, HttpOutput.Interceptor
     {
         _requests.incrementAndGet();
         _request.setTimeStamp(System.currentTimeMillis());
-        HttpFields fields = _response.getHttpFields();
+        HttpFields.Mutable fields = _response.getHttpFields();
         if (_configuration.getSendDateHeader() && !fields.contains(HttpHeader.DATE))
             fields.put(_connector.getServer().getDateField());
 
@@ -680,10 +691,7 @@ public class HttpChannel implements Runnable, HttpOutput.Interceptor
         if (idleTO >= 0 && _oldIdleTimeout != idleTO)
             setIdleTimeout(idleTO);
 
-        request.setTrailerSupplier(_trailerSupplier);
         _request.setMetaData(request);
-
-        _request.setSecure(HttpScheme.HTTPS.is(request.getURI().getScheme()));
 
         _combinedListener.onRequestBegin(_request);
 
@@ -713,7 +721,7 @@ public class HttpChannel implements Runnable, HttpOutput.Interceptor
     {
         if (LOG.isDebugEnabled())
             LOG.debug("onTrailers {} {}", this, trailers);
-        _trailers = trailers;
+        _request.setTrailerHttpFields(trailers);
         _combinedListener.onRequestTrailers(_request);
     }
 
@@ -724,6 +732,20 @@ public class HttpChannel implements Runnable, HttpOutput.Interceptor
         boolean result = _request.getHttpInput().eof();
         _combinedListener.onRequestEnd(_request);
         return result;
+    }
+
+    /**
+     * <p>Checks whether the processing of the request resulted in an upgrade,
+     * and if so performs upgrade preparation steps <em>before</em> the upgrade
+     * response is sent back to the client.</p>
+     * <p>This avoids a race where the server is unprepared if the client sends
+     * data immediately after having received the upgrade response.</p>
+     * @return true if the channel is not complete and more processing is required,
+     * typically because sendError has been called.
+     */
+    protected boolean checkAndPrepareUpgrade()
+    {
+        return false;
     }
 
     public void onCompleted()
@@ -775,18 +797,18 @@ public class HttpChannel implements Runnable, HttpOutput.Interceptor
             if (action == Action.DISPATCH)
             {
                 ByteBuffer content = null;
-                HttpFields fields = new HttpFields();
+                HttpFields.Mutable fields = HttpFields.build();
 
                 ErrorHandler handler = getServer().getBean(ErrorHandler.class);
                 if (handler != null)
                     content = handler.badMessageError(status, reason, fields);
 
-                sendResponse(new MetaData.Response(HttpVersion.HTTP_1_1, status, reason, fields, BufferUtil.length(content)), content, true);
+                sendResponse(new MetaData.Response(HttpVersion.HTTP_1_1, status, null, fields, BufferUtil.length(content)), content, true);
             }
         }
         catch (IOException e)
         {
-            LOG.debug(e);
+            LOG.debug("Unable to send bad message response", e);
         }
         finally
         {
@@ -796,19 +818,19 @@ public class HttpChannel implements Runnable, HttpOutput.Interceptor
             }
             catch (Throwable e)
             {
-                LOG.debug(e);
+                LOG.debug("Unable to complete bad message", e);
                 abort(e);
             }
         }
     }
 
-    public boolean sendResponse(MetaData.Response info, ByteBuffer content, boolean complete, final Callback callback)
+    protected boolean sendResponse(MetaData.Response response, ByteBuffer content, boolean complete, final Callback callback)
     {
         boolean committing = _state.commitResponse();
 
         if (LOG.isDebugEnabled())
             LOG.debug("sendResponse info={} content={} complete={} committing={} callback={}",
-                info,
+                response,
                 BufferUtil.toDetailString(content),
                 complete,
                 committing,
@@ -817,25 +839,25 @@ public class HttpChannel implements Runnable, HttpOutput.Interceptor
         if (committing)
         {
             // We need an info to commit
-            if (info == null)
-                info = _response.newResponseMetaData();
-            commit(info);
+            if (response == null)
+                response = _response.newResponseMetaData();
+            commit(response);
             _combinedListener.onResponseBegin(_request);
             _request.onResponseCommit();
             
             // wrap callback to process 100 responses
-            final int status = info.getStatus();
+            final int status = response.getStatus();
             final Callback committed = (status < HttpStatus.OK_200 && status >= HttpStatus.CONTINUE_100)
                 ? new Send100Callback(callback)
                 : new SendCallback(callback, content, true, complete);
 
             // committing write
-            _transport.send(info, _request.isHead(), content, complete, committed);
+            _transport.send(_request.getMetaData(), response, content, complete, committed);
         }
-        else if (info == null)
+        else if (response == null)
         {
             // This is a normal write
-            _transport.send(null, _request.isHead(), content, complete, new SendCallback(callback, content, false, complete));
+            _transport.send(_request.getMetaData(), null, content, complete, new SendCallback(callback, content, false, complete));
         }
         else
         {
@@ -855,7 +877,7 @@ public class HttpChannel implements Runnable, HttpOutput.Interceptor
         catch (Throwable failure)
         {
             if (LOG.isDebugEnabled())
-                LOG.debug(failure);
+                LOG.debug("Unable to send response", failure);
             abort(failure);
             throw failure;
         }
@@ -933,12 +955,9 @@ public class HttpChannel implements Runnable, HttpOutput.Interceptor
         return _connector.getScheduler();
     }
 
-    /**
-     * @return true if the HttpChannel can efficiently use direct buffer (typically this means it is not over SSL or a multiplexed protocol)
-     */
-    public boolean useDirectBuffers()
+    public boolean isUseOutputDirectByteBuffers()
     {
-        return getEndPoint() instanceof ChannelEndPoint;
+        return getHttpConfiguration().isUseOutputDirectByteBuffers();
     }
 
     /**
@@ -956,6 +975,16 @@ public class HttpChannel implements Runnable, HttpOutput.Interceptor
             _combinedListener.onResponseFailure(_request, failure);
             _transport.abort(failure);
         }
+    }
+
+    public boolean isTunnellingSupported()
+    {
+        return false;
+    }
+
+    public EndPoint getTunnellingEndPoint()
+    {
+        throw new UnsupportedOperationException("Tunnelling not supported");
     }
 
     private void notifyEvent1(Function<Listener, Consumer<Request>> function, Request request)
@@ -1216,12 +1245,12 @@ public class HttpChannel implements Runnable, HttpOutput.Interceptor
 
             if (x instanceof BadMessageException)
             {
-                _transport.send(HttpGenerator.RESPONSE_500_INFO, false, null, true, new Callback.Nested(this)
+                _transport.send(_request.getMetaData(), HttpGenerator.RESPONSE_500_INFO, null, true, new Callback.Nested(this)
                 {
                     @Override
                     public void succeeded()
                     {
-                        _response.getHttpOutput().completed();
+                        _response.getHttpOutput().completed(null);
                         super.failed(x);
                     }
 

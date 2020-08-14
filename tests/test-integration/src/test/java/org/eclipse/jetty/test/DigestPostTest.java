@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.test;
@@ -36,24 +36,22 @@ import org.eclipse.jetty.client.HttpClient;
 import org.eclipse.jetty.client.api.AuthenticationStore;
 import org.eclipse.jetty.client.api.ContentResponse;
 import org.eclipse.jetty.client.api.Request;
-import org.eclipse.jetty.client.util.BytesContentProvider;
+import org.eclipse.jetty.client.util.BytesRequestContent;
 import org.eclipse.jetty.client.util.DigestAuthentication;
-import org.eclipse.jetty.client.util.StringContentProvider;
+import org.eclipse.jetty.client.util.StringRequestContent;
 import org.eclipse.jetty.http.HttpMethod;
 import org.eclipse.jetty.security.AbstractLoginService;
 import org.eclipse.jetty.security.ConstraintMapping;
 import org.eclipse.jetty.security.ConstraintSecurityHandler;
 import org.eclipse.jetty.security.authentication.DigestAuthenticator;
 import org.eclipse.jetty.server.Connector;
-import org.eclipse.jetty.server.Handler;
 import org.eclipse.jetty.server.NetworkConnector;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
 import org.eclipse.jetty.server.handler.DefaultHandler;
-import org.eclipse.jetty.server.handler.HandlerCollection;
+import org.eclipse.jetty.server.handler.HandlerList;
 import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.eclipse.jetty.util.IO;
-import org.eclipse.jetty.util.StringUtil;
 import org.eclipse.jetty.util.TypeUtil;
 import org.eclipse.jetty.util.security.Constraint;
 import org.eclipse.jetty.util.security.Credential;
@@ -63,6 +61,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class DigestPostTest
@@ -100,18 +99,12 @@ public class DigestPostTest
             roles.put(username, rolenames);
         }
 
-        /**
-         * @see org.eclipse.jetty.security.AbstractLoginService#loadRoleInfo(org.eclipse.jetty.security.AbstractLoginService.UserPrincipal)
-         */
         @Override
         protected String[] loadRoleInfo(UserPrincipal user)
         {
             return roles.get(user.getName());
         }
 
-        /**
-         * @see org.eclipse.jetty.security.AbstractLoginService#loadUserInfo(java.lang.String)
-         */
         @Override
         protected UserPrincipal loadUserInfo(String username)
         {
@@ -147,10 +140,7 @@ public class DigestPostTest
 
             security.setConstraintMappings(Collections.singletonList(mapping));
 
-            HandlerCollection handlers = new HandlerCollection();
-            handlers.setHandlers(new Handler[]
-                {context, new DefaultHandler()});
-            _server.setHandler(handlers);
+            _server.setHandler(new HandlerList(context, new DefaultHandler()));
 
             _server.start();
         }
@@ -184,12 +174,12 @@ public class DigestPostTest
         String result = IO.toString(socket.getInputStream());
 
         assertTrue(result.startsWith("HTTP/1.1 401 Unauthorized"));
-        assertEquals(null, _received);
+        assertNull(_received);
 
         int n = result.indexOf("nonce=");
         String nonce = result.substring(n + 7, result.indexOf('"', n + 7));
         MessageDigest md = MessageDigest.getInstance("MD5");
-        byte[] b = md.digest(String.valueOf(TimeUnit.NANOSECONDS.toMillis(System.nanoTime())).getBytes(org.eclipse.jetty.util.StringUtil.__ISO_8859_1));
+        byte[] b = md.digest(String.valueOf(TimeUnit.NANOSECONDS.toMillis(System.nanoTime())).getBytes(StandardCharsets.ISO_8859_1));
         String cnonce = encode(b);
         String digest = "Digest username=\"testuser\" realm=\"test\" nonce=\"" + nonce + "\" uri=\"/test/\" algorithm=MD5 response=\"" +
             newResponse("POST", "/test/", cnonce, "testuser", "test", "password", nonce, "auth") +
@@ -224,7 +214,7 @@ public class DigestPostTest
             ("POST /test/ HTTP/1.1\r\n" +
                 "Host: 127.0.0.1:" + ((NetworkConnector)_server.getConnectors()[0]).getLocalPort() + "\r\n" +
                 "Content-Length: " + bytes.length + "\r\n" +
-                "\r\n").getBytes("UTF-8"));
+                "\r\n").getBytes(StandardCharsets.UTF_8));
         socket.getOutputStream().write(bytes);
         socket.getOutputStream().flush();
 
@@ -235,12 +225,12 @@ public class DigestPostTest
         String result = new String(buf, 0, len, StandardCharsets.UTF_8);
 
         assertTrue(result.startsWith("HTTP/1.1 401 Unauthorized"));
-        assertEquals(null, _received);
+        assertNull(_received);
 
         int n = result.indexOf("nonce=");
         String nonce = result.substring(n + 7, result.indexOf('"', n + 7));
         MessageDigest md = MessageDigest.getInstance("MD5");
-        byte[] b = md.digest(String.valueOf(TimeUnit.NANOSECONDS.toMillis(System.nanoTime())).getBytes(StringUtil.__ISO_8859_1));
+        byte[] b = md.digest(String.valueOf(TimeUnit.NANOSECONDS.toMillis(System.nanoTime())).getBytes(StandardCharsets.ISO_8859_1));
         String cnonce = encode(b);
         String digest = "Digest username=\"testuser\" realm=\"test\" nonce=\"" + nonce + "\" uri=\"/test/\" algorithm=MD5 response=\"" +
             newResponse("POST", "/test/", cnonce, "testuser", "test", "password", nonce, "auth") +
@@ -252,7 +242,7 @@ public class DigestPostTest
                 "Host: 127.0.0.1:" + ((NetworkConnector)_server.getConnectors()[0]).getLocalPort() + "\r\n" +
                 "Content-Length: " + bytes.length + "\r\n" +
                 "Authorization: " + digest + "\r\n" +
-                "\r\n").getBytes("UTF-8"));
+                "\r\n").getBytes(StandardCharsets.UTF_8));
         socket.getOutputStream().write(bytes);
         socket.getOutputStream().flush();
 
@@ -276,7 +266,7 @@ public class DigestPostTest
 
             Request request = client.newRequest(srvUrl);
             request.method(HttpMethod.POST);
-            request.content(new BytesContentProvider(__message.getBytes("UTF8")));
+            request.body(new BytesRequestContent(__message.getBytes(StandardCharsets.UTF_8)));
             _received = null;
             request = request.timeout(5, TimeUnit.SECONDS);
             ContentResponse response = request.send();
@@ -304,7 +294,7 @@ public class DigestPostTest
 
             Request request = client.newRequest(srvUrl);
             request.method(HttpMethod.POST);
-            request.content(new StringContentProvider(sent));
+            request.body(new StringRequestContent(sent));
             _received = null;
             request = request.timeout(5, TimeUnit.SECONDS);
             ContentResponse response = request.send();
@@ -340,30 +330,30 @@ public class DigestPostTest
         MessageDigest md = MessageDigest.getInstance("MD5");
 
         // calc A1 digest
-        md.update(principal.getBytes(StringUtil.__ISO_8859_1));
+        md.update(principal.getBytes(StandardCharsets.ISO_8859_1));
         md.update((byte)':');
-        md.update(realm.getBytes(StringUtil.__ISO_8859_1));
+        md.update(realm.getBytes(StandardCharsets.ISO_8859_1));
         md.update((byte)':');
-        md.update(credentials.getBytes(StringUtil.__ISO_8859_1));
+        md.update(credentials.getBytes(StandardCharsets.ISO_8859_1));
         byte[] ha1 = md.digest();
         // calc A2 digest
         md.reset();
-        md.update(method.getBytes(StringUtil.__ISO_8859_1));
+        md.update(method.getBytes(StandardCharsets.ISO_8859_1));
         md.update((byte)':');
-        md.update(uri.getBytes(StringUtil.__ISO_8859_1));
+        md.update(uri.getBytes(StandardCharsets.ISO_8859_1));
         byte[] ha2 = md.digest();
 
-        md.update(TypeUtil.toString(ha1, 16).getBytes(StringUtil.__ISO_8859_1));
+        md.update(TypeUtil.toString(ha1, 16).getBytes(StandardCharsets.ISO_8859_1));
         md.update((byte)':');
-        md.update(nonce.getBytes(StringUtil.__ISO_8859_1));
+        md.update(nonce.getBytes(StandardCharsets.ISO_8859_1));
         md.update((byte)':');
-        md.update(NC.getBytes(StringUtil.__ISO_8859_1));
+        md.update(NC.getBytes(StandardCharsets.ISO_8859_1));
         md.update((byte)':');
-        md.update(cnonce.getBytes(StringUtil.__ISO_8859_1));
+        md.update(cnonce.getBytes(StandardCharsets.ISO_8859_1));
         md.update((byte)':');
-        md.update(qop.getBytes(StringUtil.__ISO_8859_1));
+        md.update(qop.getBytes(StandardCharsets.ISO_8859_1));
         md.update((byte)':');
-        md.update(TypeUtil.toString(ha2, 16).getBytes(StringUtil.__ISO_8859_1));
+        md.update(TypeUtil.toString(ha2, 16).getBytes(StandardCharsets.ISO_8859_1));
         byte[] digest = md.digest();
 
         // check digest
@@ -372,11 +362,11 @@ public class DigestPostTest
 
     private static String encode(byte[] data)
     {
-        StringBuffer buffer = new StringBuffer();
-        for (int i = 0; i < data.length; i++)
+        StringBuilder buffer = new StringBuilder();
+        for (byte datum : data)
         {
-            buffer.append(Integer.toHexString((data[i] & 0xf0) >>> 4));
-            buffer.append(Integer.toHexString(data[i] & 0x0f));
+            buffer.append(Integer.toHexString((datum & 0xf0) >>> 4));
+            buffer.append(Integer.toHexString(datum & 0x0f));
         }
         return buffer.toString();
     }

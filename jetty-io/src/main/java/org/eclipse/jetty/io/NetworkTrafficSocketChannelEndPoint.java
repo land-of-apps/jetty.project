@@ -1,48 +1,46 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.io;
 
 import java.io.IOException;
-import java.net.Socket;
 import java.nio.ByteBuffer;
-import java.nio.channels.SelectableChannel;
 import java.nio.channels.SelectionKey;
-import java.util.List;
+import java.nio.channels.SocketChannel;
 
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
 import org.eclipse.jetty.util.thread.Scheduler;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * <p>A specialized version of {@link SocketChannelEndPoint} that supports {@link NetworkTrafficListener}s.</p>
  */
 public class NetworkTrafficSocketChannelEndPoint extends SocketChannelEndPoint
 {
-    private static final Logger LOG = Log.getLogger(NetworkTrafficSocketChannelEndPoint.class);
+    private static final Logger LOG = LoggerFactory.getLogger(NetworkTrafficSocketChannelEndPoint.class);
 
-    private final List<NetworkTrafficListener> listeners;
+    private final NetworkTrafficListener listener;
 
-    public NetworkTrafficSocketChannelEndPoint(SelectableChannel channel, ManagedSelector selectSet, SelectionKey key, Scheduler scheduler, long idleTimeout, List<NetworkTrafficListener> listeners)
+    public NetworkTrafficSocketChannelEndPoint(SocketChannel channel, ManagedSelector selectSet, SelectionKey key, Scheduler scheduler, long idleTimeout, NetworkTrafficListener listener)
     {
         super(channel, selectSet, key, scheduler);
         setIdleTimeout(idleTimeout);
-        this.listeners = listeners;
+        this.listener = listener;
     }
 
     @Override
@@ -78,76 +76,63 @@ public class NetworkTrafficSocketChannelEndPoint extends SocketChannelEndPoint
     public void onOpen()
     {
         super.onOpen();
-        if (listeners != null && !listeners.isEmpty())
+        if (listener != null)
         {
-            for (NetworkTrafficListener listener : listeners)
+            try
             {
-                try
-                {
-                    listener.opened(getSocket());
-                }
-                catch (Exception x)
-                {
-                    LOG.warn(x);
-                }
+                listener.opened(getChannel().socket());
+            }
+            catch (Throwable x)
+            {
+                LOG.info("Exception while invoking listener " + listener, x);
             }
         }
     }
 
     @Override
-    public void onClose()
+    public void onClose(Throwable failure)
     {
-        super.onClose();
-        if (listeners != null && !listeners.isEmpty())
+        super.onClose(failure);
+        if (listener != null)
         {
-            for (NetworkTrafficListener listener : listeners)
+            try
             {
-                try
-                {
-                    listener.closed(getSocket());
-                }
-                catch (Exception x)
-                {
-                    LOG.warn(x);
-                }
+                listener.closed(getChannel().socket());
+            }
+            catch (Throwable x)
+            {
+                LOG.info("Exception while invoking listener " + listener, x);
             }
         }
     }
 
     public void notifyIncoming(ByteBuffer buffer, int read)
     {
-        if (listeners != null && !listeners.isEmpty() && read > 0)
+        if (listener != null && read > 0)
         {
-            for (NetworkTrafficListener listener : listeners)
+            try
             {
-                try
-                {
-                    ByteBuffer view = buffer.asReadOnlyBuffer();
-                    listener.incoming(getSocket(), view);
-                }
-                catch (Exception x)
-                {
-                    LOG.warn(x);
-                }
+                ByteBuffer view = buffer.asReadOnlyBuffer();
+                listener.incoming(getChannel().socket(), view);
+            }
+            catch (Throwable x)
+            {
+                LOG.info("Exception while invoking listener " + listener, x);
             }
         }
     }
 
     public void notifyOutgoing(ByteBuffer view)
     {
-        if (listeners != null && !listeners.isEmpty() && view.hasRemaining())
+        if (listener != null && view.hasRemaining())
         {
-            Socket socket = getSocket();
-            for (NetworkTrafficListener listener : listeners)
+            try
             {
-                try
-                {
-                    listener.outgoing(socket, view);
-                }
-                catch (Exception x)
-                {
-                    LOG.warn(x);
-                }
+                listener.outgoing(getChannel().socket(), view);
+            }
+            catch (Throwable x)
+            {
+                LOG.info("Exception while invoking listener " + listener, x);
             }
         }
     }

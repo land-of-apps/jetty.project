@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.servlet;
@@ -29,8 +29,9 @@ import javax.servlet.ServletContext;
 
 import org.eclipse.jetty.util.annotation.ManagedAttribute;
 import org.eclipse.jetty.util.annotation.ManagedObject;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
+import org.eclipse.jetty.util.thread.AutoLock;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Holder
@@ -43,7 +44,7 @@ import org.eclipse.jetty.util.log.Logger;
 @ManagedObject("Holder - a container for servlets and the like")
 public abstract class Holder<T> extends BaseHolder<T>
 {
-    private static final Logger LOG = Log.getLogger(Holder.class);
+    private static final Logger LOG = LoggerFactory.getLogger(Holder.class);
 
     private final Map<String, String> _initParams = new HashMap<String, String>(3);
     private String _displayName;
@@ -75,7 +76,7 @@ public abstract class Holder<T> extends BaseHolder<T>
     {
         if (_initParams == null)
             return null;
-        return _initParams.get(param);
+        return (String)_initParams.get(param);
     }
 
     public Enumeration<String> getInitParameterNames()
@@ -98,11 +99,14 @@ public abstract class Holder<T> extends BaseHolder<T>
     }
 
     @Override
-    protected synchronized void setInstance(T instance)
+    protected void setInstance(T instance)
     {
-        super.setInstance(instance);
-        if (getName() == null)
-            setName(String.format("%s@%x", instance.getClass().getName(), instance.hashCode()));
+        try (AutoLock l = lock())
+        {
+            super.setInstance(instance);
+            if (getName() == null)
+                setName(String.format("%s@%x", instance.getClass().getName(), instance.hashCode()));
+        }
     }
 
     public void destroyInstance(Object instance)

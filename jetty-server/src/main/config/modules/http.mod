@@ -1,4 +1,4 @@
-DO NOT EDIT - See: https://www.eclipse.org/jetty/documentation/current/startup-modules.html
+# DO NOT EDIT - See: https://www.eclipse.org/jetty/documentation/current/startup-modules.html
 
 [description]
 Enables an HTTP connector on the server.
@@ -56,6 +56,3 @@ etc/jetty-http.xml
 
 ## Connect Timeout in milliseconds
 # jetty.http.connectTimeout=15000
-
-## HTTP Compliance: RFC7230, RFC7230_LEGACY, RFC2616, RFC2616_LEGACY, LEGACY or CUSTOMn
-# jetty.http.compliance=RFC7230_LEGACY

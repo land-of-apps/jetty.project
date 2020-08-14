@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.server;
@@ -42,8 +42,8 @@ import org.eclipse.jetty.util.StringUtil;
 import org.eclipse.jetty.util.annotation.ManagedAttribute;
 import org.eclipse.jetty.util.annotation.ManagedObject;
 import org.eclipse.jetty.util.component.ContainerLifeCycle;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static java.lang.invoke.MethodHandles.dropArguments;
 import static java.lang.invoke.MethodHandles.foldArguments;
@@ -271,12 +271,12 @@ import static java.lang.invoke.MethodType.methodType;
 @ManagedObject("Custom format request log")
 public class CustomRequestLog extends ContainerLifeCycle implements RequestLog
 {
-    protected static final Logger LOG = Log.getLogger(CustomRequestLog.class);
+    protected static final Logger LOG = LoggerFactory.getLogger(CustomRequestLog.class);
 
     public static final String DEFAULT_DATE_FORMAT = "dd/MMM/yyyy:HH:mm:ss ZZZ";
 
     public static final String NCSA_FORMAT = "%{client}a - %u %t \"%r\" %s %O";
-    public static final String EXTENDED_NCSA_FORMAT = "%{client}a - %u %t \"%r\" %s %O \"%{Referer}i\" \"%{User-Agent}i\"";
+    public static final String EXTENDED_NCSA_FORMAT = NCSA_FORMAT + " \"%{Referer}i\" \"%{User-Agent}i\"";
 
     private static ThreadLocal<StringBuilder> _buffers = ThreadLocal.withInitial(() -> new StringBuilder(256));
 
@@ -286,6 +286,21 @@ public class CustomRequestLog extends ContainerLifeCycle implements RequestLog
     private RequestLog.Writer _requestLogWriter;
     private final MethodHandle _logHandle;
     private final String _formatString;
+
+    public CustomRequestLog()
+    {
+        this(new Slf4jRequestLogWriter(), EXTENDED_NCSA_FORMAT);
+    }
+
+    public CustomRequestLog(String file)
+    {
+        this(file, EXTENDED_NCSA_FORMAT);
+    }
+
+    public CustomRequestLog(String file, String format)
+    {
+        this(new RequestLogWriter(file), format);
+    }
 
     public CustomRequestLog(RequestLog.Writer writer, String formatString)
     {
@@ -301,16 +316,6 @@ public class CustomRequestLog extends ContainerLifeCycle implements RequestLog
         {
             throw new IllegalStateException(e);
         }
-    }
-
-    public CustomRequestLog(String file)
-    {
-        this(file, EXTENDED_NCSA_FORMAT);
-    }
-
-    public CustomRequestLog(String file, String format)
-    {
-        this(new RequestLogWriter(file), format);
     }
 
     @ManagedAttribute("The RequestLogWriter")
@@ -342,7 +347,7 @@ public class CustomRequestLog extends ContainerLifeCycle implements RequestLog
         }
         catch (Throwable e)
         {
-            LOG.warn(e);
+            LOG.warn("Unable to log request", e);
         }
     }
 
@@ -403,7 +408,7 @@ public class CustomRequestLog extends ContainerLifeCycle implements RequestLog
      * @see org.eclipse.jetty.util.component.AbstractLifeCycle#doStart()
      */
     @Override
-    protected synchronized void doStart() throws Exception
+    protected void doStart() throws Exception
     {
         if (_ignorePaths != null && _ignorePaths.length > 0)
         {
@@ -553,11 +558,6 @@ public class CustomRequestLog extends ContainerLifeCycle implements RequestLog
         }
     }
 
-    private MethodHandle updateLogHandle(MethodHandle logHandle, MethodHandle append, String literal)
-    {
-        return foldArguments(logHandle, dropArguments(dropArguments(append.bindTo(literal), 1, Request.class), 2, Response.class));
-    }
-
     //TODO use integer comparisons instead of strings
     private static boolean modify(List<String> modifiers, Boolean negated, StringBuilder b, Request request, Response response)
     {
@@ -570,6 +570,11 @@ public class CustomRequestLog extends ContainerLifeCycle implements RequestLog
         {
             return (modifiers.contains(responseCode));
         }
+    }
+
+    private MethodHandle updateLogHandle(MethodHandle logHandle, MethodHandle append, String literal)
+    {
+        return foldArguments(logHandle, dropArguments(dropArguments(append.bindTo(literal), 1, Request.class), 2, Response.class));
     }
 
     private MethodHandle updateLogHandle(MethodHandle logHandle, MethodHandle append, MethodHandles.Lookup lookup, String code, String arg, List<String> modifiers, boolean negated) throws NoSuchMethodException, IllegalAccessException
@@ -1188,7 +1193,7 @@ public class CustomRequestLog extends ContainerLifeCycle implements RequestLog
 
     private static void logRequestTrailer(String arg, StringBuilder b, Request request, Response response)
     {
-        HttpFields trailers = request.getTrailers();
+        HttpFields trailers = request.getTrailerHttpFields();
         if (trailers != null)
             append(b, trailers.get(arg));
         else

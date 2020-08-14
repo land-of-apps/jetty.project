@@ -1,7 +1,10 @@
-DO NOT EDIT - See: https://www.eclipse.org/jetty/documentation/current/startup-modules.html
+# DO NOT EDIT - See: https://www.eclipse.org/jetty/documentation/current/startup-modules.html
 
 [description]
 Configures the ByteBufferPool used by ServerConnectors.
+
+[depends]
+logging
 
 [xml]
 etc/jetty-bytebufferpool.xml

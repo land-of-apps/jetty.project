@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.security;
@@ -31,10 +31,10 @@ import java.util.Properties;
 import javax.servlet.ServletRequest;
 
 import org.eclipse.jetty.util.Loader;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
 import org.eclipse.jetty.util.resource.Resource;
 import org.eclipse.jetty.util.security.Credential;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * HashMapped User Realm with JDBC as data source.
@@ -51,7 +51,7 @@ import org.eclipse.jetty.util.security.Credential;
  */
 public class JDBCLoginService extends AbstractLoginService
 {
-    private static final Logger LOG = Log.getLogger(JDBCLoginService.class);
+    private static final Logger LOG = LoggerFactory.getLogger(JDBCLoginService.class);
 
     protected String _config;
     protected String _jdbcDriver;
@@ -123,22 +123,21 @@ public class JDBCLoginService extends AbstractLoginService
         _url = properties.getProperty("url");
         _userName = properties.getProperty("username");
         _password = properties.getProperty("password");
-        String userTable = properties.getProperty("usertable");
         _userTableKey = properties.getProperty("usertablekey");
-        String userTableUserField = properties.getProperty("usertableuserfield");
         _userTablePasswordField = properties.getProperty("usertablepasswordfield");
-        String roleTable = properties.getProperty("roletable");
-        String roleTableKey = properties.getProperty("roletablekey");
         _roleTableRoleField = properties.getProperty("roletablerolefield");
-        String userRoleTable = properties.getProperty("userroletable");
-        String userRoleTableUserKey = properties.getProperty("userroletableuserkey");
-        String userRoleTableRoleKey = properties.getProperty("userroletablerolekey");
+
+        final String userTable = properties.getProperty("usertable");
+        final String userTableUserField = properties.getProperty("usertableuserfield");
+        final String roleTable = properties.getProperty("roletable");
+        final String roleTableKey = properties.getProperty("roletablekey");
+        final String userRoleTable = properties.getProperty("userroletable");
+        final String userRoleTableUserKey = properties.getProperty("userroletableuserkey");
+        final String userRoleTableRoleKey = properties.getProperty("userroletablerolekey");
 
         if (_jdbcDriver == null || _jdbcDriver.equals("") ||
-            _url == null ||
-            _url.equals("") ||
-            _userName == null ||
-            _userName.equals("") ||
+            _url == null || _url.equals("") ||
+            _userName == null || _userName.equals("") ||
             _password == null)
         {
             LOG.warn("UserRealm " + getName() + " has not been properly configured");
@@ -146,8 +145,7 @@ public class JDBCLoginService extends AbstractLoginService
 
         _userSql = "select " + _userTableKey + "," + _userTablePasswordField + " from " + userTable + " where " + userTableUserField + " = ?";
         _roleSql = "select r." + _roleTableRoleField +
-            " from " + roleTable +
-            " r, " + userRoleTable +
+            " from " + roleTable + " r, " + userRoleTable +
             " u where u." + userRoleTableUserKey + " = ?" +
             " and r." + roleTableKey + " = u." + userRoleTableRoleKey;
 
@@ -264,9 +262,6 @@ public class JDBCLoginService extends AbstractLoginService
         return null;
     }
 
-    /**
-     * @see org.eclipse.jetty.util.component.AbstractLifeCycle#doStop()
-     */
     @Override
     protected void doStop() throws Exception
     {
@@ -289,7 +284,7 @@ public class JDBCLoginService extends AbstractLoginService
             }
             catch (Exception e)
             {
-                LOG.ignore(e);
+                LOG.trace("IGNORED", e);
             }
         }
         _con = null;

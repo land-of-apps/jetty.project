@@ -1,24 +1,25 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.io.ssl;
 
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.Executor;
@@ -29,6 +30,7 @@ import javax.net.ssl.SSLPeerUnverifiedException;
 
 import org.eclipse.jetty.io.ByteBufferPool;
 import org.eclipse.jetty.io.ClientConnectionFactory;
+import org.eclipse.jetty.io.ClientConnector;
 import org.eclipse.jetty.io.Connection;
 import org.eclipse.jetty.io.EndPoint;
 import org.eclipse.jetty.util.component.ContainerLifeCycle;
@@ -36,10 +38,7 @@ import org.eclipse.jetty.util.ssl.SslContextFactory;
 
 public class SslClientConnectionFactory implements ClientConnectionFactory
 {
-    public static final String SSL_CONTEXT_FACTORY_CONTEXT_KEY = "ssl.context.factory";
-    public static final String SSL_PEER_HOST_CONTEXT_KEY = "ssl.peer.host";
-    public static final String SSL_PEER_PORT_CONTEXT_KEY = "ssl.peer.port";
-    public static final String SSL_ENGINE_CONTEXT_KEY = "ssl.engine";
+    public static final String SSL_ENGINE_CONTEXT_KEY = "org.eclipse.jetty.client.ssl.engine";
 
     private final SslContextFactory sslContextFactory;
     private final ByteBufferPool byteBufferPool;
@@ -55,6 +54,11 @@ public class SslClientConnectionFactory implements ClientConnectionFactory
         this.byteBufferPool = byteBufferPool;
         this.executor = executor;
         this.connectionFactory = connectionFactory;
+    }
+
+    public ClientConnectionFactory getClientConnectionFactory()
+    {
+        return connectionFactory;
     }
 
     public void setDirectBuffersForEncryption(boolean useDirectBuffers)
@@ -78,26 +82,6 @@ public class SslClientConnectionFactory implements ClientConnectionFactory
     }
 
     /**
-     * @return whether is not required that peers send the TLS {@code close_notify} message
-     * @deprecated use {@link #isRequireCloseMessage()} instead
-     */
-    @Deprecated
-    public boolean isAllowMissingCloseMessage()
-    {
-        return !isRequireCloseMessage();
-    }
-
-    /**
-     * @param allowMissingCloseMessage whether is not required that peers send the TLS {@code close_notify} message
-     * @deprecated use {@link #setRequireCloseMessage(boolean)} instead
-     */
-    @Deprecated
-    public void setAllowMissingCloseMessage(boolean allowMissingCloseMessage)
-    {
-        setRequireCloseMessage(!allowMissingCloseMessage);
-    }
-
-    /**
      * @return whether peers must send the TLS {@code close_notify} message
      * @see SslConnection#isRequireCloseMessage()
      */
@@ -118,9 +102,8 @@ public class SslClientConnectionFactory implements ClientConnectionFactory
     @Override
     public org.eclipse.jetty.io.Connection newConnection(EndPoint endPoint, Map<String, Object> context) throws IOException
     {
-        String host = (String)context.get(SSL_PEER_HOST_CONTEXT_KEY);
-        int port = (Integer)context.get(SSL_PEER_PORT_CONTEXT_KEY);
-        SSLEngine engine = sslContextFactory.newSSLEngine(host, port);
+        InetSocketAddress address = (InetSocketAddress)context.get(ClientConnector.REMOTE_SOCKET_ADDRESS_CONTEXT_KEY);
+        SSLEngine engine = sslContextFactory.newSSLEngine(address);
         engine.setUseClientMode(true);
         context.put(SSL_ENGINE_CONTEXT_KEY, engine);
 
@@ -149,8 +132,9 @@ public class SslClientConnectionFactory implements ClientConnectionFactory
             sslConnection.setRenegotiationAllowed(sslContextFactory.isRenegotiationAllowed());
             sslConnection.setRenegotiationLimit(sslContextFactory.getRenegotiationLimit());
             sslConnection.setRequireCloseMessage(isRequireCloseMessage());
-            ContainerLifeCycle connector = (ContainerLifeCycle)context.get(ClientConnectionFactory.CONNECTOR_CONTEXT_KEY);
-            connector.getBeans(SslHandshakeListener.class).forEach(sslConnection::addHandshakeListener);
+            ContainerLifeCycle client = (ContainerLifeCycle)context.get(ClientConnectionFactory.CLIENT_CONTEXT_KEY);
+            if (client != null)
+                client.getBeans(SslHandshakeListener.class).forEach(sslConnection::addHandshakeListener);
         }
         return ClientConnectionFactory.super.customize(connection, context);
     }
@@ -170,7 +154,8 @@ public class SslClientConnectionFactory implements ClientConnectionFactory
             HostnameVerifier verifier = sslContextFactory.getHostnameVerifier();
             if (verifier != null)
             {
-                String host = (String)context.get(SSL_PEER_HOST_CONTEXT_KEY);
+                InetSocketAddress address = (InetSocketAddress)context.get(ClientConnector.REMOTE_SOCKET_ADDRESS_CONTEXT_KEY);
+                String host = address.getHostString();
                 try
                 {
                     if (!verifier.verify(host, event.getSSLEngine().getSession()))

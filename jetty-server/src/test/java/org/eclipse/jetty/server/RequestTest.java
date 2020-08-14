@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.server;
@@ -27,48 +27,66 @@ import java.io.InputStream;
 import java.io.Reader;
 import java.io.UnsupportedEncodingException;
 import java.nio.charset.StandardCharsets;
+import java.security.Principal;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import javax.servlet.DispatcherType;
 import javax.servlet.MultipartConfigElement;
 import javax.servlet.ServletException;
 import javax.servlet.ServletInputStream;
-import javax.servlet.ServletRequestEvent;
 import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import javax.servlet.http.HttpSession;
+import javax.servlet.http.MappingMatch;
 import javax.servlet.http.Part;
+import javax.servlet.http.PushBuilder;
 
 import org.eclipse.jetty.http.BadMessageException;
+import org.eclipse.jetty.http.CookieCompliance;
 import org.eclipse.jetty.http.HttpCompliance;
-import org.eclipse.jetty.http.HttpTester;
+import org.eclipse.jetty.http.HttpCookie;
+import org.eclipse.jetty.http.HttpFields;
+import org.eclipse.jetty.http.HttpHeader;
+import org.eclipse.jetty.http.HttpURI;
+import org.eclipse.jetty.http.HttpVersion;
+import org.eclipse.jetty.http.MetaData;
 import org.eclipse.jetty.http.MimeTypes;
+import org.eclipse.jetty.http.pathmap.ServletPathSpec;
+import org.eclipse.jetty.http.tools.HttpTester;
+import org.eclipse.jetty.logging.StacklessLogging;
 import org.eclipse.jetty.server.LocalConnector.LocalEndPoint;
 import org.eclipse.jetty.server.handler.AbstractHandler;
 import org.eclipse.jetty.server.handler.ContextHandler;
 import org.eclipse.jetty.server.handler.ErrorHandler;
+import org.eclipse.jetty.server.session.Session;
+import org.eclipse.jetty.server.session.SessionData;
+import org.eclipse.jetty.server.session.SessionHandler;
 import org.eclipse.jetty.toolchain.test.FS;
 import org.eclipse.jetty.toolchain.test.MavenTestingUtils;
 import org.eclipse.jetty.util.BufferUtil;
 import org.eclipse.jetty.util.IO;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
-import org.eclipse.jetty.util.log.StacklessLogging;
 import org.hamcrest.Matchers;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.nullValue;
 import static org.hamcrest.Matchers.startsWith;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -77,13 +95,14 @@ import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 // @checkstyle-disable-check : AvoidEscapedUnicodeCharactersCheck
 public class RequestTest
 {
-    private static final Logger LOG = Log.getLogger(RequestTest.class);
+    private static final Logger LOG = LoggerFactory.getLogger(RequestTest.class);
     private Server _server;
     private LocalConnector _connector;
     private RequestHandler _handler;
@@ -116,6 +135,66 @@ public class RequestTest
     {
         _server.stop();
         _server.join();
+    }
+
+    @Test
+    public void testRequestCharacterEncoding() throws Exception
+    {
+        AtomicReference<String> result = new AtomicReference<>(null);
+        AtomicReference<String> overrideCharEncoding = new AtomicReference<>(null);
+
+        _server.stop();
+        ContextHandler handler = new CharEncodingContextHandler();
+        _server.setHandler(handler);
+        handler.setHandler(_handler);
+        _handler._checker = new RequestTester()
+        {
+            @Override
+            public boolean check(HttpServletRequest request, HttpServletResponse response)
+            {
+                try
+                {
+                    String s = overrideCharEncoding.get();
+                    if (s != null)
+                        request.setCharacterEncoding(s);
+
+                    result.set(request.getCharacterEncoding());
+                    return true;
+                }
+                catch (UnsupportedEncodingException e)
+                {
+                    return false;
+                }
+            }
+        };
+        _server.start();
+
+        String request = "GET / HTTP/1.1\n" +
+            "Host: whatever\r\n" +
+            "Content-Type: text/html;charset=utf8\n" +
+            "Connection: close\n" +
+            "\n";
+
+        //test setting the default char encoding
+        handler.setDefaultRequestCharacterEncoding("ascii");
+        String response = _connector.getResponse(request);
+        assertTrue(response.startsWith("HTTP/1.1 200"));
+        assertEquals("ascii", result.get());
+
+        //test overriding the default char encoding with explicit encoding
+        result.set(null);
+        overrideCharEncoding.set("utf-16");
+        response = _connector.getResponse(request);
+        assertTrue(response.startsWith("HTTP/1.1 200"));
+        assertEquals("utf-16", result.get());
+
+        //test fallback to content-type encoding
+        result.set(null);
+        overrideCharEncoding.set(null);
+        handler.setDefaultRequestCharacterEncoding(null);
+        response = _connector.getResponse(request);
+        assertTrue(response.startsWith("HTTP/1.1 200"));
+        assertEquals("utf-8", result.get());
     }
 
     @Test
@@ -227,7 +306,7 @@ public class RequestTest
                 assertNull(request.getCookies());
                 assertEquals("", request.getHeader("Name"));
                 assertTrue(request.getHeaders("Name").hasMoreElements()); // empty
-                assertThrows(IllegalArgumentException.class, () ->  request.getDateHeader("Name"));
+                assertThrows(IllegalArgumentException.class, () -> request.getDateHeader("Name"));
                 assertEquals(-1, request.getDateHeader("Other"));
                 return true;
             }
@@ -342,28 +421,13 @@ public class RequestTest
         testTmpDir.deleteOnExit();
         assertTrue(testTmpDir.list().length == 0);
 
+        // We should have two tmp files after parsing the multipart form.
+        RequestTester tester = (request, response) -> testTmpDir.list().length == 2;
+
         ContextHandler contextHandler = new ContextHandler();
         contextHandler.setContextPath("/foo");
         contextHandler.setResourceBase(".");
-        contextHandler.setHandler(new MultiPartRequestHandler(testTmpDir));
-        contextHandler.addEventListener(new MultiPartCleanerListener()
-        {
-
-            @Override
-            public void requestDestroyed(ServletRequestEvent sre)
-            {
-                MultiParts m = (MultiParts)sre.getServletRequest().getAttribute(Request.MULTIPARTS);
-                assertNotNull(m);
-                ContextHandler.Context c = m.getContext();
-                assertNotNull(c);
-                assertTrue(c == sre.getServletContext());
-                assertTrue(!m.isEmpty());
-                assertTrue(testTmpDir.list().length == 2);
-                super.requestDestroyed(sre);
-                String[] files = testTmpDir.list();
-                assertTrue(files.length == 0);
-            }
-        });
+        contextHandler.setHandler(new MultiPartRequestHandler(testTmpDir, tester));
         _server.stop();
         _server.setHandler(contextHandler);
         _server.start();
@@ -383,120 +447,22 @@ public class RequestTest
             "Host: whatever\r\n" +
             "Content-Type: multipart/form-data; boundary=\"AaB03x\"\r\n" +
             "Content-Length: " + multipart.getBytes().length + "\r\n" +
-            "Connection: close\r\n" +
             "\r\n" +
             multipart;
 
-        String responses = _connector.getResponse(request);
-        //System.err.println(responses);
-        assertTrue(responses.startsWith("HTTP/1.1 200"));
-    }
+        LocalEndPoint endPoint = _connector.connect();
+        endPoint.addInput(request);
+        assertTrue(endPoint.getResponse().startsWith("HTTP/1.1 200"));
 
-    @Test
-    public void testUtilMultiPart() throws Exception
-    {
-        final File testTmpDir = File.createTempFile("reqtest", null);
-        if (testTmpDir.exists())
-            testTmpDir.delete();
-        testTmpDir.mkdir();
-        testTmpDir.deleteOnExit();
-        assertTrue(testTmpDir.list().length == 0);
-
-        ContextHandler contextHandler = new ContextHandler();
-        contextHandler.setContextPath("/foo");
-        contextHandler.setResourceBase(".");
-        contextHandler.setHandler(new MultiPartRequestHandler(testTmpDir));
-        contextHandler.addEventListener(new MultiPartCleanerListener()
-        {
-
-            @Override
-            public void requestDestroyed(ServletRequestEvent sre)
-            {
-                MultiParts m = (MultiParts)sre.getServletRequest().getAttribute(Request.MULTIPARTS);
-                assertNotNull(m);
-                ContextHandler.Context c = m.getContext();
-                assertNotNull(c);
-                assertTrue(c == sre.getServletContext());
-                assertTrue(!m.isEmpty());
-                assertTrue(testTmpDir.list().length == 2);
-                super.requestDestroyed(sre);
-                String[] files = testTmpDir.list();
-                assertTrue(files.length == 0);
-            }
-        });
-        _server.stop();
-        _server.setHandler(contextHandler);
-        _connector.getBean(HttpConnectionFactory.class).getHttpConfiguration().setMultiPartFormDataCompliance(MultiPartFormDataCompliance.LEGACY);
-        _server.start();
-
-        String multipart = "      --AaB03x\r" +
-            "content-disposition: form-data; name=\"field1\"\r" +
-            "\r" +
-            "Joe Blow\r" +
-            "--AaB03x\r" +
-            "content-disposition: form-data; name=\"stuff\"; filename=\"foo.upload\"\r" +
-            "Content-Type: text/plain;charset=ISO-8859-1\r" +
-            "\r" +
-            "000000000000000000000000000000000000000000000000000\r" +
-            "--AaB03x--\r";
-
-        String request = "GET /foo/x.html HTTP/1.1\r\n" +
+        // We know the previous request has completed if another request can be processed on the same connection.
+        String cleanupRequest = "GET /foo/cleanup HTTP/1.1\r\n" +
             "Host: whatever\r\n" +
-            "Content-Type: multipart/form-data; boundary=\"AaB03x\"\r\n" +
-            "Content-Length: " + multipart.getBytes().length + "\r\n" +
             "Connection: close\r\n" +
-            "\r\n" +
-            multipart;
+            "\r\n";
 
-        String responses = _connector.getResponse(request);
-        //System.err.println(responses);
-        assertThat(responses, Matchers.startsWith("HTTP/1.1 200"));
-        assertThat(responses, Matchers.containsString("Violation: CR_LINE_TERMINATION"));
-        assertThat(responses, Matchers.containsString("Violation: NO_CRLF_AFTER_PREAMBLE"));
-    }
-
-    @Test
-    public void testHttpMultiPart() throws Exception
-    {
-        final File testTmpDir = File.createTempFile("reqtest", null);
-        if (testTmpDir.exists())
-            testTmpDir.delete();
-        testTmpDir.mkdir();
-        testTmpDir.deleteOnExit();
-        assertTrue(testTmpDir.list().length == 0);
-
-        ContextHandler contextHandler = new ContextHandler();
-        contextHandler.setContextPath("/foo");
-        contextHandler.setResourceBase(".");
-        contextHandler.setHandler(new MultiPartRequestHandler(testTmpDir));
-
-        _server.stop();
-        _server.setHandler(contextHandler);
-        _connector.getBean(HttpConnectionFactory.class).getHttpConfiguration().setMultiPartFormDataCompliance(MultiPartFormDataCompliance.RFC7578);
-        _server.start();
-
-        String multipart = "      --AaB03x\r" +
-            "content-disposition: form-data; name=\"field1\"\r" +
-            "\r" +
-            "Joe Blow\r" +
-            "--AaB03x\r" +
-            "content-disposition: form-data; name=\"stuff\"; filename=\"foo.upload\"\r" +
-            "Content-Type: text/plain;charset=ISO-8859-1\r" +
-            "\r" +
-            "000000000000000000000000000000000000000000000000000\r" +
-            "--AaB03x--\r";
-
-        String request = "GET /foo/x.html HTTP/1.1\r\n" +
-            "Host: whatever\r\n" +
-            "Content-Type: multipart/form-data; boundary=\"AaB03x\"\r\n" +
-            "Content-Length: " + multipart.getBytes().length + "\r\n" +
-            "Connection: close\r\n" +
-            "\r\n" +
-            multipart;
-
-        String responses = _connector.getResponse(request);
-        //System.err.println(responses);
-        assertThat(responses, Matchers.startsWith("HTTP/1.1 500"));
+        endPoint.addInput(cleanupRequest);
+        assertTrue(endPoint.getResponse().startsWith("HTTP/1.1 200"));
+        assertThat(testTmpDir.list().length, is(0));
     }
 
     @Test
@@ -514,22 +480,6 @@ public class RequestTest
         contextHandler.setContextPath("/foo");
         contextHandler.setResourceBase(".");
         contextHandler.setHandler(new BadMultiPartRequestHandler(testTmpDir));
-        contextHandler.addEventListener(new MultiPartCleanerListener()
-        {
-
-            @Override
-            public void requestDestroyed(ServletRequestEvent sre)
-            {
-                MultiParts m = (MultiParts)sre.getServletRequest().getAttribute(Request.MULTIPARTS);
-                assertNotNull(m);
-                ContextHandler.Context c = m.getContext();
-                assertNotNull(c);
-                assertTrue(c == sre.getServletContext());
-                super.requestDestroyed(sre);
-                String[] files = testTmpDir.list();
-                assertTrue(files.length == 0);
-            }
-        });
         _server.stop();
         _server.setHandler(contextHandler);
         _server.start();
@@ -553,12 +503,21 @@ public class RequestTest
             "\r\n" +
             multipart;
 
+        LocalEndPoint endPoint = _connector.connect();
         try (StacklessLogging stackless = new StacklessLogging(HttpChannel.class))
         {
-            String responses = _connector.getResponse(request);
-            //System.err.println(responses);
-            assertTrue(responses.startsWith("HTTP/1.1 500"));
+            endPoint.addInput(request);
+            assertTrue(endPoint.getResponse().startsWith("HTTP/1.1 500"));
         }
+
+        // Wait for the cleanup of the multipart files.
+        assertTimeoutPreemptively(Duration.ofSeconds(5), () ->
+        {
+            while (testTmpDir.list().length > 0)
+            {
+                Thread.yield();
+            }
+        });
     }
 
     @Test
@@ -653,7 +612,7 @@ public class RequestTest
         System.out.println(request);
 
         String responses = _connector.getResponse(request);
-        assertThat(responses,startsWith("HTTP/1.1 200"));
+        assertThat(responses, startsWith("HTTP/1.1 200"));
     }
 
     /**
@@ -986,9 +945,9 @@ public class RequestTest
                 "Connection: close\r\n" +
                 "\r\n" +
                 content;
-            Log.getRootLogger().debug("test l={}", l);
+            LOG.debug("test l={}", l);
             String response = _connector.getResponse(request);
-            Log.getRootLogger().debug(response);
+            LOG.debug(response);
             assertThat(response, containsString(" 200 OK"));
             assertEquals(l, length.get());
             content += "x";
@@ -1144,7 +1103,7 @@ public class RequestTest
 
                 // Fake a @MultiPartConfig'd servlet endpoint
                 MultipartConfigElement multipartConfig = new MultipartConfigElement(tmpdir.getAbsolutePath());
-                request.setAttribute(Request.MULTIPART_CONFIG_ELEMENT, multipartConfig);
+                request.setAttribute(Request.__MULTIPART_CONFIG_ELEMENT, multipartConfig);
 
                 // Normal processing
                 baseRequest.setHandled(true);
@@ -1852,10 +1811,213 @@ public class RequestTest
         assertNotNull(request.getParameterMap());
         assertEquals(0, request.getParameterMap().size());
     }
+    
+    @Test
+    public void testPushBuilder() throws Exception
+    {
+        String uri = "/foo/something";
+        Request request = new TestRequest(null, null);
+        request.getResponse().getHttpFields().add(new HttpCookie.SetCookieHttpField(new HttpCookie("good","thumbsup", 100), CookieCompliance.RFC6265));
+        request.getResponse().getHttpFields().add(new HttpCookie.SetCookieHttpField(new HttpCookie("bonza","bewdy", 1), CookieCompliance.RFC6265));
+        request.getResponse().getHttpFields().add(new HttpCookie.SetCookieHttpField(new HttpCookie("bad", "thumbsdown", 0), CookieCompliance.RFC6265));
+        HttpFields.Mutable fields = HttpFields.build();
+        fields.add(HttpHeader.AUTHORIZATION, "Basic foo");
+        request.setMetaData(new MetaData.Request("GET", HttpURI.from(uri), HttpVersion.HTTP_1_0, fields));
+        assertTrue(request.isPushSupported());
+        PushBuilder builder = request.newPushBuilder();
+        assertNotNull(builder);
+        assertEquals("GET", builder.getMethod());
+        assertThrows(NullPointerException.class, () ->
+        {
+            builder.method(null);
+        });
+        assertThrows(IllegalArgumentException.class, () ->
+        {
+            builder.method("");
+        });
+        assertThrows(IllegalArgumentException.class, () ->
+        {
+            builder.method("   ");
+        });
+        assertThrows(IllegalArgumentException.class, () ->
+        {
+            builder.method("POST");
+        });
+        assertThrows(IllegalArgumentException.class, () ->
+        {
+            builder.method("PUT");
+        });
+        assertThrows(IllegalArgumentException.class, () ->
+        {
+            builder.method("DELETE");
+        });
+        assertThrows(IllegalArgumentException.class, () ->
+        {
+            builder.method("CONNECT");
+        });
+        assertThrows(IllegalArgumentException.class, () ->
+        {
+            builder.method("OPTIONS");
+        });
+        assertThrows(IllegalArgumentException.class, () ->
+        {
+            builder.method("TRACE");
+        });
+        assertEquals(TestRequest.TEST_SESSION_ID, builder.getSessionId());
+        builder.path("/foo/something-else.txt");
+        assertEquals("/foo/something-else.txt", builder.getPath());
+        assertEquals("Basic foo", builder.getHeader("Authorization"));
+        assertThat(builder.getHeader("Cookie"), containsString("bonza"));
+        assertThat(builder.getHeader("Cookie"), containsString("good"));
+        assertThat(builder.getHeader("Cookie"), containsString("maxpos"));
+        assertThat(builder.getHeader("Cookie"), not(containsString("bad")));
+    }
+
+    @Test
+    public void testServletPathMapping() throws Exception
+    {
+        ServletPathSpec spec;
+        String uri;
+        ServletPathMapping m;
+
+        spec = null;
+        uri = null;
+        m = new ServletPathMapping(spec, null, uri);
+        assertThat(m.getMappingMatch(), nullValue());
+        assertThat(m.getMatchValue(), is(""));
+        assertThat(m.getPattern(), nullValue());
+        assertThat(m.getServletName(), is(""));
+        assertThat(m.getServletPath(), nullValue());
+        assertThat(m.getPathInfo(), nullValue());
+
+        spec = new ServletPathSpec("");
+        uri = "/";
+        m = new ServletPathMapping(spec, "Something", uri);
+        assertThat(m.getMappingMatch(), is(MappingMatch.CONTEXT_ROOT));
+        assertThat(m.getMatchValue(), is(""));
+        assertThat(m.getPattern(), is(""));
+        assertThat(m.getServletName(), is("Something"));
+        assertThat(m.getServletPath(), is(spec.getPathMatch(uri)));
+        assertThat(m.getPathInfo(), is(spec.getPathInfo(uri)));
+
+        spec = new ServletPathSpec("/");
+        uri = "/some/path";
+        m = new ServletPathMapping(spec, "Default", uri);
+        assertThat(m.getMappingMatch(), is(MappingMatch.DEFAULT));
+        assertThat(m.getMatchValue(), is(""));
+        assertThat(m.getPattern(), is("/"));
+        assertThat(m.getServletName(), is("Default"));
+        assertThat(m.getServletPath(), is(spec.getPathMatch(uri)));
+        assertThat(m.getPathInfo(), is(spec.getPathInfo(uri)));
+
+        spec = new ServletPathSpec("/foo/*");
+        uri = "/foo/bar";
+        m = new ServletPathMapping(spec, "FooServlet", uri);
+        assertThat(m.getMappingMatch(), is(MappingMatch.PATH));
+        assertThat(m.getMatchValue(), is("foo"));
+        assertThat(m.getPattern(), is("/foo/*"));
+        assertThat(m.getServletName(), is("FooServlet"));
+        assertThat(m.getServletPath(), is(spec.getPathMatch(uri)));
+        assertThat(m.getPathInfo(), is(spec.getPathInfo(uri)));
+
+        uri = "/foo/";
+        m = new ServletPathMapping(spec, "FooServlet", uri);
+        assertThat(m.getMappingMatch(), is(MappingMatch.PATH));
+        assertThat(m.getMatchValue(), is("foo"));
+        assertThat(m.getPattern(), is("/foo/*"));
+        assertThat(m.getServletName(), is("FooServlet"));
+        assertThat(m.getServletPath(), is(spec.getPathMatch(uri)));
+        assertThat(m.getPathInfo(), is(spec.getPathInfo(uri)));
+
+        uri = "/foo";
+        m = new ServletPathMapping(spec, "FooServlet", uri);
+        assertThat(m.getMappingMatch(), is(MappingMatch.PATH));
+        assertThat(m.getMatchValue(), is("foo"));
+        assertThat(m.getPattern(), is("/foo/*"));
+        assertThat(m.getServletName(), is("FooServlet"));
+        assertThat(m.getServletPath(), is(spec.getPathMatch(uri)));
+        assertThat(m.getPathInfo(), is(spec.getPathInfo(uri)));
+
+        spec = new ServletPathSpec("*.jsp");
+        uri = "/foo/bar.jsp";
+        m = new ServletPathMapping(spec, "JspServlet", uri);
+        assertThat(m.getMappingMatch(), is(MappingMatch.EXTENSION));
+        assertThat(m.getMatchValue(), is("foo/bar"));
+        assertThat(m.getPattern(), is("*.jsp"));
+        assertThat(m.getServletName(), is("JspServlet"));
+        assertThat(m.getServletPath(), is(spec.getPathMatch(uri)));
+        assertThat(m.getPathInfo(), is(spec.getPathInfo(uri)));
+
+        spec = new ServletPathSpec("/catalog");
+        uri = "/catalog";
+        m = new ServletPathMapping(spec, "CatalogServlet", uri);
+        assertThat(m.getMappingMatch(), is(MappingMatch.EXACT));
+        assertThat(m.getMatchValue(), is("catalog"));
+        assertThat(m.getPattern(), is("/catalog"));
+        assertThat(m.getServletName(), is("CatalogServlet"));
+        assertThat(m.getServletPath(), is(spec.getPathMatch(uri)));
+        assertThat(m.getPathInfo(), is(spec.getPathInfo(uri)));
+    }
 
     interface RequestTester
     {
         boolean check(HttpServletRequest request, HttpServletResponse response) throws IOException;
+    }
+    
+    private class TestRequest extends Request
+    {
+        public static final String TEST_SESSION_ID = "abc123";
+        Response _response = new Response(null, null);
+        Cookie c1;
+        Cookie c2;
+        
+        public TestRequest(HttpChannel channel, HttpInput input)
+        {
+            super(channel, input);
+            c1 = new Cookie("maxpos", "xxx");
+            c1.setMaxAge(1);
+            c2 = new Cookie("maxneg", "yyy");
+            c2.setMaxAge(-1);
+        }
+
+        @Override
+        public boolean isPushSupported()
+        {
+            return true;
+        }
+
+        @Override
+        public HttpSession getSession()
+        {
+            return new Session(new SessionHandler(), new SessionData(TEST_SESSION_ID,  "", "0.0.0.0", 0, 0, 0, 300));
+        }
+
+        @Override
+        public Principal getUserPrincipal()
+        {
+            return new Principal()
+            {
+
+                @Override
+                public String getName()
+                {
+                    return "user";
+                }
+
+            };
+        }
+
+        @Override
+        public Response getResponse()
+        {
+            return _response;
+        }
+
+        @Override
+        public Cookie[] getCookies()
+        {
+            return new Cookie[] {c1,c2};
+        }
     }
 
     private class RequestHandler extends AbstractHandler
@@ -1883,22 +2045,29 @@ public class RequestTest
 
     private class MultiPartRequestHandler extends AbstractHandler
     {
+        RequestTester checker;
         File tmpDir;
 
-        public MultiPartRequestHandler(File tmpDir)
+        public MultiPartRequestHandler(File tmpDir, RequestTester checker)
         {
             this.tmpDir = tmpDir;
+            this.checker = checker;
         }
 
         @Override
         public void handle(String target, Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException
         {
             ((Request)request).setHandled(true);
+            if ("/cleanup".equals(target))
+            {
+                response.setStatus(200);
+                return;
+            }
+
             try
             {
-
                 MultipartConfigElement mpce = new MultipartConfigElement(tmpDir.getAbsolutePath(), -1, -1, 2);
-                request.setAttribute(Request.MULTIPART_CONFIG_ELEMENT, mpce);
+                request.setAttribute(Request.__MULTIPART_CONFIG_ELEMENT, mpce);
 
                 String field1 = request.getParameter("field1");
                 assertNotNull(field1);
@@ -1915,6 +2084,9 @@ public class RequestTest
                         response.addHeader("Violation", v);
                     }
                 }
+
+                if (checker != null && !checker.check(request, response))
+                    response.sendError(500);
             }
             catch (IllegalStateException e)
             {
@@ -1942,11 +2114,17 @@ public class RequestTest
         public void handle(String target, Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException
         {
             ((Request)request).setHandled(true);
+            if ("/cleanup".equals(target))
+            {
+                response.setStatus(200);
+                return;
+            }
+
             try
             {
 
                 MultipartConfigElement mpce = new MultipartConfigElement(tmpDir.getAbsolutePath(), -1, -1, 2);
-                request.setAttribute(Request.MULTIPART_CONFIG_ELEMENT, mpce);
+                request.setAttribute(Request.__MULTIPART_CONFIG_ELEMENT, mpce);
 
                 //We should get an error when we getParams if there was a problem parsing the multipart
                 request.getPart("xxx");
@@ -1956,6 +2134,44 @@ public class RequestTest
             {
                 response.sendError(500);
             }
+        }
+    }
+
+    private class TestUserIdentityScope implements UserIdentity.Scope
+    {
+        private ContextHandler _handler;
+        private String _contextPath;
+        private String _name;
+
+        public TestUserIdentityScope(ContextHandler handler, String contextPath, String name)
+        {
+            _handler = handler;
+            _contextPath = contextPath;
+            _name = name;
+        }
+
+        @Override
+        public ContextHandler getContextHandler()
+        {
+            return _handler;
+        }
+
+        @Override
+        public String getContextPath()
+        {
+            return _contextPath;
+        }
+
+        @Override
+        public String getName()
+        {
+            return _name;
+        }
+
+        @Override
+        public Map<String, String> getRoleRefMap()
+        {
+            return null;
         }
     }
 }

@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.rewrite.handler;
@@ -25,11 +25,10 @@ import javax.servlet.http.HttpServletResponse;
 import org.eclipse.jetty.http.HttpURI;
 import org.eclipse.jetty.server.Request;
 import org.eclipse.jetty.util.ArrayUtil;
-import org.eclipse.jetty.util.StringUtil;
 import org.eclipse.jetty.util.URIUtil;
 import org.eclipse.jetty.util.component.Dumpable;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Base container to group rules. Can be extended so that the contained rules
@@ -38,7 +37,7 @@ import org.eclipse.jetty.util.log.Logger;
 public class RuleContainer extends Rule implements Dumpable
 {
     public static final String ORIGINAL_QUERYSTRING_ATTRIBUTE_SUFFIX = ".QUERYSTRING";
-    private static final Logger LOG = Log.getLogger(RuleContainer.class);
+    private static final Logger LOG = LoggerFactory.getLogger(RuleContainer.class);
 
     protected Rule[] _rules;
 
@@ -188,21 +187,15 @@ public class RuleContainer extends Rule implements Dumpable
                         ((Rule.ApplyURI)rule).applyURI(baseRequest, baseRequest.getRequestURI(), encoded);
                     else
                     {
-                        String uriPathQuery = encoded;
                         HttpURI baseUri = baseRequest.getHttpURI();
-                        // Copy path params from original URI if present
-                        if ((baseUri != null) && StringUtil.isNotBlank(baseUri.getParam()))
-                        {
-                            HttpURI uri = new HttpURI(uriPathQuery);
-                            uri.setParam(baseUri.getParam());
-                            uriPathQuery = uri.toString();
-                        }
-                        baseRequest.setURIPathQuery(uriPathQuery);
+                        baseRequest.setHttpURI(HttpURI.build(baseUri,encoded)
+                            .param(baseUri.getParam())
+                            .query(baseUri.getQuery()));
                     }
                 }
 
                 if (_rewritePathInfo)
-                    baseRequest.setPathInfo(applied);
+                    baseRequest.setContext(baseRequest.getContext(), applied);
 
                 target = applied;
 

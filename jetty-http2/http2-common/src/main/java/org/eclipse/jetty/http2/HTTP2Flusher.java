@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.http2;
@@ -38,14 +38,16 @@ import org.eclipse.jetty.io.EofException;
 import org.eclipse.jetty.util.Callback;
 import org.eclipse.jetty.util.IteratingCallback;
 import org.eclipse.jetty.util.component.Dumpable;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
+import org.eclipse.jetty.util.thread.AutoLock;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class HTTP2Flusher extends IteratingCallback implements Dumpable
 {
-    private static final Logger LOG = Log.getLogger(HTTP2Flusher.class);
+    private static final Logger LOG = LoggerFactory.getLogger(HTTP2Flusher.class);
     private static final ByteBuffer[] EMPTY_BYTE_BUFFERS = new ByteBuffer[0];
 
+    private final AutoLock lock = new AutoLock();
     private final Queue<WindowEntry> windows = new ArrayDeque<>();
     private final Deque<Entry> entries = new ArrayDeque<>();
     private final Queue<Entry> pendingEntries = new ArrayDeque<>();
@@ -64,7 +66,7 @@ public class HTTP2Flusher extends IteratingCallback implements Dumpable
     public void window(IStream stream, WindowUpdateFrame frame)
     {
         Throwable closed;
-        synchronized (this)
+        try (AutoLock l = lock.lock())
         {
             closed = terminated;
             if (closed == null)
@@ -78,7 +80,7 @@ public class HTTP2Flusher extends IteratingCallback implements Dumpable
     public boolean prepend(Entry entry)
     {
         Throwable closed;
-        synchronized (this)
+        try (AutoLock l = lock.lock())
         {
             closed = terminated;
             if (closed == null)
@@ -97,7 +99,7 @@ public class HTTP2Flusher extends IteratingCallback implements Dumpable
     public boolean append(Entry entry)
     {
         Throwable closed;
-        synchronized (this)
+        try (AutoLock l = lock.lock())
         {
             closed = terminated;
             if (closed == null)
@@ -115,7 +117,7 @@ public class HTTP2Flusher extends IteratingCallback implements Dumpable
 
     private int getWindowQueueSize()
     {
-        synchronized (this)
+        try (AutoLock l = lock.lock())
         {
             return windows.size();
         }
@@ -123,7 +125,7 @@ public class HTTP2Flusher extends IteratingCallback implements Dumpable
 
     public int getFrameQueueSize()
     {
-        synchronized (this)
+        try (AutoLock l = lock.lock())
         {
             return entries.size();
         }
@@ -135,7 +137,7 @@ public class HTTP2Flusher extends IteratingCallback implements Dumpable
         if (LOG.isDebugEnabled())
             LOG.debug("Flushing {}", session);
 
-        synchronized (this)
+        try (AutoLock l = lock.lock())
         {
             if (terminated != null)
                 throw terminated;
@@ -323,7 +325,7 @@ public class HTTP2Flusher extends IteratingCallback implements Dumpable
 
         Throwable closed;
         Set<Entry> allEntries;
-        synchronized (this)
+        try (AutoLock l = lock.lock())
         {
             closed = terminated;
             terminated = x;
@@ -352,7 +354,7 @@ public class HTTP2Flusher extends IteratingCallback implements Dumpable
     void terminate(Throwable cause)
     {
         Throwable closed;
-        synchronized (this)
+        try (AutoLock l = lock.lock())
         {
             closed = terminated;
             terminated = cause;
@@ -436,7 +438,7 @@ public class HTTP2Flusher extends IteratingCallback implements Dumpable
             // It's an application frame; is the stream gone already?
             if (stream == null)
                 return true;
-            return stream.isReset();
+            return stream.isResetOrFailed();
         }
 
         private boolean isProtocolFrame(Frame frame)

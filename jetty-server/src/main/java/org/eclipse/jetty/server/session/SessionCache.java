@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.server.session;
@@ -53,9 +53,9 @@ import org.eclipse.jetty.util.component.LifeCycle;
  */
 public interface SessionCache extends LifeCycle
 {
-    int NEVER_EVICT = -1;
-    int EVICT_ON_SESSION_EXIT = 0;
-    int EVICT_ON_INACTIVITY = 1; //any number equal or greater is time in seconds
+    public static final int NEVER_EVICT = -1;
+    public static final int EVICT_ON_SESSION_EXIT = 0;
+    public static final int EVICT_ON_INACTIVITY = 1; //any number equal or greater is time in seconds
 
     /**
      * @param context the {@link SessionContext} to use for this cache
@@ -86,25 +86,6 @@ public interface SessionCache extends LifeCycle
     Session newSession(SessionData data);
 
     /**
-     * Change the id of a session.
-     *
-     * This method has been superceded by the 4 arg renewSessionId method and
-     * should no longer be called.
-     *
-     * @param oldId the old id
-     * @param newId the new id
-     * @return the changed Session
-     * @throws Exception if anything went wrong
-     * @deprecated use
-     * {@link #renewSessionId(String oldId, String newId, String oldExtendedId, String newExtendedId)}
-     */
-    @Deprecated
-    default Session renewSessionId(String oldId, String newId) throws Exception
-    {
-        return null;
-    }
-
-    /**
      * Change the id of a Session.
      *
      * @param oldId the current session id
@@ -114,10 +95,7 @@ public interface SessionCache extends LifeCycle
      * @return the Session after changing its id
      * @throws Exception if any error occurred
      */
-    default Session renewSessionId(String oldId, String newId, String oldExtendedId, String newExtendedId) throws Exception
-    {
-        return renewSessionId(oldId, newId);
-    }
+    Session renewSessionId(String oldId, String newId, String oldExtendedId, String newExtendedId) throws Exception;
     
     /**
      * Adds a new Session, with a never-before-used id,
@@ -148,11 +126,11 @@ public interface SessionCache extends LifeCycle
      * @param id the session id
      * @param session the current session object
      * @throws Exception if any error occurred
-     * @deprecated @see release
+     * @deprecated use {@link #release(String, Session)} instead
      */
+    @Deprecated
     void put(String id, Session session) throws Exception;
-    
-    
+
     /**
      * Finish using a Session. This is called by the SessionHandler
      * once a request is finished with a Session. SessionCache

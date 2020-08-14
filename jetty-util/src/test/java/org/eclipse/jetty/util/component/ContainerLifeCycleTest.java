@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.util.component;
@@ -443,6 +443,11 @@ public class ContainerLifeCycleTest
 
         c0.addBean(inherited);
 
+        assertEquals("listener", handled.poll());
+        assertEquals("added", operation.poll());
+        assertEquals(c0, parent.poll());
+        assertEquals(inherited, child.poll());
+
         assertEquals("inherited", handled.poll());
         assertEquals("added", operation.poll());
         assertEquals(c0, parent.poll());
@@ -452,11 +457,6 @@ public class ContainerLifeCycleTest
         assertEquals("added", operation.poll());
         assertEquals(c0, parent.poll());
         assertEquals(listener, child.poll());
-
-        assertEquals("listener", handled.poll());
-        assertEquals("added", operation.poll());
-        assertEquals(c0, parent.poll());
-        assertEquals(inherited, child.poll());
 
         assertEquals("inherited", handled.poll());
         assertEquals("added", operation.poll());
@@ -628,24 +628,19 @@ public class ContainerLifeCycleTest
         TestContainerLifeCycle leaf = new TestContainerLifeCycle();
         right.addBean(leaf);
 
-        Integer zero = 0;
-        Integer one = 1;
-        Integer two = 2;
-        Integer three = 3;
-        Integer four = 4;
-        root.addBean(zero);
-        root.addBean(one);
-        left.addBean(two);
-        right.addBean(three);
-        leaf.addBean(four);
+        root.addBean(0);
+        root.addBean(1);
+        left.addBean(2);
+        right.addBean(3);
+        leaf.addBean(4);
         leaf.addBean("leaf");
 
         assertThat(root.getBeans(Container.class), containsInAnyOrder(left, right));
-        assertThat(root.getBeans(Integer.class), containsInAnyOrder(zero, one));
+        assertThat(root.getBeans(Integer.class), containsInAnyOrder(0, 1));
         assertThat(root.getBeans(String.class), containsInAnyOrder());
 
         assertThat(root.getContainedBeans(Container.class), containsInAnyOrder(left, right, leaf));
-        assertThat(root.getContainedBeans(Integer.class), containsInAnyOrder(zero, one, two, three, four));
+        assertThat(root.getContainedBeans(Integer.class), containsInAnyOrder(0, 1, 2, 3, 4));
         assertThat(root.getContainedBeans(String.class), containsInAnyOrder("leaf"));
     }
 

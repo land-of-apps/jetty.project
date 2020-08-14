@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.util;
@@ -136,18 +136,6 @@ public class StringUtilTest
 
     @Test
     @SuppressWarnings("ReferenceEquality")
-    public void testUnquote()
-    {
-        String uq = " not quoted ";
-        assertTrue(StringUtil.unquote(uq) == uq);
-        assertEquals(StringUtil.unquote("' quoted string '"), " quoted string ");
-        assertEquals(StringUtil.unquote("\" quoted string \""), " quoted string ");
-        assertEquals(StringUtil.unquote("' quoted\"string '"), " quoted\"string ");
-        assertEquals(StringUtil.unquote("\" quoted'string \""), " quoted'string ");
-    }
-
-    @Test
-    @SuppressWarnings("ReferenceEquality")
     public void testNonNull()
     {
         String nn = "non empty string";
@@ -176,26 +164,6 @@ public class StringUtilTest
         StringUtil.append(buf, (byte)-1, 16);
         StringUtil.append(buf, (byte)-16, 16);
         assertEquals("ab0c10fff0", buf.toString());
-    }
-
-    @Test
-    @Deprecated
-    public void testSidConversion() throws Exception
-    {
-        String sid4 = "S-1-4-21-3623811015-3361044348-30300820";
-        String sid5 = "S-1-5-21-3623811015-3361044348-30300820-1013";
-        String sid6 = "S-1-6-21-3623811015-3361044348-30300820-1013-23445";
-        String sid12 = "S-1-12-21-3623811015-3361044348-30300820-1013-23445-21-3623811015-3361044348-30300820-1013-23445";
-
-        byte[] sid4Bytes = StringUtil.sidStringToBytes(sid4);
-        byte[] sid5Bytes = StringUtil.sidStringToBytes(sid5);
-        byte[] sid6Bytes = StringUtil.sidStringToBytes(sid6);
-        byte[] sid12Bytes = StringUtil.sidStringToBytes(sid12);
-
-        assertEquals(sid4, StringUtil.sidBytesToString(sid4Bytes));
-        assertEquals(sid5, StringUtil.sidBytesToString(sid5Bytes));
-        assertEquals(sid6, StringUtil.sidBytesToString(sid6Bytes));
-        assertEquals(sid12, StringUtil.sidBytesToString(sid12Bytes));
     }
 
     @Test

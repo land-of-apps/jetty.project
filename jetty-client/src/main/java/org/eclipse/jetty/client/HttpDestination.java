@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.client;
@@ -46,16 +46,16 @@ import org.eclipse.jetty.util.annotation.ManagedObject;
 import org.eclipse.jetty.util.component.ContainerLifeCycle;
 import org.eclipse.jetty.util.component.Dumpable;
 import org.eclipse.jetty.util.component.DumpableCollection;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.Logger;
 import org.eclipse.jetty.util.ssl.SslContextFactory;
 import org.eclipse.jetty.util.thread.Scheduler;
 import org.eclipse.jetty.util.thread.Sweeper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @ManagedObject
 public abstract class HttpDestination extends ContainerLifeCycle implements Destination, Closeable, Callback, Dumpable
 {
-    protected static final Logger LOG = Log.getLogger(HttpDestination.class);
+    private static final Logger LOG = LoggerFactory.getLogger(HttpDestination.class);
 
     private final HttpClient client;
     private final Origin origin;
@@ -80,6 +80,11 @@ public abstract class HttpDestination extends ContainerLifeCycle implements Dest
 
         this.timeout = new TimeoutTask(client.getScheduler());
 
+        String host = HostPort.normalizeHost(getHost());
+        if (!client.isDefaultPort(getScheme(), getPort()))
+            host += ":" + getPort();
+        hostField = new HttpField(HttpHeader.HOST, host);
+
         ProxyConfiguration proxyConfig = client.getProxyConfiguration();
         proxy = proxyConfig.match(origin);
         ClientConnectionFactory connectionFactory = client.getTransport();
@@ -98,11 +103,11 @@ public abstract class HttpDestination extends ContainerLifeCycle implements Dest
         if (tag instanceof ClientConnectionFactory.Decorator)
             connectionFactory = ((ClientConnectionFactory.Decorator)tag).apply(connectionFactory);
         this.connectionFactory = connectionFactory;
+    }
 
-        String host = HostPort.normalizeHost(getHost());
-        if (!client.isDefaultPort(getScheme(), getPort()))
-            host += ":" + getPort();
-        hostField = new HttpField(HttpHeader.HOST, host);
+    public void accept(Connection connection)
+    {
+        connectionPool.accept(connection);
     }
 
     @Override
@@ -136,23 +141,8 @@ public abstract class HttpDestination extends ContainerLifeCycle implements Dest
         return new BlockingArrayQueue<>(client.getMaxRequestsQueuedPerDestination());
     }
 
-    /**
-     * Creates a new {@code SslClientConnectionFactory} wrapping the given connection factory.
-     *
-     * @param connectionFactory the connection factory to wrap
-     * @return a new SslClientConnectionFactory
-     * @deprecated use {@link #newSslClientConnectionFactory(SslContextFactory, ClientConnectionFactory)} instead
-     */
-    @Deprecated
-    protected ClientConnectionFactory newSslClientConnectionFactory(ClientConnectionFactory connectionFactory)
+    protected ClientConnectionFactory newSslClientConnectionFactory(SslContextFactory.Client sslContextFactory, ClientConnectionFactory connectionFactory)
     {
-        return client.newSslClientConnectionFactory(null, connectionFactory);
-    }
-
-    protected ClientConnectionFactory newSslClientConnectionFactory(SslContextFactory sslContextFactory, ClientConnectionFactory connectionFactory)
-    {
-        if (sslContextFactory == null)
-            return newSslClientConnectionFactory(connectionFactory);
         return client.newSslClientConnectionFactory(sslContextFactory, connectionFactory);
     }
 
@@ -200,7 +190,7 @@ public abstract class HttpDestination extends ContainerLifeCycle implements Dest
     @ManagedAttribute(value = "The destination scheme", readonly = true)
     public String getScheme()
     {
-        return origin.getScheme();
+        return getOrigin().getScheme();
     }
 
     @Override
@@ -209,14 +199,14 @@ public abstract class HttpDestination extends ContainerLifeCycle implements Dest
     {
         // InetSocketAddress.getHostString() transforms the host string
         // in case of IPv6 addresses, so we return the original host string
-        return origin.getAddress().getHost();
+        return getOrigin().getAddress().getHost();
     }
 
     @Override
     @ManagedAttribute(value = "The destination port", readonly = true)
     public int getPort()
     {
-        return origin.getAddress().getPort();
+        return getOrigin().getAddress().getPort();
     }
 
     @ManagedAttribute(value = "The number of queued requests", readonly = true)
@@ -227,7 +217,7 @@ public abstract class HttpDestination extends ContainerLifeCycle implements Dest
 
     public Origin.Address getConnectAddress()
     {
-        return proxy == null ? origin.getAddress() : proxy.getAddress();
+        return proxy == null ? getOrigin().getAddress() : proxy.getAddress();
     }
 
     public HttpField getHostField()
@@ -326,11 +316,7 @@ public abstract class HttpDestination extends ContainerLifeCycle implements Dest
         // In other cases looping is a work-stealing optimization.
         while (true)
         {
-            Connection connection;
-            if (connectionPool instanceof AbstractConnectionPool)
-                connection = ((AbstractConnectionPool)connectionPool).acquire(create);
-            else
-                connection = connectionPool.acquire();
+            Connection connection = connectionPool.acquire(create);
             if (connection == null)
                 break;
             ProcessResult result = process(connection);
@@ -379,7 +365,7 @@ public abstract class HttpDestination extends ContainerLifeCycle implements Dest
                     : ProcessResult.FINISH;
             }
 
-            SendFailure failure = send(connection, exchange);
+            SendFailure failure = send((IConnection)connection, exchange);
             if (failure == null)
             {
                 // Aggressively send other queued requests
@@ -401,7 +387,10 @@ public abstract class HttpDestination extends ContainerLifeCycle implements Dest
         }
     }
 
-    protected abstract SendFailure send(Connection connection, HttpExchange exchange);
+    protected SendFailure send(IConnection connection, HttpExchange exchange)
+    {
+        return connection.send(exchange);
+    }
 
     @Override
     public void newConnection(Promise<Connection> promise)
@@ -438,6 +427,7 @@ public abstract class HttpDestination extends ContainerLifeCycle implements Dest
         {
             if (connectionPool.isActive(connection))
             {
+                // trigger the next request after releasing the connection
                 if (connectionPool.release(connection))
                     send(false);
                 else
@@ -473,16 +463,6 @@ public abstract class HttpDestination extends ContainerLifeCycle implements Dest
             process(true);
         }
         return removed;
-    }
-
-    /**
-     * @param connection the connection to remove
-     * @deprecated use {@link #remove(Connection)} instead
-     */
-    @Deprecated
-    public void close(Connection connection)
-    {
-        remove(connection);
     }
 
     /**
@@ -526,7 +506,7 @@ public abstract class HttpDestination extends ContainerLifeCycle implements Dest
 
     public String asString()
     {
-        return origin.asString();
+        return getOrigin().asString();
     }
 
     @Override
@@ -534,11 +514,17 @@ public abstract class HttpDestination extends ContainerLifeCycle implements Dest
     {
         return String.format("%s[%s]@%x%s,queue=%d,pool=%s",
             HttpDestination.class.getSimpleName(),
-            asString(),
+            getOrigin(),
             hashCode(),
             proxy == null ? "" : "(via " + proxy + ")",
             exchanges.size(),
             connectionPool);
+    }
+
+    @FunctionalInterface
+    public interface Multiplexed
+    {
+        void setMaxRequestsPerConnection(int maxRequestsPerConnection);
     }
 
     /**

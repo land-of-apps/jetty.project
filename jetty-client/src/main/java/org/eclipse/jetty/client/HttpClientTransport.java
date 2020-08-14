@@ -1,19 +1,19 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.client;
@@ -36,19 +36,27 @@ import org.eclipse.jetty.io.ClientConnectionFactory;
  */
 public interface HttpClientTransport extends ClientConnectionFactory
 {
-    String HTTP_DESTINATION_CONTEXT_KEY = "http.destination";
-    String HTTP_CONNECTION_PROMISE_CONTEXT_KEY = "http.connection.promise";
+    public static final String HTTP_DESTINATION_CONTEXT_KEY = "org.eclipse.jetty.client.destination";
+    public static final String HTTP_CONNECTION_PROMISE_CONTEXT_KEY = "org.eclipse.jetty.client.connection.promise";
 
     /**
      * Sets the {@link HttpClient} instance on this transport.
      * <p>
      * This is needed because of a chicken-egg problem: in order to create the {@link HttpClient}
-     * a {@link HttpClientTransport} is needed, that therefore cannot have a reference yet to the
+     * a HttpClientTransport is needed, that therefore cannot have a reference yet to the
      * {@link HttpClient}.
      *
      * @param client the {@link HttpClient} that uses this transport.
      */
-    void setHttpClient(HttpClient client);
+    public void setHttpClient(HttpClient client);
+
+    /**
+     * Creates a new Origin with the given request.
+     *
+     * @param request the request that triggers the creation of the Origin
+     * @return an Origin that identifies a destination
+     */
+    public Origin newOrigin(HttpRequest request);
 
     /**
      * Creates a new, transport-specific, {@link HttpDestination} object.
@@ -59,7 +67,7 @@ public interface HttpClientTransport extends ClientConnectionFactory
      * @param origin the destination origin
      * @return a new, transport-specific, {@link HttpDestination} object
      */
-    HttpDestination newHttpDestination(Origin origin);
+    public HttpDestination newHttpDestination(Origin origin);
 
     /**
      * Establishes a physical connection to the given {@code address}.
@@ -67,15 +75,15 @@ public interface HttpClientTransport extends ClientConnectionFactory
      * @param address the address to connect to
      * @param context the context information to establish the connection
      */
-    void connect(InetSocketAddress address, Map<String, Object> context);
+    public void connect(InetSocketAddress address, Map<String, Object> context);
 
     /**
      * @return the factory for ConnectionPool instances
      */
-    ConnectionPool.Factory getConnectionPoolFactory();
+    public ConnectionPool.Factory getConnectionPoolFactory();
 
     /**
      * @param factory the factory for ConnectionPool instances
      */
-    void setConnectionPoolFactory(ConnectionPool.Factory factory);
+    public void setConnectionPoolFactory(ConnectionPool.Factory factory);
 }

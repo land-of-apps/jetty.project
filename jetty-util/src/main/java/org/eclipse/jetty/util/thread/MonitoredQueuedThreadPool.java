@@ -1,22 +1,24 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.util.thread;
+
+import java.util.concurrent.BlockingQueue;
 
 import org.eclipse.jetty.util.BlockingArrayQueue;
 import org.eclipse.jetty.util.annotation.ManagedAttribute;
@@ -43,7 +45,12 @@ public class MonitoredQueuedThreadPool extends QueuedThreadPool
 
     public MonitoredQueuedThreadPool(int maxThreads)
     {
-        super(maxThreads, maxThreads, 24 * 3600 * 1000, new BlockingArrayQueue<>(maxThreads, 256));
+        this(maxThreads, maxThreads, 24 * 3600 * 1000, new BlockingArrayQueue<>(maxThreads, 256));
+    }
+
+    public MonitoredQueuedThreadPool(int maxThreads, int minThreads, int idleTimeOut, BlockingQueue<Runnable> queue)
+    {
+        super(maxThreads, minThreads, idleTimeOut, queue);
         addBean(queueStats);
         addBean(queueLatencyStats);
         addBean(taskLatencyStats);
@@ -63,7 +70,7 @@ public class MonitoredQueuedThreadPool extends QueuedThreadPool
                 long queueLatency = System.nanoTime() - begin;
                 queueStats.decrement();
                 threadStats.increment();
-                queueLatencyStats.set(queueLatency);
+                queueLatencyStats.record(queueLatency);
                 long start = System.nanoTime();
                 try
                 {
@@ -73,7 +80,7 @@ public class MonitoredQueuedThreadPool extends QueuedThreadPool
                 {
                     long taskLatency = System.nanoTime() - start;
                     threadStats.decrement();
-                    taskLatencyStats.set(taskLatency);
+                    taskLatencyStats.record(taskLatency);
                 }
             }
 

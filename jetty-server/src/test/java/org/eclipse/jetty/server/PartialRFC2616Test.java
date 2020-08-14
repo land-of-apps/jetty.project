@@ -1,34 +1,34 @@
 //
-//  ========================================================================
-//  Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
+// ========================================================================
+// Copyright (c) 1995-2020 Mort Bay Consulting Pty Ltd and others.
 //
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
+// This program and the accompanying materials are made available under
+// the terms of the Eclipse Public License 2.0 which is available at
+// https://www.eclipse.org/legal/epl-2.0
 //
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
+// This Source Code may also be made available under the following
+// Secondary Licenses when the conditions for such availability set
+// forth in the Eclipse Public License, v. 2.0 are satisfied:
+// the Apache License v2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0
 //
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+// ========================================================================
 //
 
 package org.eclipse.jetty.server;
 
 import java.util.Date;
-import java.util.Enumeration;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
+import org.eclipse.jetty.http.HttpField;
 import org.eclipse.jetty.http.HttpFields;
 import org.eclipse.jetty.http.HttpParser;
+import org.eclipse.jetty.logging.StacklessLogging;
 import org.eclipse.jetty.server.LocalConnector.LocalEndPoint;
 import org.eclipse.jetty.server.handler.ContextHandler;
-import org.eclipse.jetty.server.handler.HandlerCollection;
-import org.eclipse.jetty.util.log.StacklessLogging;
+import org.eclipse.jetty.server.handler.HandlerList;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -65,11 +65,7 @@ public class PartialRFC2616Test
         context.setContextPath("/");
         context.setHandler(new DumpHandler());
 
-        HandlerCollection collection = new HandlerCollection();
-        collection.setHandlers(new Handler[]
-            {vcontext, context});
-
-        server.setHandler(collection);
+        server.setHandler(new HandlerList(vcontext, context));
 
         server.start();
     }
@@ -86,11 +82,10 @@ public class PartialRFC2616Test
     {
         try
         {
-            HttpFields fields = new HttpFields();
-
-            fields.put("D1", "Sun, 6 Nov 1994 08:49:37 GMT");
-            fields.put("D2", "Sunday, 6-Nov-94 08:49:37 GMT");
-            fields.put("D3", "Sun Nov  6 08:49:37 1994");
+            HttpFields.Mutable fields = HttpFields.build()
+                .put("D1", "Sun, 6 Nov 1994 08:49:37 GMT")
+                .put("D2", "Sunday, 6-Nov-94 08:49:37 GMT")
+                .put("D3", "Sun Nov  6 08:49:37 1994");
             Date d1 = new Date(fields.getDateField("D1"));
             Date d2 = new Date(fields.getDateField("D2"));
             Date d3 = new Date(fields.getDateField("D3"));
@@ -104,7 +99,7 @@ public class PartialRFC2616Test
         catch (Exception e)
         {
             e.printStackTrace();
-            assertTrue(false);
+            fail();
         }
     }
 
@@ -118,7 +113,7 @@ public class PartialRFC2616Test
             checkContains(get, 0, "Content-Type: text/html", "GET _content");
             checkContains(get, 0, "<html>", "GET body");
             int cli = get.indexOf("Content-Length");
-            String contentLength = get.substring(cli, get.indexOf("\r", cli));
+            String contentLength = get.substring(cli,get.indexOf("\r",cli));
 
             String head = connector.getResponse("HEAD /R1 HTTP/1.0\n" + "Host: localhost\n" + "\n");
             checkContains(head, 0, "HTTP/1.1 200", "HEAD");
@@ -143,12 +138,10 @@ public class PartialRFC2616Test
                 "Host: localhost\n" +
                 "Transfer-Encoding: chunked,identity\n" +
                 "Content-Type: text/plain\n" +
-                //@checkstyle-disable-check : IllegalTokenText
-                "\015\012" +
-                "5;\015\012" +
-                "123\015\012\015\012" +
-                "0;\015\012\015\012");
-        //@checkstyle-enable-check : IllegalTokenText
+                "\r\n" +
+                "5;\r\n" +
+                "123\r\n\r\n" +
+                "0;\r\n\r\n");
         checkContains(response, offset, "HTTP/1.1 400 Bad", "Chunked last");
     }
 
@@ -281,25 +274,24 @@ public class PartialRFC2616Test
     @Test
     public void test39() throws Exception
     {
-        HttpFields fields = new HttpFields();
-
-        fields.put("Q", "bbb;q=0.5,aaa,ccc;q=0.002,d;q=0,e;q=0.0001,ddd;q=0.001,aa2,abb;q=0.7");
-        Enumeration<String> qualities = fields.getValues("Q", ", \t");
-        List<String> list = HttpFields.qualityList(qualities);
-        assertEquals("aaa", HttpFields.valueParameters(list.get(0), null), "Quality parameters");
-        assertEquals("aa2", HttpFields.valueParameters(list.get(1), null), "Quality parameters");
-        assertEquals("abb", HttpFields.valueParameters(list.get(2), null), "Quality parameters");
-        assertEquals("bbb", HttpFields.valueParameters(list.get(3), null), "Quality parameters");
-        assertEquals("ccc", HttpFields.valueParameters(list.get(4), null), "Quality parameters");
-        assertEquals("ddd", HttpFields.valueParameters(list.get(5), null), "Quality parameters");
+        HttpFields fields = HttpFields.build()
+            .put("Q", "bbb;q=0.5,aaa,ccc;q=0.002,d;q=0,e;q=0.0001,ddd;q=0.001,aa2,abb;q=0.7").asImmutable();
+        List<String> list = fields.getQualityCSV("Q");
+        assertEquals("aaa", HttpField.valueParameters(list.get(0), null), "Quality parameters");
+        assertEquals("aa2", HttpField.valueParameters(list.get(1), null), "Quality parameters");
+        assertEquals("abb", HttpField.valueParameters(list.get(2), null), "Quality parameters");
+        assertEquals("bbb", HttpField.valueParameters(list.get(3), null), "Quality parameters");
+        assertEquals("ccc", HttpField.valueParameters(list.get(4), null), "Quality parameters");
+        assertEquals("ddd", HttpField.valueParameters(list.get(5), null), "Quality parameters");
     }
 
     @Test
     public void test41() throws Exception
     {
         int offset = 0;
+
         // If _content length not used, second request will not be read.
-        String response = connector.getResponses(
+        LocalEndPoint endp = connector.executeRequest(
             "\r\n" +
                 "GET /R1 HTTP/1.1\r\n" +
                 "Host: localhost\r\n" +
@@ -316,10 +308,18 @@ public class PartialRFC2616Test
                 "Connection: close\r\n" +
                 "\r\n"
         );
+
+        String response = endp.getResponse();
         offset = checkContains(response, offset, "HTTP/1.1 200 OK", "2. identity") + 10;
         offset = checkContains(response, offset, "/R1", "2. identity") + 3;
+
+        response = endp.getResponse();
+        offset = 0;
         offset = checkContains(response, offset, "HTTP/1.1 200 OK", "2. identity") + 10;
         offset = checkContains(response, offset, "/R2", "2. identity") + 3;
+
+        response = endp.getResponse();
+        offset = 0;
         checkNotContained(response, offset, "HTTP/1.1 200 OK", "2. identity");
         checkNotContained(response, offset, "/R3", "2. identity");
     }
@@ -337,9 +337,7 @@ public class PartialRFC2616Test
                 "Content-Type: text/plain\n" +
                 "Content-Length: 5\n" +
                 "\n" +
-                //@checkstyle-disable-check : IllegalTokenText
-                "123\015\012" +
-                //@checkstyle-enable-check : IllegalTokenText
+                "123\r\n" +
                 "GET /R2 HTTP/1.1\n" +
                 "Host: localhost\n" +
                 "Transfer-Encoding: other\n" +
@@ -468,9 +466,7 @@ public class PartialRFC2616Test
     {
         int offset = 0;
         String response = connector.getResponse("GET /R1 HTTP/1.1\n" + "Host: localhost\n" + "\n", 250, TimeUnit.MILLISECONDS);
-        //@checkstyle-disable-check : IllegalTokenText
-        offset = checkContains(response, offset, "HTTP/1.1 200 OK\015\012", "8.1.2 default") + 10;
-        //@checkstyle-enable-check : IllegalTokenText
+        offset = checkContains(response, offset, "HTTP/1.1 200 OK\r\n", "8.1.2 default") + 10;
         checkContains(response, offset, "Content-Length: ", "8.1.2 default");
 
         LocalEndPoint endp = connector.executeRequest("GET /R1 HTTP/1.1\n" + "Host: localhost\n" + "\n" +
@@ -479,16 +475,11 @@ public class PartialRFC2616Test
 
         offset = 0;
         response = endp.getResponse();
-        //@checkstyle-disable-check : IllegalTokenText
-        offset = checkContains(response, offset, "HTTP/1.1 200 OK\015\012", "8.1.2 default") + 1;
-        //@checkstyle-enable-check : IllegalTokenText
+        offset = checkContains(response, offset, "HTTP/1.1 200 OK\r\n", "8.1.2 default") + 1;
         offset = checkContains(response, offset, "/R1", "8.1.2 default") + 1;
-
         offset = 0;
         response = endp.getResponse();
-        //@checkstyle-disable-check : IllegalTokenText
-        offset = checkContains(response, offset, "HTTP/1.1 200 OK\015\012", "8.1.2.2 pipeline") + 11;
-        //@checkstyle-enable-check : IllegalTokenText
+        offset = checkContains(response, offset, "HTTP/1.1 200 OK\r\n", "8.1.2.2 pipeline") + 11;
         offset = checkContains(response, offset, "Connection: close", "8.1.2.2 pipeline") + 1;
         offset = checkContains(response, offset, "/R2", "8.1.2.1 close") + 3;
 
@@ -513,7 +504,7 @@ public class PartialRFC2616Test
     }
 
     @Test
-    public void test823Dash5() throws Exception
+    public void test823dash5() throws Exception
     {
         // Expect with body: client sends the content right away, we should not send 100-Continue
         int offset = 0;
@@ -525,9 +516,7 @@ public class PartialRFC2616Test
                 "Content-Length: 8\n" +
                 "Connection: close\n" +
                 "\n" +
-                //@checkstyle-disable-check : IllegalTokenText
-                "123456\015\012");
-        //@checkstyle-enable-check : IllegalTokenText
+                "123456\r\n");
         checkNotContained(response, offset, "HTTP/1.1 100 ", "8.2.3 expect 100");
         offset = checkContains(response, offset, "HTTP/1.1 200 OK", "8.2.3 expect with body") + 1;
     }
@@ -547,9 +536,7 @@ public class PartialRFC2616Test
         String infomational = endp.getResponse();
         offset = checkContains(infomational, offset, "HTTP/1.1 100 ", "8.2.3 expect 100") + 1;
         checkNotContained(infomational, offset, "HTTP/1.1 200", "8.2.3 expect 100");
-        //@checkstyle-disable-check : IllegalTokenText
-        endp.addInput("654321\015\012");
-        //@checkstyle-enable-check : IllegalTokenText
+        endp.addInput("654321\r\n");
         String response = endp.getResponse();
         offset = 0;
         offset = checkContains(response, offset, "HTTP/1.1 200", "8.2.3 expect 100") + 1;
@@ -644,8 +631,7 @@ public class PartialRFC2616Test
         {
             int offset = 0;
             String response = connector.getResponse("GET /R1 HTTP/1.0\n" + "\n");
-            //@checkstyle-disable-check : IllegalTokenText
-            offset = checkContains(response, offset, "HTTP/1.1 200 OK\015\012", "19.6.2 default close") + 10;
+            offset = checkContains(response, offset, "HTTP/1.1 200 OK\r\n", "19.6.2 default close") + 10;
             checkNotContained(response, offset, "Connection: close", "19.6.2 not assumed");
 
             LocalEndPoint endp = connector.executeRequest(
@@ -655,7 +641,7 @@ public class PartialRFC2616Test
 
             offset = 0;
             response = endp.getResponse();
-            offset = checkContains(response, offset, "HTTP/1.1 200 OK\015\012", "19.6.2 Keep-alive 1") + 1;
+            offset = checkContains(response, offset, "HTTP/1.1 200 OK\r\n", "19.6.2 Keep-alive 1") + 1;
             offset = checkContains(response, offset, "Connection: keep-alive", "19.6.2 Keep-alive 1") + 1;
 
             offset = checkContains(response, offset, "<html>", "19.6.2 Keep-alive 1") + 1;
@@ -664,7 +650,7 @@ public class PartialRFC2616Test
 
             offset = 0;
             response = endp.getResponse();
-            offset = checkContains(response, offset, "HTTP/1.1 200 OK\015\012", "19.6.2 Keep-alive 2") + 11;
+            offset = checkContains(response, offset, "HTTP/1.1 200 OK\r\n", "19.6.2 Keep-alive 2") + 11;
             offset = checkContains(response, offset, "/R2", "19.6.2 Keep-alive close") + 3;
 
             offset = 0;
@@ -680,23 +666,22 @@ public class PartialRFC2616Test
 
             offset = 0;
             response = endp.getResponse();
-            offset = checkContains(response, offset, "HTTP/1.1 200 OK\015\012", "19.6.2 Keep-alive 1") + 1;
+            offset = checkContains(response, offset, "HTTP/1.1 200 OK\r\n", "19.6.2 Keep-alive 1") + 1;
             offset = checkContains(response, offset, "Connection: keep-alive", "19.6.2 Keep-alive 1") + 1;
             offset = checkContains(response, offset, "<html>", "19.6.2 Keep-alive 1") + 1;
             offset = checkContains(response, offset, "1234567890", "19.6.2 Keep-alive 1") + 1;
 
             offset = 0;
             response = endp.getResponse();
-            offset = checkContains(response, offset, "HTTP/1.1 200 OK\015\012", "19.6.2 Keep-alive 1") + 1;
+            offset = checkContains(response, offset, "HTTP/1.1 200 OK\r\n", "19.6.2 Keep-alive 1") + 1;
             offset = checkContains(response, offset, "Connection: keep-alive", "19.6.2 Keep-alive 1") + 1;
             offset = checkContains(response, offset, "<html>", "19.6.2 Keep-alive 1") + 1;
             offset = checkContains(response, offset, "ABCDEFGHIJ", "19.6.2 Keep-alive 1") + 1;
 
             offset = 0;
             response = endp.getResponse();
-            offset = checkContains(response, offset, "HTTP/1.1 200 OK\015\012", "19.6.2 Keep-alive 2") + 11;
+            offset = checkContains(response, offset, "HTTP/1.1 200 OK\r\n", "19.6.2 Keep-alive 2") + 11;
             offset = checkContains(response, offset, "/R2", "19.6.2 Keep-alive close") + 3;
-            //@checkstyle-enable-check : IllegalTokenText
             offset = 0;
             response = endp.getResponse();
             assertThat("19.6.2 closed", response, nullValue());
