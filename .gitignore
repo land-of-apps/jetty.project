@@ -9,7 +9,7 @@ target/
 *.versionsBackup
 *.releaseBackup
 bin/
-
+tmp
 # common junk
 *.log
 *.diff
