@@ -18,8 +18,6 @@
 
 package org.eclipse.jetty.http2.client.http;
 
-import java.io.IOException;
-
 import org.eclipse.jetty.client.HttpChannel;
 import org.eclipse.jetty.client.HttpDestination;
 import org.eclipse.jetty.client.HttpExchange;
@@ -36,9 +34,13 @@ import org.eclipse.jetty.http2.frames.HeadersFrame;
 import org.eclipse.jetty.http2.frames.PushPromiseFrame;
 import org.eclipse.jetty.http2.frames.ResetFrame;
 import org.eclipse.jetty.util.Callback;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class HttpChannelOverHTTP2 extends HttpChannel
 {
+    private static final Logger LOG = LoggerFactory.getLogger(HttpChannelOverHTTP2.class);
+
     private final Stream.Listener listener = new Listener();
     private final HttpConnectionOverHTTP2 connection;
     private final Session session;
@@ -208,10 +210,10 @@ public class HttpChannelOverHTTP2 extends HttpChannel
         }
 
         @Override
-        public void onFailure(Stream stream, int error, String reason, Callback callback)
+        public void onFailure(Stream stream, int error, String reason, Throwable failure, Callback callback)
         {
             HTTP2Channel.Client channel = (HTTP2Channel.Client)((IStream)stream).getAttachment();
-            channel.onFailure(new IOException(String.format("Failure %s/%s", ErrorCode.toString(error, null), reason)), callback);
+            channel.onFailure(failure, callback);
         }
 
         @Override

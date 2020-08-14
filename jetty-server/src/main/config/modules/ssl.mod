@@ -1,4 +1,4 @@
-DO NOT EDIT - See: https://www.eclipse.org/jetty/documentation/current/startup-modules.html
+# DO NOT EDIT - See: https://www.eclipse.org/jetty/documentation/current/startup-modules.html
 
 [description]
 Enables a TLS(SSL) Connector on the server.
@@ -35,7 +35,7 @@ etc/jetty-ssl-context.xml
 # jetty.ssl.selectors=-1
 
 ## ServerSocketChannel backlog (0 picks platform default)
-# jetty.ssl.acceptorQueueSize=0
+# jetty.ssl.acceptQueueSize=0
 
 ## Thread priority delta to give to acceptor threads
 # jetty.ssl.acceptorPriorityDelta=0

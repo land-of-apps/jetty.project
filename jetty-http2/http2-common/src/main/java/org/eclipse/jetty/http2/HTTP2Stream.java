@@ -42,6 +42,7 @@ import org.eclipse.jetty.http2.frames.HeadersFrame;
 import org.eclipse.jetty.http2.frames.PushPromiseFrame;
 import org.eclipse.jetty.http2.frames.ResetFrame;
 import org.eclipse.jetty.http2.frames.WindowUpdateFrame;
+import org.eclipse.jetty.io.EofException;
 import org.eclipse.jetty.io.IdleTimeout;
 import org.eclipse.jetty.util.Callback;
 import org.eclipse.jetty.util.MathUtils;
@@ -61,7 +62,6 @@ public class HTTP2Stream extends IdleTimeout implements IStream, Callback, Dumpa
     private final AtomicReference<Object> attachment = new AtomicReference<>();
     private final AtomicReference<ConcurrentMap<String, Object>> attributes = new AtomicReference<>();
     private final AtomicReference<CloseState> closeState = new AtomicReference<>(CloseState.NOT_CLOSED);
-    private final AtomicReference<Callback> writing = new AtomicReference<>();
     private final AtomicInteger sendWindow = new AtomicInteger();
     private final AtomicInteger recvWindow = new AtomicInteger();
     private final long timeStamp = System.nanoTime();
@@ -69,9 +69,11 @@ public class HTTP2Stream extends IdleTimeout implements IStream, Callback, Dumpa
     private final int streamId;
     private final MetaData.Request request;
     private final boolean local;
+    private Callback sendCallback;
+    private Throwable failure;
     private boolean localReset;
-    private Listener listener;
     private boolean remoteReset;
+    private Listener listener;
     private long dataLength;
     private long dataDemand;
     private boolean dataInitial;
@@ -141,18 +143,31 @@ public class HTTP2Stream extends IdleTimeout implements IStream, Callback, Dumpa
     @Override
     public void reset(ResetFrame frame, Callback callback)
     {
-        if (isReset())
-            return;
-        localReset = true;
+        try (AutoLock l = lock.lock())
+        {
+            if (isReset())
+                return;
+            localReset = true;
+            failure = new EOFException("reset");
+        }
         session.frames(this, callback, frame, Frame.EMPTY_ARRAY);
     }
 
     private boolean startWrite(Callback callback)
     {
-        if (writing.compareAndSet(null, callback))
-            return true;
-        close();
-        callback.failed(new WritePendingException());
+        Throwable failure;
+        try (AutoLock l = lock.lock())
+        {
+            failure = this.failure;
+            if (failure == null && sendCallback == null)
+            {
+                sendCallback = callback;
+                return true;
+            }
+        }
+        if (failure == null)
+            failure = new WritePendingException();
+        callback.failed(failure);
         return false;
     }
 
@@ -177,7 +192,27 @@ public class HTTP2Stream extends IdleTimeout implements IStream, Callback, Dumpa
     @Override
     public boolean isReset()
     {
-        return localReset || remoteReset;
+        try (AutoLock l = lock.lock())
+        {
+            return localReset || remoteReset;
+        }
+    }
+
+    private boolean isFailed()
+    {
+        try (AutoLock l = lock.lock())
+        {
+            return failure != null;
+        }
+    }
+
+    @Override
+    public boolean isResetOrFailed()
+    {
+        try (AutoLock l = lock.lock())
+        {
+            return isReset() || isFailed();
+        }
     }
 
     @Override
@@ -190,7 +225,7 @@ public class HTTP2Stream extends IdleTimeout implements IStream, Callback, Dumpa
     public boolean isRemotelyClosed()
     {
         CloseState state = closeState.get();
-        return state == CloseState.REMOTELY_CLOSED || state == CloseState.CLOSING;
+        return state == CloseState.REMOTELY_CLOSED || state == CloseState.CLOSING || state == CloseState.CLOSED;
     }
 
     public boolean isLocallyClosed()
@@ -345,7 +380,7 @@ public class HTTP2Stream extends IdleTimeout implements IStream, Callback, Dumpa
         if (dataLength != Long.MIN_VALUE)
         {
             dataLength -= frame.remaining();
-            if (frame.isEndStream() && dataLength != 0)
+            if (dataLength < 0 || (frame.isEndStream() && dataLength != 0))
             {
                 reset(new ResetFrame(streamId, ErrorCode.PROTOCOL_ERROR.code), Callback.NOOP);
                 callback.failed(new IOException("invalid_data_length"));
@@ -441,7 +476,11 @@ public class HTTP2Stream extends IdleTimeout implements IStream, Callback, Dumpa
 
     private void onReset(ResetFrame frame, Callback callback)
     {
-        remoteReset = true;
+        try (AutoLock l = lock.lock())
+        {
+            remoteReset = true;
+            failure = new EofException("reset");
+        }
         close();
         session.removeStream(this);
         notifyReset(this, frame, callback);
@@ -462,6 +501,12 @@ public class HTTP2Stream extends IdleTimeout implements IStream, Callback, Dumpa
 
     private void onFailure(FailureFrame frame, Callback callback)
     {
+        try (AutoLock l = lock.lock())
+        {
+            failure = frame.getFailure();
+        }
+        close();
+        session.removeStream(this);
         notifyFailure(this, frame, callback);
     }
 
@@ -644,7 +689,12 @@ public class HTTP2Stream extends IdleTimeout implements IStream, Callback, Dumpa
 
     private Callback endWrite()
     {
-        return writing.getAndSet(null);
+        try (AutoLock l = lock.lock())
+        {
+            Callback callback = sendCallback;
+            sendCallback = null;
+            return callback;
+        }
     }
 
     private void notifyNewStream(Stream stream)
@@ -749,7 +799,7 @@ public class HTTP2Stream extends IdleTimeout implements IStream, Callback, Dumpa
         {
             try
             {
-                listener.onFailure(stream, frame.getError(), frame.getReason(), callback);
+                listener.onFailure(stream, frame.getError(), frame.getReason(), frame.getFailure(), callback);
             }
             catch (Throwable x)
             {
@@ -793,10 +843,11 @@ public class HTTP2Stream extends IdleTimeout implements IStream, Callback, Dumpa
     @Override
     public String toString()
     {
-        return String.format("%s@%x#%d{sendWindow=%s,recvWindow=%s,demand=%d,reset=%b/%b,%s,age=%d,attachment=%s}",
+        return String.format("%s@%x#%d@%x{sendWindow=%s,recvWindow=%s,demand=%d,reset=%b/%b,%s,age=%d,attachment=%s}",
             getClass().getSimpleName(),
             hashCode(),
             getId(),
+            session.hashCode(),
             sendWindow,
             recvWindow,
             demand(),

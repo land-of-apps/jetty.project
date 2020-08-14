@@ -30,7 +30,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
-import org.eclipse.jetty.http.HttpFields;
 import org.eclipse.jetty.io.EndPoint;
 import org.eclipse.jetty.util.BufferUtil;
 import org.eclipse.jetty.util.Callback;
@@ -40,7 +39,7 @@ import org.eclipse.jetty.websocket.core.CloseStatus;
 import org.eclipse.jetty.websocket.core.CoreSession;
 import org.eclipse.jetty.websocket.core.Frame;
 import org.eclipse.jetty.websocket.core.FrameHandler;
-import org.eclipse.jetty.websocket.core.client.ClientUpgradeRequest;
+import org.eclipse.jetty.websocket.core.client.CoreClientUpgradeRequest;
 import org.eclipse.jetty.websocket.core.client.WebSocketCoreClient;
 import org.eclipse.jetty.websocket.core.internal.Generator;
 
@@ -72,11 +71,13 @@ public class NetworkFuzzer extends Fuzzer.Adapter implements Fuzzer, AutoCloseab
         this.upgradeRequest = new RawUpgradeRequest(client, wsURI);
         if (requestHeaders != null)
         {
-            HttpFields.Mutable fields = this.upgradeRequest.getHeaders();
-            requestHeaders.forEach((name, value) ->
+            this.upgradeRequest.headers(fields ->
             {
-                fields.remove(name);
-                fields.put(name, value);
+                requestHeaders.forEach((name, value) ->
+                {
+                    fields.remove(name);
+                    fields.put(name, value);
+                });
             });
         }
         this.client.start();
@@ -178,7 +179,7 @@ public class NetworkFuzzer extends Fuzzer.Adapter implements Fuzzer, AutoCloseab
         }
     }
 
-    public static class RawUpgradeRequest extends ClientUpgradeRequest
+    public static class RawUpgradeRequest extends CoreClientUpgradeRequest
     {
         private final FrameCapture frameCapture = new FrameCapture();
         private final CompletableFuture<FrameCapture> futureCapture;

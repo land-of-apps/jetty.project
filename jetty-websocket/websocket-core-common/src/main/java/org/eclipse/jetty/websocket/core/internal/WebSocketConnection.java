@@ -21,6 +21,7 @@ package org.eclipse.jetty.websocket.core.internal;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
+import java.security.SecureRandom;
 import java.util.Objects;
 import java.util.Random;
 import java.util.concurrent.Executor;
@@ -34,6 +35,7 @@ import org.eclipse.jetty.io.RetainableByteBuffer;
 import org.eclipse.jetty.util.BufferUtil;
 import org.eclipse.jetty.util.Callback;
 import org.eclipse.jetty.util.component.Dumpable;
+import org.eclipse.jetty.util.thread.AutoLock;
 import org.eclipse.jetty.util.thread.Scheduler;
 import org.eclipse.jetty.websocket.core.Behavior;
 import org.eclipse.jetty.websocket.core.Frame;
@@ -53,19 +55,17 @@ public class WebSocketConnection extends AbstractConnection implements Connectio
      */
     private static final int MIN_BUFFER_SIZE = Generator.MAX_HEADER_LENGTH;
 
+    private final AutoLock lock = new AutoLock();
     private final ByteBufferPool bufferPool;
     private final Generator generator;
     private final Parser parser;
     private final WebSocketCoreSession coreSession;
-
     private final Flusher flusher;
     private final Random random;
-
     private long demand;
     private boolean fillingAndParsing;
     private final LongAdder messagesIn = new LongAdder();
     private final LongAdder bytesIn = new LongAdder();
-
     // Read / Parse variables
     private RetainableByteBuffer networkBuffer;
     private boolean useInputDirectByteBuffers;
@@ -84,6 +84,29 @@ public class WebSocketConnection extends AbstractConnection implements Connectio
                                ByteBufferPool bufferPool,
                                WebSocketCoreSession coreSession)
     {
+        this(endp, executor, scheduler, bufferPool, coreSession, null);
+    }
+
+    /**
+     * Create a WSConnection.
+     * <p>
+     * It is assumed that the WebSocket Upgrade Handshake has already
+     * completed successfully before creating this connection.
+     * </p>
+     * @param endp The endpoint ever which Websockot is sent/received
+     * @param executor A thread executor to use for WS callbacks.
+     * @param scheduler A scheduler to use for timeouts
+     * @param bufferPool A pool of buffers to use.
+     * @param coreSession The WC core session to which frames are delivered.
+     * @param randomMask A Random used to mask frames. If null then SecureRandom will be created if needed.
+     */
+    public WebSocketConnection(EndPoint endp,
+                               Executor executor,
+                               Scheduler scheduler,
+                               ByteBufferPool bufferPool,
+                               WebSocketCoreSession coreSession,
+                               Random randomMask)
+    {
         super(endp, executor);
 
         Objects.requireNonNull(endp, "EndPoint");
@@ -92,15 +115,15 @@ public class WebSocketConnection extends AbstractConnection implements Connectio
         Objects.requireNonNull(bufferPool, "ByteBufferPool");
 
         this.bufferPool = bufferPool;
-
         this.coreSession = coreSession;
-
         this.generator = new Generator();
         this.parser = new Parser(bufferPool, coreSession);
         this.flusher = new Flusher(scheduler, coreSession.getOutputBufferSize(), generator, endp);
         this.setInputBufferSize(coreSession.getInputBufferSize());
 
-        this.random = this.coreSession.getBehavior() == Behavior.CLIENT ? new Random(endp.hashCode()) : null;
+        if (this.coreSession.getBehavior() == Behavior.CLIENT && randomMask == null)
+            randomMask = new SecureRandom();
+        this.random = randomMask;
     }
 
     @Override
@@ -241,7 +264,7 @@ public class WebSocketConnection extends AbstractConnection implements Connectio
 
     private void acquireNetworkBuffer()
     {
-        synchronized (this)
+        try (AutoLock l = lock.lock())
         {
             if (networkBuffer == null)
                 networkBuffer = newNetworkBuffer(getInputBufferSize());
@@ -250,7 +273,7 @@ public class WebSocketConnection extends AbstractConnection implements Connectio
 
     private void reacquireNetworkBuffer()
     {
-        synchronized (this)
+        try (AutoLock l = lock.lock())
         {
             if (networkBuffer == null)
                 throw new IllegalStateException();
@@ -270,7 +293,7 @@ public class WebSocketConnection extends AbstractConnection implements Connectio
 
     private void releaseNetworkBuffer()
     {
-        synchronized (this)
+        try (AutoLock l = lock.lock())
         {
             if (networkBuffer == null)
                 throw new IllegalStateException();
@@ -305,7 +328,7 @@ public class WebSocketConnection extends AbstractConnection implements Connectio
             throw new IllegalArgumentException("Demand must be positive");
 
         boolean fillAndParse = false;
-        synchronized (this)
+        try (AutoLock l = lock.lock())
         {
             if (LOG.isDebugEnabled())
                 LOG.debug("demand {} d={} fp={} {} {}", n, demand, fillingAndParsing, networkBuffer, this);
@@ -338,7 +361,7 @@ public class WebSocketConnection extends AbstractConnection implements Connectio
 
     public boolean moreDemand()
     {
-        synchronized (this)
+        try (AutoLock l = lock.lock())
         {
             if (LOG.isDebugEnabled())
                 LOG.debug("moreDemand? d={} fp={} {} {}", demand, fillingAndParsing, networkBuffer, this);
@@ -358,7 +381,7 @@ public class WebSocketConnection extends AbstractConnection implements Connectio
 
     public boolean meetDemand()
     {
-        synchronized (this)
+        try (AutoLock l = lock.lock())
         {
             if (LOG.isDebugEnabled())
                 LOG.debug("meetDemand d={} fp={} {} {}", demand, fillingAndParsing, networkBuffer, this);
@@ -377,11 +400,10 @@ public class WebSocketConnection extends AbstractConnection implements Connectio
 
     public void cancelDemand()
     {
-        synchronized (this)
+        try (AutoLock l = lock.lock())
         {
             if (LOG.isDebugEnabled())
                 LOG.debug("cancelDemand d={} fp={} {} {}", demand, fillingAndParsing, networkBuffer, this);
-
             demand = -1;
         }
     }
@@ -459,26 +481,20 @@ public class WebSocketConnection extends AbstractConnection implements Connectio
      * be processed by the websocket parser before starting
      * to read bytes from the connection
      *
-     * @param prefilled the bytes of prefilled content encountered during upgrade
+     * @param initialBuffer the bytes of extra content encountered during upgrade
      */
-    protected void setInitialBuffer(ByteBuffer prefilled)
+    protected void setInitialBuffer(ByteBuffer initialBuffer)
     {
         if (LOG.isDebugEnabled())
+            LOG.debug("Set initial buffer - {}", BufferUtil.toDetailString(initialBuffer));
+        try (AutoLock l = lock.lock())
         {
-            LOG.debug("set Initial Buffer - {}", BufferUtil.toDetailString(prefilled));
+            networkBuffer = newNetworkBuffer(initialBuffer.remaining());
         }
-
-        if ((prefilled != null) && (prefilled.hasRemaining()))
-        {
-            synchronized (this)
-            {
-                networkBuffer = newNetworkBuffer(prefilled.remaining());
-            }
-            ByteBuffer buffer = networkBuffer.getBuffer();
-            BufferUtil.clearToFill(buffer);
-            BufferUtil.put(prefilled, buffer);
-            BufferUtil.flipToFlush(buffer, 0);
-        }
+        ByteBuffer buffer = networkBuffer.getBuffer();
+        BufferUtil.clearToFill(buffer);
+        BufferUtil.put(initialBuffer, buffer);
+        BufferUtil.flipToFlush(buffer, 0);
     }
 
     /**
@@ -533,16 +549,15 @@ public class WebSocketConnection extends AbstractConnection implements Connectio
      * Extra bytes from the initial HTTP upgrade that need to
      * be processed by the websocket parser before starting
      * to read bytes from the connection
+     *
+     * @param buffer a non-null buffer of extra bytes
      */
     @Override
-    public void onUpgradeTo(ByteBuffer prefilled)
+    public void onUpgradeTo(ByteBuffer buffer)
     {
         if (LOG.isDebugEnabled())
-        {
-            LOG.debug("onUpgradeTo({})", BufferUtil.toDetailString(prefilled));
-        }
-
-        setInitialBuffer(prefilled);
+            LOG.debug("onUpgradeTo({})", BufferUtil.toDetailString(buffer));
+        setInitialBuffer(buffer);
     }
 
     public FrameFlusher getFrameFlusher()

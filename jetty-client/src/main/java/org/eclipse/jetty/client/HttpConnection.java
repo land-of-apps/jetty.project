@@ -35,15 +35,19 @@ import org.eclipse.jetty.http.HttpField;
 import org.eclipse.jetty.http.HttpFields;
 import org.eclipse.jetty.http.HttpHeader;
 import org.eclipse.jetty.http.HttpVersion;
+import org.eclipse.jetty.util.Attachable;
 import org.eclipse.jetty.util.HttpCookieStore;
+import org.eclipse.jetty.util.thread.AutoLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public abstract class HttpConnection implements IConnection
+public abstract class HttpConnection implements IConnection, Attachable
 {
     private static final Logger LOG = LoggerFactory.getLogger(HttpConnection.class);
 
+    private final AutoLock lock = new AutoLock();
     private final HttpDestination destination;
+    private Object attachment;
     private int idleTimeoutGuard;
     private long idleTimeoutStamp;
 
@@ -87,7 +91,7 @@ public abstract class HttpConnection implements IConnection
         // the request is associated to the channel and sent.
         // Use a counter to support multiplexed requests.
         boolean send;
-        synchronized (this)
+        try (AutoLock l = lock.lock())
         {
             send = idleTimeoutGuard >= 0;
             if (send)
@@ -105,11 +109,13 @@ public abstract class HttpConnection implements IConnection
             }
             else
             {
+                // Association may fail, for example if the application
+                // aborted the request, so we must release the channel.
                 channel.release();
                 result = new SendFailure(new HttpRequestException("Could not associate request to connection", request), false);
             }
 
-            synchronized (this)
+            try (AutoLock l = lock.lock())
             {
                 --idleTimeoutGuard;
                 idleTimeoutStamp = System.nanoTime();
@@ -119,6 +125,8 @@ public abstract class HttpConnection implements IConnection
         }
         else
         {
+            // This connection has been timed out by another thread
+            // that will take care of removing it from the pool.
             return new SendFailure(new TimeoutException(), true);
         }
     }
@@ -187,19 +195,18 @@ public abstract class HttpConnection implements IConnection
         }
 
         // Cookies
+        StringBuilder cookies = convertCookies(request.getCookies(), null);
         CookieStore cookieStore = getHttpClient().getCookieStore();
         if (cookieStore != null && cookieStore.getClass() != HttpCookieStore.Empty.class)
         {
-            StringBuilder cookies = null;
             URI uri = request.getURI();
             if (uri != null)
-                cookies = convertCookies(HttpCookieStore.matchPath(uri, cookieStore.get(uri)), null);
-            cookies = convertCookies(request.getCookies(), cookies);
-            if (cookies != null)
-            {
-                HttpField cookieField = new HttpField(HttpHeader.COOKIE, cookies.toString());
-                request.addHeader(cookieField);
-            }
+                cookies = convertCookies(HttpCookieStore.matchPath(uri, cookieStore.get(uri)), cookies);
+        }
+        if (cookies != null)
+        {
+            HttpField cookieField = new HttpField(HttpHeader.COOKIE, cookies.toString());
+            request.addHeader(cookieField);
         }
 
         // Authentication
@@ -247,7 +254,7 @@ public abstract class HttpConnection implements IConnection
 
     public boolean onIdleTimeout(long idleTimeout)
     {
-        synchronized (this)
+        try (AutoLock l = lock.lock())
         {
             if (idleTimeoutGuard == 0)
             {
@@ -266,6 +273,18 @@ public abstract class HttpConnection implements IConnection
                 return false;
             }
         }
+    }
+
+    @Override
+    public void setAttachment(Object obj)
+    {
+        this.attachment = obj;
+    }
+
+    @Override
+    public Object getAttachment()
+    {
+        return attachment;
     }
 
     @Override

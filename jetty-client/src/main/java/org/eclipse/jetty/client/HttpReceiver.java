@@ -42,6 +42,7 @@ import org.eclipse.jetty.util.BufferUtil;
 import org.eclipse.jetty.util.Callback;
 import org.eclipse.jetty.util.MathUtils;
 import org.eclipse.jetty.util.component.Destroyable;
+import org.eclipse.jetty.util.thread.AutoLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -74,6 +75,7 @@ public abstract class HttpReceiver
 {
     private static final Logger LOG = LoggerFactory.getLogger(HttpReceiver.class);
 
+    private final AutoLock lock = new AutoLock();
     private final AtomicReference<ResponseState> responseState = new AtomicReference<>(ResponseState.IDLE);
     private final HttpChannel channel;
     private ContentListeners contentListeners;
@@ -98,7 +100,7 @@ public abstract class HttpReceiver
             throw new IllegalArgumentException("Invalid demand " + n);
 
         boolean resume = false;
-        synchronized (this)
+        try (AutoLock l = lock.lock())
         {
             demand = MathUtils.cappedAdd(demand, n);
             if (stalled)
@@ -126,7 +128,7 @@ public abstract class HttpReceiver
 
     private long demand(LongUnaryOperator operator)
     {
-        synchronized (this)
+        try (AutoLock l = lock.lock())
         {
             return demand = operator.applyAsLong(demand);
         }
@@ -134,7 +136,7 @@ public abstract class HttpReceiver
 
     protected boolean hasDemandOrStall()
     {
-        synchronized (this)
+        try (AutoLock l = lock.lock())
         {
             stalled = demand <= 0;
             return !stalled;
@@ -199,6 +201,7 @@ public abstract class HttpReceiver
         if (updateResponseState(ResponseState.TRANSIENT, ResponseState.BEGIN))
             return true;
 
+        dispose();
         terminateResponse(exchange);
         return false;
     }
@@ -217,23 +220,17 @@ public abstract class HttpReceiver
      */
     protected boolean responseHeader(HttpExchange exchange, HttpField field)
     {
-        out:
         while (true)
         {
             ResponseState current = responseState.get();
-            switch (current)
+            if (current == ResponseState.BEGIN || current == ResponseState.HEADER)
             {
-                case BEGIN:
-                case HEADER:
-                {
-                    if (updateResponseState(current, ResponseState.TRANSIENT))
-                        break out;
+                if (updateResponseState(current, ResponseState.TRANSIENT))
                     break;
-                }
-                default:
-                {
-                    return false;
-                }
+            }
+            else
+            {
+                return false;
             }
         }
 
@@ -267,6 +264,7 @@ public abstract class HttpReceiver
         if (updateResponseState(ResponseState.TRANSIENT, ResponseState.HEADER))
             return true;
 
+        dispose();
         terminateResponse(exchange);
         return false;
     }
@@ -334,7 +332,7 @@ public abstract class HttpReceiver
                     {
                         if (factory.getEncoding().equalsIgnoreCase(encoding))
                         {
-                            decoder = new Decoder(response, factory.newContentDecoder());
+                            decoder = new Decoder(exchange, factory.newContentDecoder());
                             break;
                         }
                     }
@@ -350,6 +348,7 @@ public abstract class HttpReceiver
             return hasDemand;
         }
 
+        dispose();
         terminateResponse(exchange);
         return false;
     }
@@ -393,39 +392,28 @@ public abstract class HttpReceiver
         {
             if (LOG.isDebugEnabled())
                 LOG.debug("Response content {}{}{}", response, System.lineSeparator(), BufferUtil.toDetailString(buffer));
-
-            ContentListeners listeners = this.contentListeners;
-            if (listeners != null)
+            if (contentListeners.isEmpty())
             {
-                if (listeners.isEmpty())
-                {
-                    callback.succeeded();
-                }
-                else
-                {
-                    Decoder decoder = this.decoder;
-                    if (decoder == null)
-                    {
-                        listeners.notifyContent(response, buffer, callback);
-                    }
-                    else
-                    {
-                        try
-                        {
-                            proceed = decoder.decode(buffer, callback);
-                        }
-                        catch (Throwable x)
-                        {
-                            callback.failed(x);
-                            proceed = false;
-                        }
-                    }
-                }
+                callback.succeeded();
             }
             else
             {
-                // May happen in case of concurrent abort.
-                proceed = false;
+                if (decoder == null)
+                {
+                    contentListeners.notifyContent(response, buffer, callback);
+                }
+                else
+                {
+                    try
+                    {
+                        proceed = decoder.decode(buffer, callback);
+                    }
+                    catch (Throwable x)
+                    {
+                        callback.failed(x);
+                        proceed = false;
+                    }
+                }
             }
         }
 
@@ -444,6 +432,7 @@ public abstract class HttpReceiver
             }
         }
 
+        dispose();
         terminateResponse(exchange);
         return false;
     }
@@ -567,6 +556,7 @@ public abstract class HttpReceiver
      */
     protected void dispose()
     {
+        assert responseState.get() != ResponseState.TRANSIENT;
         cleanup();
     }
 
@@ -598,7 +588,8 @@ public abstract class HttpReceiver
 
         this.failure = failure;
 
-        dispose();
+        if (terminate)
+            dispose();
 
         HttpResponse response = exchange.getResponse();
         if (LOG.isDebugEnabled())
@@ -776,14 +767,14 @@ public abstract class HttpReceiver
      */
     private class Decoder implements Destroyable
     {
-        private final HttpResponse response;
+        private final HttpExchange exchange;
         private final ContentDecoder decoder;
         private ByteBuffer encoded;
         private Callback callback;
 
-        private Decoder(HttpResponse response, ContentDecoder decoder)
+        private Decoder(HttpExchange exchange, ContentDecoder decoder)
         {
-            this.response = response;
+            this.exchange = exchange;
             this.decoder = Objects.requireNonNull(decoder);
         }
 
@@ -814,13 +805,13 @@ public abstract class HttpReceiver
                 }
                 ByteBuffer decoded = buffer;
                 if (LOG.isDebugEnabled())
-                    LOG.debug("Response content decoded ({}) {}{}{}", decoder, response, System.lineSeparator(), BufferUtil.toDetailString(decoded));
+                    LOG.debug("Response content decoded ({}) {}{}{}", decoder, exchange, System.lineSeparator(), BufferUtil.toDetailString(decoded));
 
-                contentListeners.notifyContent(response, decoded, Callback.from(() -> decoder.release(decoded), callback::failed));
+                contentListeners.notifyContent(exchange.getResponse(), decoded, Callback.from(() -> decoder.release(decoded), callback::failed));
 
                 boolean hasDemand = hasDemandOrStall();
                 if (LOG.isDebugEnabled())
-                    LOG.debug("Response content decoded {}, hasDemand={}", response, hasDemand);
+                    LOG.debug("Response content decoded {}, hasDemand={}", exchange, hasDemand);
                 if (!hasDemand)
                     return false;
             }
@@ -829,9 +820,50 @@ public abstract class HttpReceiver
         private void resume()
         {
             if (LOG.isDebugEnabled())
-                LOG.debug("Response content resuming decoding {}", response);
-            if (decode())
+                LOG.debug("Response content resuming decoding {}", exchange);
+
+            // The content and callback may be null
+            // if there is no initial content demand.
+            if (callback == null)
+            {
                 receive();
+                return;
+            }
+
+            while (true)
+            {
+                ResponseState current = responseState.get();
+                if (current == ResponseState.HEADERS || current == ResponseState.CONTENT)
+                {
+                    if (updateResponseState(current, ResponseState.TRANSIENT))
+                        break;
+                }
+                else
+                {
+                    callback.failed(new IllegalStateException("Invalid response state " + current));
+                    return;
+                }
+            }
+
+            boolean decoded = false;
+            try
+            {
+                decoded = decode();
+            }
+            catch (Throwable x)
+            {
+                callback.failed(x);
+            }
+
+            if (updateResponseState(ResponseState.TRANSIENT, ResponseState.CONTENT))
+            {
+                if (decoded)
+                    receive();
+                return;
+            }
+
+            dispose();
+            terminateResponse(exchange);
         }
 
         @Override
