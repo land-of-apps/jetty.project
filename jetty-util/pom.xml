@@ -58,6 +58,7 @@
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>
         <configuration>
+          <skipTests>true</skipTests>
           <systemPropertyVariables>
             <mavenRepoPath>${settings.localRepository}</mavenRepoPath>
           </systemPropertyVariables>
